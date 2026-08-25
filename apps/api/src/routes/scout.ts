@@ -12,7 +12,9 @@ import { fail, nowIso, parseBody } from '../lib/http';
 import type { TitleRow, TitleStatsRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
 import { breakoutScore, growthRatio } from '../lib/momentum';
+import { notify } from '../lib/notify';
 import { smoothedFinishRate } from '../lib/ranking';
+import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireScout, requireUser, currentUser } from '../lib/session';
 import { scoutApplySchema, scoutInterestSchema } from '../lib/validate';
 
@@ -31,14 +33,14 @@ const ONESHEET_DAILY_DAYS = 30;
 
 scoutRoutes.post('/apply', requireUser, async (c) => {
   const user = currentUser(c);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.scoutApply, user.id);
   if (user.scout) {
-    fail(
-      409,
-      'already_applied',
-      user.scout.status === 'approved'
-        ? 'You already have scout access.'
-        : 'Your scout application is already pending review.',
-    );
+    const messages: Record<string, string> = {
+      approved: 'You already have scout access.',
+      pending: 'Your scout application is already pending review.',
+      rejected: 'Your scout application was reviewed and not approved.',
+    };
+    fail(409, 'already_applied', messages[user.scout.status] ?? 'You already applied.');
   }
   const body = await parseBody(c, scoutApplySchema);
   await c.env.DB.prepare(
@@ -151,14 +153,15 @@ scoutRoutes.get('/leaderboards', requireScout, async (c) => {
 // One-sheets
 // ---------------------------------------------------------------------------
 
-type OneSheetRow = TitleRow & TitleStatsRow & { bio: string; verified: number; watch_seconds: number };
+type OneSheetRow = TitleRow &
+  TitleStatsRow & { bio: string; verified: number; watch_seconds: number; creator_id: string };
 
 /** Loads a title for scout surfaces: must be published and opted in. */
 async function scoutableTitle(db: D1Database, titleId: string): Promise<OneSheetRow | null> {
   return db
     .prepare(
       `SELECT ${TITLE_SELECT},
-        cp.bio, cp.verified,
+        cp.bio, cp.verified, t.creator_id,
         COALESCE(s.impressions, 0) AS impressions,
         COALESCE(s.plays, 0) AS plays,
         COALESCE(s.completes, 0) AS completes,
@@ -187,11 +190,27 @@ scoutRoutes.get('/titles/:titleId/onesheet', requireScout, async (c) => {
   ]);
 
   // Opening a one-sheet is part of the deal: the creator sees who looked.
+  // The first look from each organization also notifies the creator; repeat
+  // views stay in the log without pinging them again.
+  const seenBefore = await c.env.DB.prepare(
+    'SELECT 1 AS x FROM onesheet_views WHERE scout_user_id = ? AND title_id = ? LIMIT 1',
+  )
+    .bind(scout.id, row.id)
+    .first();
   await c.env.DB.prepare(
     'INSERT INTO onesheet_views (id, scout_user_id, title_id, viewed_at) VALUES (?, ?, ?, ?)',
   )
     .bind(crypto.randomUUID(), scout.id, row.id, nowIso())
     .run();
+  if (!seenBefore && scout.scout) {
+    await notify(
+      c.env.DB,
+      row.creator_id,
+      'scout_view',
+      `${scout.scout.orgName} viewed the one-sheet for ${row.name}.`,
+      `/studio/t/${row.id}/analytics`,
+    );
+  }
 
   const payload: OneSheet = {
     title: mapTitle(row),
@@ -217,12 +236,21 @@ scoutRoutes.post('/titles/:titleId/interest', requireScout, async (c) => {
   const row = await scoutableTitle(c.env.DB, c.req.param('titleId'));
   if (!row) fail(404, 'title_not_found', 'That title is not available for scouting.');
 
-  await c.env.DB.prepare(
+  const result = await c.env.DB.prepare(
     `INSERT INTO scout_interests (id, scout_user_id, title_id, note, created_at)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (scout_user_id, title_id) DO NOTHING`,
   )
     .bind(crypto.randomUUID(), scout.id, row.id, body.note, nowIso())
     .run();
+  if (result.meta.changes > 0 && scout.scout) {
+    await notify(
+      c.env.DB,
+      row.creator_id,
+      'scout_interest',
+      `${scout.scout.orgName} expressed interest in ${row.name}. Their contact details are in your analytics.`,
+      `/studio/t/${row.id}/analytics`,
+    );
+  }
   return c.json({ interested: true });
 });

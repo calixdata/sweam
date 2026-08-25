@@ -126,6 +126,20 @@ The boards are small, published math in [`apps/api/src/lib/momentum.ts`](../apps
 
 Three deliberate privacy decisions: scouts see exactly the numbers the creator sees (the one-sheet and the creator's analytics page share the same loaders in [`apps/api/src/lib/analytics.ts`](../apps/api/src/lib/analytics.ts)); opening a one-sheet writes an `onesheet_views` row the creator can read, so scouting is never silent; and expressing interest hands the creator the scout's organization, note, and contact email rather than exposing the creator's contact details to the scout.
 
+### Trust, safety, and administration
+
+Admins are rows in an `admins` table provisioned by operations; there is deliberately no self-serve path, and every `/api/admin/*` route sits behind that role. The console covers scout application decisions, the moderation queue, takedowns, strikes, transcode queue health with requeue, and maintenance.
+
+The moderation model, end to end:
+
+- **Reports** come from signed-in viewers, one per viewer per title, rate limited. They land in an admin queue that shows each report beside the creator's current strike count.
+- **Resolutions** are dismiss, takedown, strike, or takedown-and-strike. A takedown (DMCA or community guidelines) unpublishes the title and blocks republishing until an admin releases it; a direct takedown path exists for notices that arrive outside the report flow. Strikes attach to the creator; **three active strikes in a rolling 90-day window suspend publishing, uploads, and new titles** (watching is never suspended), and strikes can be revoked.
+- **Moderation is never silent**: every takedown, release, strike, and scout application decision writes an in-app notification to the affected person, and creators see their standing (strikes, takedowns) in the Studio.
+
+**Rate limiting** is fixed-window counting on a D1 table: one upsert per request returns the window's count, and the first hit of each new window prunes that bucket's stale rows, so the table stays bounded with no scheduler. D1's single primary makes counts globally consistent. A fixed window admits up to 2x the budget across a boundary, which is acceptable for abuse control and stated here rather than hidden. Budgets live in [apps/api/src/lib/ratelimit.ts](../apps/api/src/lib/ratelimit.ts): per-email and per-address sign-in, per-address sign-up, and per-user reports, uploads, and scout applications, plus per-session anonymous beacons.
+
+**Notifications** store prerendered text plus an optional app link, so the list is a plain indexed read and an entry stays accurate even if what it describes is later renamed or deleted. The nav badge is a count query refreshed on navigation; opening the page marks everything read.
+
 ## Security posture
 
 - Passwords: PBKDF2-SHA256, 100k iterations, per-user salt, constant-time comparison, versioned storage format so the work factor can be raised without a migration.
@@ -133,7 +147,7 @@ Three deliberate privacy decisions: scouts see exactly the numbers the creator s
 - All inputs validated with zod; all SQL parameterized; LIKE patterns escape user input.
 - Ownership checks on every Studio route (title and episode loads are scoped to the signed-in creator; a miss is a 404, not a 403, to avoid confirming existence).
 - Draft titles are invisible everywhere public and watchable only by their creator.
-- Known gaps, tracked in the roadmap: rate limiting, email verification, moderation/DMCA pipeline, scout approval is a manual operations step pending the admin console, and HLS outputs from superseded transcode jobs are not garbage-collected yet.
+- Known gaps, tracked in the roadmap: email verification and password reset (they need an email provider, which would break this repo's local-first promise, so the decision is explicit rather than half-shipped), comments and follows, and per-creator storage quotas.
 
 ## Why this stack
 

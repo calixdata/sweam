@@ -3,6 +3,8 @@ import {
   creatorProfileSchema,
   episodeCreateSchema,
   progressSchema,
+  reportCreateSchema,
+  reportResolveSchema,
   scoutApplySchema,
   signUpSchema,
   titleCreateSchema,
@@ -113,6 +115,30 @@ describe('scoutApplySchema', () => {
 
   it('rejects one-character organization names', () => {
     expect(scoutApplySchema.safeParse({ orgName: 'X', contactEmail: 'a@b.co' }).success).toBe(false);
+  });
+});
+
+describe('reportCreateSchema', () => {
+  it('accepts a report with a known reason and defaults the note', () => {
+    const parsed = reportCreateSchema.parse({ titleId: 'ttl_x', reason: 'copyright' });
+    expect(parsed.note).toBe('');
+  });
+
+  it('rejects unknown reasons', () => {
+    expect(reportCreateSchema.safeParse({ titleId: 'ttl_x', reason: 'ugly' }).success).toBe(false);
+  });
+});
+
+describe('reportResolveSchema', () => {
+  it('requires a takedown kind for takedown actions', () => {
+    expect(reportResolveSchema.safeParse({ action: 'takedown' }).success).toBe(false);
+    expect(reportResolveSchema.safeParse({ action: 'takedown_and_strike' }).success).toBe(false);
+    expect(reportResolveSchema.safeParse({ action: 'takedown', kind: 'dmca' }).success).toBe(true);
+  });
+
+  it('allows dismiss and strike without a kind', () => {
+    expect(reportResolveSchema.safeParse({ action: 'dismiss' }).success).toBe(true);
+    expect(reportResolveSchema.safeParse({ action: 'strike' }).success).toBe(true);
   });
 });
 

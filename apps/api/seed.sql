@@ -20,6 +20,12 @@
 -- Tears of Steel is mid-launch spike, Sintel is accelerating week over week,
 -- Big Buck Bunny is big but flat-to-declining.
 
+DELETE FROM notifications;
+DELETE FROM rate_limits;
+DELETE FROM strikes;
+DELETE FROM takedowns;
+DELETE FROM reports;
+DELETE FROM admins;
 DELETE FROM scout_interests;
 DELETE FROM onesheet_views;
 DELETE FROM title_stats_daily;
@@ -39,7 +45,14 @@ INSERT INTO users (id, email, display_name, password_hash, created_at) VALUES
   ('usr_nova',  'nova@demo.sweam',  'Nova Reyes',  'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-07-21T09:30:00.000Z'),
   ('usr_mira',  'mira@demo.sweam',  'Mira Chen',   'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-01T18:45:00.000Z'),
   ('usr_sam',   'sam@demo.sweam',   'Sam Park',    'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-10T11:00:00.000Z'),
-  ('usr_scout', 'scout@demo.sweam', 'Riley Grant', 'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-15T10:00:00.000Z');
+  ('usr_scout', 'scout@demo.sweam', 'Riley Grant', 'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-15T10:00:00.000Z'),
+  ('usr_scout2', 'westgate@demo.sweam', 'Jordan Wells', 'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-24T09:00:00.000Z'),
+  ('usr_admin', 'admin@demo.sweam', 'Alex Ondo', 'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-07-15T09:00:00.000Z');
+
+-- Admins are provisioned here or by operations:
+--   npx wrangler d1 execute sweam-db --local --command "INSERT INTO admins (user_id, created_at) VALUES ('<id>', strftime('%Y-%m-%dT%H:%M:%fZ','now'))"
+INSERT INTO admins (user_id, created_at) VALUES
+  ('usr_admin', '2026-07-15T09:05:00.000Z');
 
 -- Tracked viewer cohort: exists to make retention curves real. Not intended
 -- as sign-in demo accounts, but the shared demo password works for them too.
@@ -60,11 +73,11 @@ INSERT INTO creator_profiles (user_id, handle, bio, verified, created_at) VALUES
   ('usr_nova', 'novareyes', 'Shorts, sketches, and the occasional accidental masterpiece.',  0, '2026-07-21T09:35:00.000Z'),
   ('usr_mira', 'miradocs',  'Curating open cinema and documenting how it gets made.',        0, '2026-08-01T18:50:00.000Z');
 
--- Approved demo scout. Approval is an ops step until the admin console ships;
--- to approve a new application locally:
---   npx wrangler d1 execute sweam-db --local --command "UPDATE scout_profiles SET status='approved', approved_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE user_id='<id>'"
-INSERT INTO scout_profiles (user_id, org_name, org_url, contact_email, status, created_at, approved_at) VALUES
-  ('usr_scout', 'Northlight Studios', 'https://northlight.example', 'scouting@northlight.example', 'approved', '2026-08-15T10:05:00.000Z', '2026-08-16T09:00:00.000Z');
+-- One approved demo scout, plus a pending application so the admin console
+-- has something to decide on first run. Approvals now happen in /admin.
+INSERT INTO scout_profiles (user_id, org_name, org_url, contact_email, status, created_at, decided_at) VALUES
+  ('usr_scout', 'Northlight Studios', 'https://northlight.example', 'scouting@northlight.example', 'approved', '2026-08-15T10:05:00.000Z', '2026-08-16T09:00:00.000Z'),
+  ('usr_scout2', 'Westgate Media', NULL, 'content@westgate.example', 'pending', '2026-08-24T09:10:00.000Z', NULL);
 
 -- Elephants Dream deliberately stays scoutable = 0 to demonstrate the opt-in
 -- gate: it appears in the public catalog but in no scout surface.
@@ -222,3 +235,15 @@ INSERT INTO scout_interests (id, scout_user_id, title_id, note, created_at) VALU
   ('int_seed_1', 'usr_scout', 'ttl_sintel',
    'Strong finish rate for a debut drama. We are assembling a slate of independent animated features and would like to talk.',
    strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'));
+
+-- An open report so the moderation queue has a live example, and the
+-- notification Ana would have received for the seeded interest above.
+INSERT INTO reports (id, title_id, reporter_id, reason, note, status, created_at) VALUES
+  ('rep_seed_1', 'ttl_ed', 'usr_v07', 'other',
+   'The audio drops out around the halfway mark. Might be a broken upload.',
+   'open', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'));
+
+INSERT INTO notifications (id, user_id, kind, body, link, read, created_at) VALUES
+  ('ntf_seed_1', 'usr_ana', 'scout_interest',
+   'Northlight Studios expressed interest in Sintel. Their contact details are in your analytics.',
+   '/studio/t/ttl_sintel/analytics', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'));

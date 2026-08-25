@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ADVISORIES, CONTENT_KINDS, GENRES } from '@sweam/shared';
+import { ADVISORIES, CONTENT_KINDS, GENRES, REPORT_REASONS } from '@sweam/shared';
 
 /**
  * Every request body and query parameter in the API is validated by one of
@@ -158,4 +158,37 @@ export const transcodeCompleteSchema = z.object({
 
 export const transcodeFailSchema = z.object({
   error: z.string().trim().min(1).max(2000),
+});
+
+// ---------------------------------------------------------------------------
+// Trust, safety, and administration
+// ---------------------------------------------------------------------------
+
+export const reportCreateSchema = z.object({
+  titleId: z.string().min(1).max(64),
+  reason: z.enum(REPORT_REASONS),
+  note: z.string().trim().max(1000).default(''),
+});
+
+const takedownKind = z.enum(['dmca', 'guidelines']);
+
+export const reportResolveSchema = z
+  .object({
+    action: z.enum(['dismiss', 'takedown', 'strike', 'takedown_and_strike']),
+    kind: takedownKind.optional(),
+    note: z.string().trim().max(1000).default(''),
+  })
+  .refine(
+    (value) => !value.action.includes('takedown') || value.kind !== undefined,
+    'A takedown needs a kind: dmca or guidelines.',
+  );
+
+export const scoutDecideSchema = z.object({
+  approve: z.boolean(),
+});
+
+export const takedownCreateSchema = z.object({
+  slug: z.string().trim().min(1).max(200),
+  kind: takedownKind,
+  reason: z.string().trim().min(1, 'A takedown needs a written reason.').max(1000),
 });

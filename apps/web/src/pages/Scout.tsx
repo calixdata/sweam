@@ -46,6 +46,17 @@ export function Scout() {
     );
   }
 
+  if (user.scout.status === 'rejected') {
+    return (
+      <div className="page page-narrow">
+        <h1>Scout portal</h1>
+        <p className="status" role="status">
+          Your application for {user.scout.orgName} was reviewed and not approved.
+        </p>
+      </div>
+    );
+  }
+
   return <ScoutBoards orgName={user.scout.orgName} />;
 }
 

@@ -31,8 +31,9 @@ interface SessionRow {
   email: string;
   display_name: string;
   handle: string | null;
-  scout_status: 'pending' | 'approved' | null;
+  scout_status: 'pending' | 'approved' | 'rejected' | null;
   scout_org: string | null;
+  is_admin: number | null;
 }
 
 export async function resolveSession(db: D1Database, token: string): Promise<SessionUser | null> {
@@ -40,11 +41,13 @@ export async function resolveSession(db: D1Database, token: string): Promise<Ses
   const row = await db
     .prepare(
       `SELECT s.expires_at, s.token_hash, u.id, u.email, u.display_name, cp.handle,
-        sp.status AS scout_status, sp.org_name AS scout_org
+        sp.status AS scout_status, sp.org_name AS scout_org,
+        (a.user_id IS NOT NULL) AS is_admin
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        LEFT JOIN creator_profiles cp ON cp.user_id = u.id
        LEFT JOIN scout_profiles sp ON sp.user_id = u.id
+       LEFT JOIN admins a ON a.user_id = u.id
        WHERE s.token_hash = ?`,
     )
     .bind(tokenHash)
@@ -61,6 +64,7 @@ export async function resolveSession(db: D1Database, token: string): Promise<Ses
     handle: row.handle,
     scout:
       row.scout_status && row.scout_org ? { status: row.scout_status, orgName: row.scout_org } : null,
+    isAdmin: row.is_admin === 1,
   };
 }
 
@@ -91,9 +95,19 @@ export const requireScout = createMiddleware<AppEnv>(async (c, next) => {
   const user = c.get('user');
   if (!user) fail(401, 'auth_required', 'Sign in to continue.');
   if (!user.scout) fail(403, 'scout_required', 'Apply for scout access to use the scout portal.');
+  if (user.scout.status === 'rejected') {
+    fail(403, 'scout_rejected', 'Your scout application was not approved.');
+  }
   if (user.scout.status !== 'approved') {
     fail(403, 'scout_pending', 'Your scout application is pending review.');
   }
+  await next();
+});
+
+export const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
+  const user = c.get('user');
+  if (!user) fail(401, 'auth_required', 'Sign in to continue.');
+  if (!user.isAdmin) fail(403, 'admin_required', 'This area is for Sweam administrators.');
   await next();
 });
 

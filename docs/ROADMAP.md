@@ -18,14 +18,13 @@ The feature that closes the loop on the platform thesis: a vetted, ranked view f
 - Notifications to creators on new one-sheet views and interest
 - Retention rollups per episode so curves stay cheap at scale
 
-## v0.4: Trust, safety, and community
+## v0.4: Trust, safety, and administration (shipped)
 
-Prerequisites for any real audience:
+Shipped: the admin console (overview, in-product scout application decisions, transcode queue health with requeue, HLS orphan garbage collection); the viewer report flow feeding a moderation queue; DMCA and guidelines takedowns with a release lifecycle and republish blocking; the strike system with 90-day-window suspension at three active strikes and revocation; fixed-window rate limiting on sign-in, sign-up, reports, uploads, scout applications, and anonymous beacons; and in-app notifications for every moderation and scout event. Still open from this phase:
 
-- Report flow, moderation queue, strike system, DMCA takedown pipeline
-- Email verification and password reset
-- Rate limiting and abuse controls on auth, uploads, and beacons
+- Email verification and password reset: needs an email provider, which breaks the local-first promise, so it ships with the first deployment decision instead of a mock
 - Comments with moderation, creator follows, and new-episode notifications
+- Per-creator storage quotas
 
 ## v0.5: Sustainability
 

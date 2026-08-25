@@ -1,11 +1,14 @@
 import { Hono } from 'hono';
+import type { NotificationItem } from '@sweam/shared';
 import type { AppEnv } from '../env';
-import { fail, nowIso } from '../lib/http';
+import { fail, nowIso, parseBody } from '../lib/http';
 import type { TitleRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
+import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
+import { reportCreateSchema } from '../lib/validate';
 
-/** Signed-in viewer state: watchlist and likes. */
+/** Signed-in viewer state: watchlist, likes, reports, and notifications. */
 export const meRoutes = new Hono<AppEnv>();
 
 meRoutes.use('*', requireUser);
@@ -75,6 +78,77 @@ meRoutes.put('/likes/:titleId', async (c) => {
     ]);
   }
   return c.json({ likedByMe: true });
+});
+
+// ---------------------------------------------------------------------------
+// Reports
+// ---------------------------------------------------------------------------
+
+meRoutes.post('/reports', async (c) => {
+  const user = currentUser(c);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.report, user.id);
+  const body = await parseBody(c, reportCreateSchema);
+  await assertPublishedTitle(c.env.DB, body.titleId);
+
+  const result = await c.env.DB.prepare(
+    `INSERT OR IGNORE INTO reports (id, title_id, reporter_id, reason, note, status, created_at)
+     VALUES (?, ?, ?, ?, ?, 'open', ?)`,
+  )
+    .bind(crypto.randomUUID(), body.titleId, user.id, body.reason, body.note, nowIso())
+    .run();
+  if (result.meta.changes === 0) {
+    fail(409, 'already_reported', 'You already reported this title. Our moderators will review it.');
+  }
+  return c.json({ reported: true }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+interface NotificationRow {
+  id: string;
+  kind: NotificationItem['kind'];
+  body: string;
+  link: string | null;
+  read: number;
+  created_at: string;
+}
+
+meRoutes.get('/notifications', async (c) => {
+  const user = currentUser(c);
+  const { results } = await c.env.DB.prepare(
+    `SELECT id, kind, body, link, read, created_at
+     FROM notifications WHERE user_id = ?
+     ORDER BY created_at DESC LIMIT 50`,
+  )
+    .bind(user.id)
+    .all<NotificationRow>();
+  const notifications: NotificationItem[] = results.map((row) => ({
+    id: row.id,
+    kind: row.kind,
+    body: row.body,
+    link: row.link,
+    read: row.read === 1,
+    createdAt: row.created_at,
+  }));
+  return c.json({ notifications });
+});
+
+meRoutes.get('/notifications/unread-count', async (c) => {
+  const row = await c.env.DB.prepare(
+    'SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND read = 0',
+  )
+    .bind(currentUser(c).id)
+    .first<{ n: number }>();
+  return c.json({ unread: row?.n ?? 0 });
+});
+
+meRoutes.post('/notifications/read-all', async (c) => {
+  await c.env.DB.prepare('UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0')
+    .bind(currentUser(c).id)
+    .run();
+  return c.json({ ok: true });
 });
 
 meRoutes.delete('/likes/:titleId', async (c) => {

@@ -5,6 +5,7 @@ import type { SessionUser } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { hashPassword, verifyPassword } from '../lib/auth';
 import { fail, nowIso, parseBody } from '../lib/http';
+import { RATE_LIMITS, clientIp, enforceRateLimit } from '../lib/ratelimit';
 import { SESSION_COOKIE, createSession, destroySession } from '../lib/session';
 import { signInSchema, signUpSchema } from '../lib/validate';
 
@@ -27,6 +28,7 @@ function setSessionCookie(c: Context<AppEnv>, token: string): void {
 }
 
 authRoutes.post('/signup', async (c) => {
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.signupIp, clientIp(c.req.raw));
   const body = await parseBody(c, signUpSchema);
 
   const existing = await c.env.DB.prepare('SELECT id FROM users WHERE email = ?')
@@ -49,19 +51,24 @@ authRoutes.post('/signup', async (c) => {
     displayName: body.displayName,
     handle: null,
     scout: null,
+    isAdmin: false,
   };
   return c.json({ user }, 201);
 });
 
 authRoutes.post('/signin', async (c) => {
   const body = await parseBody(c, signInSchema);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.signinIp, clientIp(c.req.raw));
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.signinEmail, body.email);
 
   const row = await c.env.DB.prepare(
     `SELECT u.id, u.email, u.display_name, u.password_hash, cp.handle,
-       sp.status AS scout_status, sp.org_name AS scout_org
+       sp.status AS scout_status, sp.org_name AS scout_org,
+       (a.user_id IS NOT NULL) AS is_admin
      FROM users u
      LEFT JOIN creator_profiles cp ON cp.user_id = u.id
      LEFT JOIN scout_profiles sp ON sp.user_id = u.id
+     LEFT JOIN admins a ON a.user_id = u.id
      WHERE u.email = ?`,
   )
     .bind(body.email)
@@ -71,8 +78,9 @@ authRoutes.post('/signin', async (c) => {
       display_name: string;
       password_hash: string;
       handle: string | null;
-      scout_status: 'pending' | 'approved' | null;
+      scout_status: 'pending' | 'approved' | 'rejected' | null;
       scout_org: string | null;
+      is_admin: number | null;
     }>();
 
   if (!row) {
@@ -93,6 +101,7 @@ authRoutes.post('/signin', async (c) => {
     handle: row.handle,
     scout:
       row.scout_status && row.scout_org ? { status: row.scout_status, orgName: row.scout_org } : null,
+    isAdmin: row.is_admin === 1,
   };
   return c.json({ user });
 });

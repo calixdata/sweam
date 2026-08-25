@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { apiGet } from '../api';
 import { useAuth } from '../auth';
 
 export function Layout() {
@@ -8,6 +9,25 @@ export function Layout() {
   const navigate = useNavigate();
   const mainRef = useRef<HTMLElement>(null);
   const isFirstRender = useRef(true);
+  const [unread, setUnread] = useState(0);
+
+  // Refresh the notifications badge on every navigation; a stale badge is
+  // worse than one extra count query.
+  useEffect(() => {
+    if (!user) {
+      setUnread(0);
+      return;
+    }
+    let cancelled = false;
+    apiGet<{ unread: number }>('/api/me/notifications/unread-count')
+      .then((data) => {
+        if (!cancelled) setUnread(data.unread);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [user, location.pathname]);
 
   // On SPA navigation, move focus to the main landmark so screen reader and
   // keyboard users land at the new page content instead of staying mid-header.
@@ -59,6 +79,21 @@ export function Layout() {
             <li>
               <NavLink to="/scout">Scout</NavLink>
             </li>
+            {user && (
+              <li>
+                <NavLink
+                  to="/notifications"
+                  aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+                >
+                  Notifications{unread > 0 ? ` (${unread})` : ''}
+                </NavLink>
+              </li>
+            )}
+            {user?.isAdmin && (
+              <li>
+                <NavLink to="/admin">Admin</NavLink>
+              </li>
+            )}
           </ul>
           <div className="nav-auth">
             {user ? (

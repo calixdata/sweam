@@ -34,7 +34,7 @@ export const ADVISORIES = ['TV-G', 'TV-PG', 'TV-14', 'TV-MA'] as const;
 
 export type Advisory = (typeof ADVISORIES)[number];
 
-export type ScoutStatus = 'pending' | 'approved';
+export type ScoutStatus = 'pending' | 'approved' | 'rejected';
 
 /**
  * The signed-in user attached to a session. `handle` is null until the user
@@ -46,6 +46,7 @@ export interface SessionUser {
   displayName: string;
   handle: string | null;
   scout: { status: ScoutStatus; orgName: string } | null;
+  isAdmin: boolean;
 }
 
 export interface CreatorRef {
@@ -282,6 +283,110 @@ export interface TitleAnalytics {
   retention: EpisodeRetention[];
   oneSheetViews: OneSheetView[];
   interests: ScoutInterestForCreator[];
+}
+
+// ---------------------------------------------------------------------------
+// Trust, safety, and administration
+// ---------------------------------------------------------------------------
+
+export const REPORT_REASONS = ['spam', 'abuse', 'copyright', 'other'] as const;
+
+export type ReportReason = (typeof REPORT_REASONS)[number];
+
+export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
+  spam: 'Spam or misleading',
+  abuse: 'Abusive or harmful',
+  copyright: 'Copyright infringement',
+  other: 'Something else',
+};
+
+export type TakedownKind = 'dmca' | 'guidelines';
+
+export type NotificationKind =
+  | 'scout_view'
+  | 'scout_interest'
+  | 'scout_decision'
+  | 'takedown'
+  | 'takedown_released'
+  | 'strike';
+
+export interface NotificationItem {
+  id: string;
+  kind: NotificationKind;
+  body: string;
+  /** App-relative path to open, when the notification has a destination. */
+  link: string | null;
+  read: boolean;
+  createdAt: string;
+}
+
+/** A creator's account standing, shown in their Studio. */
+export interface StudioStanding {
+  activeStrikes: number;
+  /** Three or more active strikes suspends publishing and uploads. */
+  suspended: boolean;
+  takedowns: { titleName: string; kind: TakedownKind; createdAt: string }[];
+}
+
+export interface AdminOverview {
+  users: number;
+  creators: number;
+  approvedScouts: number;
+  pendingScoutApplications: number;
+  publishedTitles: number;
+  draftTitles: number;
+  openReports: number;
+  activeTakedowns: number;
+  transcode: { queued: number; running: number; failed: number };
+  totalPlays: number;
+  totalWatchHours: number;
+}
+
+export interface AdminScoutApplication {
+  userId: string;
+  displayName: string;
+  email: string;
+  orgName: string;
+  orgUrl: string | null;
+  contactEmail: string;
+  createdAt: string;
+}
+
+export interface AdminReport {
+  id: string;
+  reason: ReportReason;
+  note: string;
+  createdAt: string;
+  title: { id: string; name: string; slug: string; published: boolean };
+  creator: { userId: string; handle: string; displayName: string; activeStrikes: number };
+  reporter: { displayName: string };
+}
+
+export interface AdminTakedown {
+  id: string;
+  kind: TakedownKind;
+  reason: string;
+  createdAt: string;
+  releasedAt: string | null;
+  title: { id: string; name: string; slug: string };
+  creatorHandle: string;
+}
+
+export interface AdminStrike {
+  id: string;
+  reason: string;
+  createdAt: string;
+  creator: { handle: string; displayName: string };
+}
+
+export interface AdminTranscodeJob {
+  id: string;
+  status: TranscodeStatus;
+  attempts: number;
+  error: string | null;
+  updatedAt: string;
+  episodeName: string;
+  titleName: string;
 }
 
 /** Every API error responds with this envelope and a machine-readable code. */

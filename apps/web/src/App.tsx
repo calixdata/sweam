@@ -6,6 +6,9 @@ import { Loading } from './components/Status';
 import { Discover } from './pages/Discover';
 import { Home } from './pages/Home';
 import { NotFound } from './pages/NotFound';
+import { Admin } from './pages/Admin';
+import { AdminModeration } from './pages/AdminModeration';
+import { Notifications } from './pages/Notifications';
 import { Scout } from './pages/Scout';
 import { ScoutOneSheet } from './pages/ScoutOneSheet';
 import { Search } from './pages/Search';
@@ -70,6 +73,16 @@ export function App() {
             </RequireAuth>
           }
         />
+        <Route
+          path="/notifications"
+          element={
+            <RequireAuth>
+              <Notifications />
+            </RequireAuth>
+          }
+        />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="/admin/moderation" element={<AdminModeration />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="*" element={<NotFound />} />

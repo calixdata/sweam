@@ -525,6 +525,45 @@ input[type='file'] {
   color: var(--muted);
 }
 
+.notification-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.notification-list > li {
+  border-bottom: 1px solid var(--border);
+  padding: 0.75rem 0;
+}
+
+.notification-list p {
+  margin: 0 0 0.2rem;
+}
+
+.notification-unread {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.75rem;
+}
+
+.tag-new {
+  display: inline-block;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 0.05rem 0.45rem;
+  margin-bottom: 0.25rem;
+}
+
+.report-section {
+  margin-top: 2rem;
+}
+
+.resolve-form {
+  margin: 0.75rem 0 0;
+}
+
 .studio-form {
   background: var(--surface);
   border: 1px solid var(--border);

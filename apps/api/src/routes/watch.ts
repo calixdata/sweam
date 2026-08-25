@@ -4,6 +4,7 @@ import type { AppEnv } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
 import type { EpisodeRow } from '../lib/mappers';
 import { mapEpisode } from '../lib/mappers';
+import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
 import { progressSchema, viewBeaconSchema } from '../lib/validate';
 
@@ -162,6 +163,7 @@ watchRoutes.post('/:episodeId/progress', requireUser, async (c) => {
  */
 watchRoutes.post('/:episodeId/view', async (c) => {
   const body = await parseBody(c, viewBeaconSchema);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.anonView, body.viewId);
   const row = await loadEpisode(c.env.DB, c.req.param('episodeId'));
   if (!row) fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
   if (row.published !== 1) {

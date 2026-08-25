@@ -65,6 +65,7 @@ A working vertical slice, end to end:
   - **Transcode queue** (v0.2): a D1-backed job queue with atomic claims, capped attempts, stale-claim reclaim, and supersede protection; uploaded sources automatically become adaptive HLS ladders with generated thumbnails when a transcoder worker runs
   - **Anonymous view beacons** (v0.2): signed-out plays, finishes, and retention count via a random per-session id, never tied to an account, IP, or fingerprint
   - **Scout portal** (v0.3): application-gated scout access; momentum boards over daily counters; per-title one-sheets with 30-day series and per-episode audience retention curves computed from furthest-watched positions; the interest loop, with every one-sheet view logged for the creator
+  - **Trust, safety, and administration** (v0.4): viewer report flow feeding an admin moderation queue; DMCA and guidelines takedowns that block republishing until released; a strike system that suspends publishing at three active strikes in 90 days, with revocation; in-product scout application decisions; D1-backed fixed-window rate limiting on sign-in, sign-up, reports, uploads, and anonymous beacons; in-app notifications for every moderation and scout event (moderation is never silent); transcode queue health with requeue; and an HLS orphan garbage collector
 - **Transcoder** ([apps/transcoder](apps/transcoder)): the pipeline's data plane. A Node worker (run it anywhere ffmpeg exists) that claims jobs, probes sources, encodes a no-upscale HLS ladder (1080p/720p/480p/360p) in a single ffmpeg pass, grabs a poster frame, and uploads everything back through the service API
 - **Web** ([apps/web](apps/web)): React + Vite + TypeScript. Home rails with continue-watching, Discover with visible ranking reasons, title and watch pages, an HLS-capable player (native on Safari, lazy-loaded hls.js elsewhere), search, watchlist, sign-in/up, the full Studio flow with pipeline status, per-title analytics, and scout visibility controls, and the scout portal
 - **Shared** ([packages/shared](packages/shared)): one set of types and constants consumed by both sides
@@ -102,8 +103,10 @@ The seed creates a small catalog around the Blender Foundation open movies plus 
 | `nova@demo.sweam` | Creator `@novareyes` (Big Buck Bunny, Elephants Dream) |
 | `mira@demo.sweam` | Creator `@miradocs` (Open Cinema Anthology, a 3-episode series) |
 | `scout@demo.sweam` | Approved scout for Northlight Studios |
+| `westgate@demo.sweam` | Scout applicant with a pending application to decide |
+| `admin@demo.sweam` | Platform administrator |
 
-The seeded stats are chosen to make the mechanics visible. Open Discover and Sintel (90 plays, devoted audience) outranks Big Buck Bunny (2,100 plays, indifferent audience). Sign in as the scout and the fastest-growing board leads with Tears of Steel mid-launch-spike, Elephants Dream is absent everywhere scout-facing because its creator has not opted in, and Ana's Studio analytics for Sintel already shows a one-sheet view and an expression of interest from Northlight Studios.
+The seeded stats are chosen to make the mechanics visible. Open Discover and Sintel (90 plays, devoted audience) outranks Big Buck Bunny (2,100 plays, indifferent audience). Sign in as the scout and the fastest-growing board leads with Tears of Steel mid-launch-spike, Elephants Dream is absent everywhere scout-facing because its creator has not opted in, and Ana's Studio analytics for Sintel already shows a one-sheet view and an expression of interest from Northlight Studios. Sign in as the admin and the console opens with Westgate Media's application waiting for a decision and one open report in the moderation queue.
 
 ### Verify everything
 

@@ -3,6 +3,7 @@ import type { Context } from 'hono';
 import type {
   MultipartInit,
   StudioEpisode,
+  StudioStanding,
   StudioTitleDetail,
   StudioTitleSummary,
   TitleAnalytics,
@@ -11,6 +12,8 @@ import type {
 import type { AppEnv } from '../env';
 import { loadDailySeries, loadRetention } from '../lib/analytics';
 import { fail, nowIso, parseBody } from '../lib/http';
+import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
+import { SUSPENSION_STRIKES, activeStrikeCount, assertGoodStanding } from '../lib/standing';
 import type { EpisodeRow } from '../lib/mappers';
 import { mapEpisode } from '../lib/mappers';
 import { requireCreator, requireUser, currentUser } from '../lib/session';
@@ -173,6 +176,7 @@ studioRoutes.get('/titles', requireCreator, async (c) => {
 });
 
 studioRoutes.post('/titles', requireCreator, async (c) => {
+  await assertGoodStanding(c.env.DB, currentUser(c).id);
   const body = await parseBody(c, titleCreateSchema);
   const id = crypto.randomUUID();
   const slug = makeSlug(body.name);
@@ -252,6 +256,17 @@ studioRoutes.post('/titles/:titleId/publish', requireCreator, async (c) => {
   if (body.published && row.episode_count === 0) {
     fail(400, 'no_episodes', 'Add at least one episode before publishing.');
   }
+  if (body.published) {
+    await assertGoodStanding(c.env.DB, currentUser(c).id);
+    const takedown = await c.env.DB.prepare(
+      'SELECT 1 AS x FROM takedowns WHERE title_id = ? AND released_at IS NULL',
+    )
+      .bind(row.id)
+      .first();
+    if (takedown) {
+      fail(403, 'takedown_active', 'This title is under an active takedown and cannot be republished.');
+    }
+  }
 
   if (body.published) {
     await c.env.DB.prepare(
@@ -270,6 +285,7 @@ studioRoutes.post('/titles/:titleId/publish', requireCreator, async (c) => {
 // ---------------------------------------------------------------------------
 
 studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
+  await assertGoodStanding(c.env.DB, currentUser(c).id);
   const row = await ownedTitle(c, c.req.param('titleId'));
   const body = await parseBody(c, episodeCreateSchema);
   const id = crypto.randomUUID();
@@ -382,6 +398,37 @@ studioRoutes.delete('/episodes/:episodeId', requireCreator, async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// Account standing
+// ---------------------------------------------------------------------------
+
+studioRoutes.get('/standing', requireCreator, async (c) => {
+  const user = currentUser(c);
+  const [activeStrikes, takedownsResult] = await Promise.all([
+    activeStrikeCount(c.env.DB, user.id),
+    c.env.DB.prepare(
+      `SELECT t.name AS title_name, td.kind, td.created_at
+       FROM takedowns td
+       JOIN titles t ON t.id = td.title_id
+       WHERE t.creator_id = ? AND td.released_at IS NULL
+       ORDER BY td.created_at DESC`,
+    )
+      .bind(user.id)
+      .all<{ title_name: string; kind: 'dmca' | 'guidelines'; created_at: string }>(),
+  ]);
+
+  const payload: StudioStanding = {
+    activeStrikes,
+    suspended: activeStrikes >= SUSPENSION_STRIKES,
+    takedowns: takedownsResult.results.map((row) => ({
+      titleName: row.title_name,
+      kind: row.kind,
+      createdAt: row.created_at,
+    })),
+  };
+  return c.json(payload);
+});
+
+// ---------------------------------------------------------------------------
 // Analytics
 // ---------------------------------------------------------------------------
 
@@ -456,6 +503,8 @@ studioRoutes.get('/titles/:titleId/analytics', requireCreator, async (c) => {
  * episode form stores as videoUrl / captionsUrl / posterUrl.
  */
 studioRoutes.put('/upload/:filename', requireCreator, async (c) => {
+  await assertGoodStanding(c.env.DB, currentUser(c).id);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.upload, currentUser(c).id);
   const contentType = c.req.header('content-type') ?? '';
   if (!UPLOAD_CONTENT_TYPES.has(contentType)) {
     fail(415, 'unsupported_type', 'Upload MP4/WebM video, WebVTT captions, or JPEG/PNG/WebP images.');
@@ -499,6 +548,8 @@ function assertOwnKey(c: Context<AppEnv>, key: string): void {
 }
 
 studioRoutes.post('/upload/multipart', requireCreator, async (c) => {
+  await assertGoodStanding(c.env.DB, currentUser(c).id);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.upload, currentUser(c).id);
   const body = await parseBody(c, multipartInitSchema);
   if (!UPLOAD_CONTENT_TYPES.has(body.contentType)) {
     fail(415, 'unsupported_type', 'Upload MP4/WebM video, WebVTT captions, or JPEG/PNG/WebP images.');

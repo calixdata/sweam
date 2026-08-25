@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { EpisodeSummary, TitleDetail } from '@sweam/shared';
-import { CONTENT_KIND_LABELS } from '@sweam/shared';
+import { CONTENT_KIND_LABELS, REPORT_REASONS, REPORT_REASON_LABELS } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote, Loading } from '../components/Status';
@@ -145,6 +146,93 @@ export function TitlePage() {
           ))}
         </section>
       )}
+
+      <ReportSection titleId={title.id} titleSlug={title.slug} signedIn={user !== null} />
     </div>
+  );
+}
+
+function ReportSection({
+  titleId,
+  titleSlug,
+  signedIn,
+}: {
+  titleId: string;
+  titleSlug: string;
+  signedIn: boolean;
+}) {
+  const [reason, setReason] = useState<string>(REPORT_REASONS[0]);
+  const [note, setNote] = useState('');
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await apiSend('POST', '/api/me/reports', { titleId, reason, note });
+      setSent(true);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'already_reported') {
+        setSent(true);
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Could not send the report.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <details className="explainer report-section">
+      <summary>Report this title</summary>
+      {!signedIn ? (
+        <p>
+          <Link to="/signin" state={{ from: `/t/${titleSlug}` }}>
+            Sign in
+          </Link>{' '}
+          to report a title to the moderators.
+        </p>
+      ) : sent ? (
+        <p role="status">Thanks. Our moderators will review this title.</p>
+      ) : (
+        <form onSubmit={handleSubmit} noValidate>
+          <div className="field">
+            <label htmlFor="report-reason">Reason</label>
+            <select
+              id="report-reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            >
+              {REPORT_REASONS.map((value) => (
+                <option key={value} value={value}>
+                  {REPORT_REASON_LABELS[value]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="report-note">Details (optional)</label>
+            <textarea
+              id="report-note"
+              rows={2}
+              maxLength={1000}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </div>
+          {error && (
+            <p className="status status-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button type="submit" className="button button-quiet" disabled={submitting}>
+            {submitting ? 'Sending…' : 'Send report'}
+          </button>
+        </form>
+      )}
+    </details>
   );
 }

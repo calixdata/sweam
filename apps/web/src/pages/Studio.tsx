@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { StudioTitleSummary } from '@sweam/shared';
+import type { StudioStanding, StudioTitleSummary } from '@sweam/shared';
 import { ADVISORIES, CONTENT_KINDS, CONTENT_KIND_LABELS, GENRES } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
@@ -101,12 +101,17 @@ function CreatorOnboarding({ onCreated }: { onCreated: () => Promise<void> }) {
 
 function StudioDashboard({ handle }: { handle: string }) {
   const [titles, setTitles] = useState<StudioTitleSummary[] | null>(null);
+  const [standing, setStanding] = useState<StudioStanding | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const data = await apiGet<{ titles: StudioTitleSummary[] }>('/api/studio/titles');
-      setTitles(data.titles);
+      const [titleData, standingData] = await Promise.all([
+        apiGet<{ titles: StudioTitleSummary[] }>('/api/studio/titles'),
+        apiGet<StudioStanding>('/api/studio/standing'),
+      ]);
+      setTitles(titleData.titles);
+      setStanding(standingData);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load your titles.');
     }
@@ -117,12 +122,42 @@ function StudioDashboard({ handle }: { handle: string }) {
   }, [load]);
 
   if (error) return <ErrorNote message={error} />;
-  if (!titles) return <Loading label="Loading your Studio" />;
+  if (!titles || !standing) return <Loading label="Loading your Studio" />;
 
   return (
     <div className="page page-narrow">
       <h1>Studio</h1>
       <p className="page-intro">Signed in as @{handle}.</p>
+
+      {(standing.suspended || standing.activeStrikes > 0 || standing.takedowns.length > 0) && (
+        <section aria-labelledby="standing-heading">
+          <h2 id="standing-heading">Account standing</h2>
+          {standing.suspended ? (
+            <p className="status status-error" role="alert">
+              Publishing, uploads, and new titles are suspended: {standing.activeStrikes} active
+              strikes on your account. Check your notifications for the details of each strike.
+            </p>
+          ) : (
+            standing.activeStrikes > 0 && (
+              <p className="status" role="status">
+                {standing.activeStrikes} active strike{standing.activeStrikes === 1 ? '' : 's'} on
+                your account. Three active strikes suspend publishing.
+              </p>
+            )
+          )}
+          {standing.takedowns.length > 0 && (
+            <ul>
+              {standing.takedowns.map((takedown) => (
+                <li key={`${takedown.titleName}-${takedown.createdAt}`}>
+                  {takedown.titleName}: removed under{' '}
+                  {takedown.kind === 'dmca' ? 'a DMCA takedown' : 'community guidelines'} on{' '}
+                  {takedown.createdAt.slice(0, 10)}. It cannot be republished until released.
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
 
       <NewTitleForm onCreated={load} />
 
