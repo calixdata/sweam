@@ -6,6 +6,8 @@ export interface Env {
   ENVIRONMENT: 'development' | 'production';
   /** Shared secret authenticating transcoder workers to /api/transcode. */
   TRANSCODER_TOKEN: string;
+  /** Static-asset binding for the built web app; only present on the deploy. */
+  ASSETS?: Fetcher;
 }
 
 /** Hono generic: bindings plus the per-request variables middleware attaches. */

@@ -1,9 +1,14 @@
 # Sweam API worker.
 #
-# Local development needs no Cloudflare account: `wrangler dev` runs D1 and R2
-# simulations on disk under .wrangler/state. Before a real deploy, create the
-# resources (`wrangler d1 create sweam-db`, `wrangler r2 bucket create
-# sweam-media`) and replace database_id below with the id you are given.
+# Local development (`wrangler dev`) uses the top-level config and runs D1/R2
+# simulations on disk under .wrangler/state; the web app is served by Vite,
+# which proxies /api and /media here.
+#
+# The `preview` environment is the always-on deploy: it serves the built web
+# app (apps/web/dist) as static assets AND handles /api + /media from the same
+# Worker, so everything is one origin. Deploy with:
+#   npm run build -w @sweam/web
+#   npx wrangler deploy --env preview
 
 name = "sweam-api"
 main = "src/index.ts"
@@ -12,7 +17,7 @@ compatibility_date = "2025-08-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "sweam-db"
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "cb955161-edd2-41d9-8692-7da571815e0d"
 migrations_dir = "migrations"
 
 [[r2_buckets]]
@@ -26,3 +31,31 @@ ENVIRONMENT = "development"
 # `wrangler secret put TRANSCODER_TOKEN` (the API refuses the default value
 # when ENVIRONMENT is "production").
 TRANSCODER_TOKEN = "dev-transcoder-token"
+
+# ---------------------------------------------------------------------------
+# Always-on deploy (workers.dev). Serves the SPA + API from one Worker.
+# ---------------------------------------------------------------------------
+[env.preview]
+name = "sweam"
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "sweam-db"
+database_id = "cb955161-edd2-41d9-8692-7da571815e0d"
+migrations_dir = "migrations"
+
+[[env.preview.r2_buckets]]
+binding = "MEDIA"
+bucket_name = "sweam-media"
+
+[env.preview.vars]
+ENVIRONMENT = "development"
+TRANSCODER_TOKEN = "dev-transcoder-token"
+
+# The built web app. The Worker runs first (below) and hands non-API requests
+# to this binding; unknown paths fall back to index.html for the SPA router.
+[env.preview.assets]
+directory = "../web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true

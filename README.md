@@ -6,6 +6,8 @@
 
 [![CI](https://github.com/calixdata/sweam/actions/workflows/ci.yml/badge.svg)](https://github.com/calixdata/sweam/actions/workflows/ci.yml)
 
+**Live demo: https://sweam.hi-3e9.workers.dev** — the whole app (SPA + API) on one Cloudflare Worker with D1 and R2. Demo accounts below; all use the password `SweamDemo1!`.
+
 Sweam is a full-stack streaming platform where the core catalog is creator-made: short films, binge series, sketch runs, and documentaries. It pairs the lean-back catalog experience of an ad-supported streamer (think Tubi) with the open, anyone-can-publish pipeline of a social platform (think TikTok), and it makes one promise neither of them makes: **equal visibility, enforced by a published algorithm.**
 
 ---
@@ -121,6 +123,25 @@ npm run typecheck
 npm test
 npm run build
 ```
+
+## Deploy
+
+The whole app deploys to a single Cloudflare Worker: it serves the built web
+app as static assets and handles `/api` + `/media` itself, so the SPA and API
+share one origin (`https://sweam.hi-3e9.workers.dev`). One-time setup creates
+the D1 database and R2 bucket (`wrangler d1 create sweam-db`, `wrangler r2
+bucket create sweam-media`) and puts the database id in `apps/api/wrangler.toml`.
+Then, from `apps/api`:
+
+```bash
+npm run build -w @sweam/web                       # build the SPA into apps/web/dist
+npx wrangler d1 migrations apply sweam-db --remote
+npx wrangler d1 execute sweam-db --remote --file seed.sql   # first deploy only
+npx wrangler deploy --env preview
+```
+
+The `preview` environment (see `apps/api/wrangler.toml`) is what binds the
+static assets; local `wrangler dev` is untouched by it.
 
 ## Repository layout
 

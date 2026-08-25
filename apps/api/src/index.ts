@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { ApiErrorBody } from '@sweam/shared';
-import type { AppEnv } from './env';
+import type { AppEnv, Env } from './env';
 import { withUser } from './lib/session';
 import { adminRoutes } from './routes/admin';
 import { adRoutes } from './routes/ads';
@@ -57,4 +57,20 @@ app.onError((err, c) => {
   return c.json(body, 500);
 });
 
-export default app;
+/**
+ * Entry point. On the deployed Worker (which runs before static assets),
+ * /api and /media are handled by the Hono app and everything else is served
+ * from the built web app via the ASSETS binding, with unknown paths falling
+ * back to index.html for the client router. In local dev there is no ASSETS
+ * binding — Vite serves the app and proxies only /api and /media here.
+ */
+export default {
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
+    const { pathname } = new URL(request.url);
+    if (pathname.startsWith('/api') || pathname.startsWith('/media')) {
+      return app.fetch(request, env, ctx);
+    }
+    return env.ASSETS ? env.ASSETS.fetch(request) : app.fetch(request, env, ctx);
+  },
+};
+
