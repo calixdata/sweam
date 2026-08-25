@@ -26,11 +26,13 @@ Shipped: the admin console (overview, in-product scout application decisions, tr
 - Comments with moderation, creator follows, and new-episode notifications
 - Per-creator storage quotas
 
-## v0.5: Sustainability
+## v0.5: Sustainability (shipped)
 
-- AVOD: pre-roll slots with a published creator revenue share (the Tubi half of the thesis)
-- Creator payouts and tax onboarding
-- Optional fan support (tips, early access) without paywalling the catalog
+Shipped: AVOD pre-rolls (viewer-initiated, pausable, skippable after five seconds, one per title per session) with the published 55% creator share; the integer-millicents impression ledger with splits frozen at serve time; creator earnings dashboards with $10-minimum payout requests; and admin ad inventory plus payout review. Still open from this phase:
+
+- Real money movement and tax onboarding: needs a payment provider, so payout status stays a ledger fact until that decision
+- Optional fan support (tips, early access) without paywalling the catalog: same provider dependency
+- Ad pacing, targeting, and brand-safety review for third-party inventory
 
 ## Continuing threads
 

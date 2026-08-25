@@ -192,3 +192,39 @@ export const takedownCreateSchema = z.object({
   kind: takedownKind,
   reason: z.string().trim().min(1, 'A takedown needs a written reason.').max(1000),
 });
+
+// ---------------------------------------------------------------------------
+// Monetization
+// ---------------------------------------------------------------------------
+
+/** Ad click destinations: https, or an app-relative path like /discover. */
+const clickUrl = z
+  .string()
+  .trim()
+  .max(2048)
+  .refine(
+    (value) => /^https:\/\/\S+$/.test(value) || /^\/\S*$/.test(value),
+    'Must be an https URL or an app-relative path.',
+  );
+
+export const adCreateSchema = z.object({
+  sponsor: z.string().trim().min(1).max(80),
+  headline: z.string().trim().min(1).max(140),
+  mediaUrl: mediaUrl,
+  clickUrl,
+  durationS: z.number().int().min(3).max(60),
+  cpmCents: z.number().int().min(1).max(1_000_000),
+  active: z.boolean().default(true),
+});
+
+export const adUpdateSchema = adCreateSchema
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, 'Provide at least one field to update.');
+
+export const adImpressionSchema = z.object({
+  titleId: z.string().min(1).max(64),
+});
+
+export const payoutDecideSchema = z.object({
+  paid: z.boolean(),
+});

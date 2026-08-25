@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type Hls from 'hls.js';
-import type { WatchPayload } from '@sweam/shared';
-import { ApiError, apiGet } from '../api';
+import type { PrerollAd, WatchPayload } from '@sweam/shared';
+import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote, Loading } from '../components/Status';
 import { formatDuration, usePageTitle } from '../hooks';
@@ -49,6 +49,8 @@ export function Watch() {
   const [payload, setPayload] = useState<WatchPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [preroll, setPreroll] = useState<PrerollAd | null>(null);
+  const [adDone, setAdDone] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastBeaconAt = useRef(0);
   const resumeApplied = useRef(false);
@@ -116,10 +118,42 @@ export function Watch() {
     };
   }, [sendProgress]);
 
-  const videoUrl = payload?.episode.videoUrl ?? null;
+  // Decide the pre-roll slot once per title per browser session. Free
+  // catalog, ad-supported: the split is published on the earnings page.
+  const titleId = payload?.title.id ?? null;
+  useEffect(() => {
+    if (!titleId) return;
+    const seenKey = `sweam-preroll-${titleId}`;
+    let seen = false;
+    try {
+      seen = sessionStorage.getItem(seenKey) === '1';
+    } catch {
+      // Session storage unavailable: play the ad; capping is best-effort.
+    }
+    if (seen) {
+      setAdDone(true);
+      return;
+    }
+    let cancelled = false;
+    apiGet<{ ad: PrerollAd | null }>(`/api/ads/preroll?titleId=${encodeURIComponent(titleId)}`)
+      .then((data) => {
+        if (cancelled) return;
+        if (data.ad) setPreroll(data.ad);
+        else setAdDone(true);
+      })
+      .catch(() => {
+        if (!cancelled) setAdDone(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [titleId]);
+
+  const videoUrl = adDone ? (payload?.episode.videoUrl ?? null) : null;
 
   // Attach the source: native for MP4/WebM (and Safari's built-in HLS),
-  // hls.js (lazy-loaded) for .m3u8 everywhere else.
+  // hls.js (lazy-loaded) for .m3u8 everywhere else. Runs only after the
+  // pre-roll slot resolves so the ad and the feature never race.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoUrl) return;
@@ -190,12 +224,30 @@ export function Watch() {
         </p>
       </header>
 
-      {/* Native controls carry the primary keyboard/SR experience. */}
+      {preroll && !adDone && (
+        <PrerollPlayer
+          ad={preroll}
+          titleId={title.id}
+          onDone={() => {
+            try {
+              sessionStorage.setItem(`sweam-preroll-${title.id}`, '1');
+            } catch {
+              // Best-effort capping only.
+            }
+            setAdDone(true);
+            setAnnouncement('Ad finished. Your video is ready to play.');
+          }}
+        />
+      )}
+
+      {/* Native controls carry the primary keyboard/SR experience. The
+          feature player mounts after the pre-roll slot resolves. */}
       <video
         ref={videoRef}
         className="player"
         controls
         preload="metadata"
+        hidden={!adDone}
         aria-label={`${title.name}: ${episode.name}`}
         onLoadedMetadata={handleLoadedMetadata}
         onPause={() => sendProgress(true)}
@@ -248,5 +300,100 @@ export function Watch() {
 
       {episode.synopsis && <p className="episode-synopsis">{episode.synopsis}</p>}
     </div>
+  );
+}
+
+const AD_SKIPPABLE_AFTER_S = 5;
+
+/**
+ * The pre-roll slot. Nothing autoplays: the viewer starts the ad with a
+ * button press (which also satisfies browser audio policies), can pause it at
+ * any time, and can skip after five seconds. The impression is recorded once,
+ * when ad playback actually starts.
+ */
+function PrerollPlayer({
+  ad,
+  titleId,
+  onDone,
+}: {
+  ad: PrerollAd;
+  titleId: string;
+  onDone: () => void;
+}) {
+  const adRef = useRef<HTMLVideoElement>(null);
+  const [started, setStarted] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const impressionSent = useRef(false);
+
+  function start() {
+    void adRef.current?.play().catch(() => onDone());
+    setStarted(true);
+  }
+
+  function togglePause() {
+    const video = adRef.current;
+    if (!video) return;
+    if (video.paused) {
+      void video.play().catch(() => undefined);
+      setPaused(false);
+    } else {
+      video.pause();
+      setPaused(true);
+    }
+  }
+
+  function handlePlaying() {
+    if (impressionSent.current) return;
+    impressionSent.current = true;
+    void apiSend('POST', `/api/ads/${ad.id}/impression`, { titleId }).catch(() => undefined);
+  }
+
+  function handleTimeUpdate() {
+    const video = adRef.current;
+    if (!video) return;
+    setElapsed(Math.floor(video.currentTime));
+    if (video.currentTime >= ad.durationS) onDone();
+  }
+
+  const skippable = elapsed >= AD_SKIPPABLE_AFTER_S;
+
+  return (
+    <section className="preroll" aria-label="Advertisement">
+      <p className="preroll-label">
+        Ad: {ad.headline} — {ad.sponsor}. Your video plays after this ad.
+      </p>
+      <video
+        ref={adRef}
+        className="player"
+        src={ad.mediaUrl}
+        preload="auto"
+        playsInline
+        aria-label={`Advertisement from ${ad.sponsor}`}
+        onPlaying={handlePlaying}
+        onTimeUpdate={handleTimeUpdate}
+        onEnded={onDone}
+        onError={onDone}
+      />
+      <div className="player-extras">
+        {!started ? (
+          <button type="button" className="button" onClick={start}>
+            Play ad, then your video
+          </button>
+        ) : (
+          <>
+            <button type="button" className="button button-quiet" onClick={togglePause}>
+              {paused ? 'Resume ad' : 'Pause ad'}
+            </button>
+            <button type="button" className="button button-quiet" disabled={!skippable} onClick={onDone}>
+              {skippable ? 'Skip ad' : `Skip ad (in ${AD_SKIPPABLE_AFTER_S - elapsed}s)`}
+            </button>
+          </>
+        )}
+        <a className="button button-quiet" href={ad.clickUrl}>
+          Learn more about {ad.sponsor}
+        </a>
+      </div>
+    </section>
   );
 }

@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import type {
+  AdminAd,
+  AdminMonetization,
   AdminOverview,
+  AdminPayout,
   AdminReport,
   AdminScoutApplication,
   AdminStrike,
@@ -10,12 +13,16 @@ import type {
   TakedownKind,
   TranscodeStatus,
 } from '@sweam/shared';
+import { formatMillicents } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { notify } from '../lib/notify';
 import { requireAdmin, currentUser } from '../lib/session';
 import { SUSPENSION_STRIKES, strikeCutoffIso } from '../lib/standing';
 import {
+  adCreateSchema,
+  adUpdateSchema,
+  payoutDecideSchema,
   reportResolveSchema,
   scoutDecideSchema,
   takedownCreateSchema,
@@ -54,6 +61,8 @@ adminRoutes.get('/overview', async (c) => {
     c.env.DB.prepare(
       'SELECT COALESCE(SUM(plays), 0) AS plays, COALESCE(SUM(watch_seconds), 0) AS watch FROM title_stats',
     ),
+    c.env.DB.prepare("SELECT COUNT(*) AS n FROM payout_requests WHERE status = 'pending'"),
+    c.env.DB.prepare('SELECT COALESCE(SUM(revenue_millicents), 0) AS n FROM ad_impressions'),
   ]);
 
   const count = (index: number) => (results[index]?.results?.[0] as { n: number } | undefined)?.n ?? 0;
@@ -80,6 +89,8 @@ adminRoutes.get('/overview', async (c) => {
     },
     totalPlays: totals.plays ?? 0,
     totalWatchHours: Math.round((totals.watch ?? 0) / 3600),
+    pendingPayouts: count(10),
+    revenueMillicents: count(11),
   };
   return c.json(payload);
 });
@@ -453,6 +464,161 @@ adminRoutes.post('/transcode/:jobId/requeue', async (c) => {
     .run();
   if (result.meta.changes === 0) fail(404, 'job_not_found', 'No failed job with that id.');
   return c.json({ requeued: true });
+});
+
+// ---------------------------------------------------------------------------
+// Monetization
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/monetization', async (c) => {
+  const [totalsRow, adsResult, payoutsResult] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT COUNT(*) AS impressions,
+         COALESCE(SUM(revenue_millicents), 0) AS revenue,
+         COALESCE(SUM(creator_millicents), 0) AS creator
+       FROM ad_impressions`,
+    ).first<{ impressions: number; revenue: number; creator: number }>(),
+    c.env.DB.prepare(
+      `SELECT a.id, a.sponsor, a.headline, a.media_url, a.click_url, a.duration_s, a.cpm_cents, a.active,
+         COUNT(ai.id) AS impressions, COALESCE(SUM(ai.revenue_millicents), 0) AS revenue
+       FROM ads a
+       LEFT JOIN ad_impressions ai ON ai.ad_id = a.id
+       GROUP BY a.id ORDER BY a.created_at DESC`,
+    ).all<{
+      id: string;
+      sponsor: string;
+      headline: string;
+      media_url: string;
+      click_url: string;
+      duration_s: number;
+      cpm_cents: number;
+      active: number;
+      impressions: number;
+      revenue: number;
+    }>(),
+    c.env.DB.prepare(
+      `SELECT p.id, p.amount_millicents, p.requested_at, cp.handle, u.display_name
+       FROM payout_requests p
+       JOIN users u ON u.id = p.creator_id
+       JOIN creator_profiles cp ON cp.user_id = p.creator_id
+       WHERE p.status = 'pending'
+       ORDER BY p.requested_at`,
+    ).all<{
+      id: string;
+      amount_millicents: number;
+      requested_at: string;
+      handle: string;
+      display_name: string;
+    }>(),
+  ]);
+
+  const totals = totalsRow ?? { impressions: 0, revenue: 0, creator: 0 };
+  const ads: AdminAd[] = adsResult.results.map((row) => ({
+    id: row.id,
+    sponsor: row.sponsor,
+    headline: row.headline,
+    mediaUrl: row.media_url,
+    clickUrl: row.click_url,
+    durationS: row.duration_s,
+    cpmCents: row.cpm_cents,
+    active: row.active === 1,
+    impressions: row.impressions,
+    revenueMillicents: row.revenue,
+  }));
+  const pendingPayouts: AdminPayout[] = payoutsResult.results.map((row) => ({
+    id: row.id,
+    amountMillicents: row.amount_millicents,
+    requestedAt: row.requested_at,
+    creator: { handle: row.handle, displayName: row.display_name },
+  }));
+
+  const payload: AdminMonetization = {
+    totals: {
+      impressions: totals.impressions,
+      revenueMillicents: totals.revenue,
+      creatorMillicents: totals.creator,
+      platformMillicents: totals.revenue - totals.creator,
+    },
+    ads,
+    pendingPayouts,
+  };
+  return c.json(payload);
+});
+
+adminRoutes.post('/ads', async (c) => {
+  const body = await parseBody(c, adCreateSchema);
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO ads (id, sponsor, headline, media_url, click_url, duration_s, cpm_cents, active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      id,
+      body.sponsor,
+      body.headline,
+      body.mediaUrl,
+      body.clickUrl,
+      body.durationS,
+      body.cpmCents,
+      body.active ? 1 : 0,
+      nowIso(),
+    )
+    .run();
+  return c.json({ id }, 201);
+});
+
+adminRoutes.patch('/ads/:adId', async (c) => {
+  const body = await parseBody(c, adUpdateSchema);
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  const columns: Record<string, unknown> = {
+    sponsor: body.sponsor,
+    headline: body.headline,
+    media_url: body.mediaUrl,
+    click_url: body.clickUrl,
+    duration_s: body.durationS,
+    cpm_cents: body.cpmCents,
+    active: body.active === undefined ? undefined : body.active ? 1 : 0,
+  };
+  for (const [column, value] of Object.entries(columns)) {
+    if (value !== undefined) {
+      sets.push(`${column} = ?`);
+      values.push(value);
+    }
+  }
+  const result = await c.env.DB.prepare(`UPDATE ads SET ${sets.join(', ')} WHERE id = ?`)
+    .bind(...values, c.req.param('adId'))
+    .run();
+  if (result.meta.changes === 0) fail(404, 'ad_not_found', 'No ad with that id.');
+  return c.json({ ok: true });
+});
+
+adminRoutes.post('/payouts/:payoutId/decide', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, payoutDecideSchema);
+  const payout = await c.env.DB.prepare(
+    `SELECT p.id, p.creator_id, p.amount_millicents FROM payout_requests p
+     WHERE p.id = ? AND p.status = 'pending'`,
+  )
+    .bind(c.req.param('payoutId'))
+    .first<{ id: string; creator_id: string; amount_millicents: number }>();
+  if (!payout) fail(404, 'payout_not_found', 'No pending payout with that id.');
+
+  await c.env.DB.prepare(
+    'UPDATE payout_requests SET status = ?, decided_at = ?, decided_by = ? WHERE id = ?',
+  )
+    .bind(body.paid ? 'paid' : 'rejected', nowIso(), admin.id, payout.id)
+    .run();
+  await notify(
+    c.env.DB,
+    payout.creator_id,
+    'payout',
+    body.paid
+      ? `Your payout of ${formatMillicents(payout.amount_millicents)} was approved and marked paid.`
+      : `Your payout request of ${formatMillicents(payout.amount_millicents)} was declined; the amount is back in your available balance.`,
+    '/studio/earnings',
+  );
+  return c.json({ status: body.paid ? 'paid' : 'rejected' });
 });
 
 // ---------------------------------------------------------------------------

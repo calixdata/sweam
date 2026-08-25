@@ -1,3 +1,5 @@
+<img src="docs/brand/sweam-wordmark.png" alt="Sweam wordmark: the word Sweam in bold black letters with blue wave accents; the A contains a play button." width="480">
+
 # Sweam
 
 **Free streaming built for independent creators. Watch like a streaming service. Break out like a social feed.**
@@ -66,6 +68,7 @@ A working vertical slice, end to end:
   - **Anonymous view beacons** (v0.2): signed-out plays, finishes, and retention count via a random per-session id, never tied to an account, IP, or fingerprint
   - **Scout portal** (v0.3): application-gated scout access; momentum boards over daily counters; per-title one-sheets with 30-day series and per-episode audience retention curves computed from furthest-watched positions; the interest loop, with every one-sheet view logged for the creator
   - **Trust, safety, and administration** (v0.4): viewer report flow feeding an admin moderation queue; DMCA and guidelines takedowns that block republishing until released; a strike system that suspends publishing at three active strikes in 90 days, with revocation; in-product scout application decisions; D1-backed fixed-window rate limiting on sign-in, sign-up, reports, uploads, and anonymous beacons; in-app notifications for every moderation and scout event (moderation is never silent); transcode queue health with requeue; and an HLS orphan garbage collector
+  - **Monetization** (v0.5): AVOD pre-rolls with a **published 55% creator revenue share**; an integer-millicents impression ledger that freezes each serve's split at serve time; creator earnings dashboards with payout requests ($10 minimum); and admin ad inventory and payout review. Actual money movement waits on a payment provider decision, so payout status is a ledger fact, stated openly
 - **Transcoder** ([apps/transcoder](apps/transcoder)): the pipeline's data plane. A Node worker (run it anywhere ffmpeg exists) that claims jobs, probes sources, encodes a no-upscale HLS ladder (1080p/720p/480p/360p) in a single ffmpeg pass, grabs a poster frame, and uploads everything back through the service API
 - **Web** ([apps/web](apps/web)): React + Vite + TypeScript. Home rails with continue-watching, Discover with visible ranking reasons, title and watch pages, an HLS-capable player (native on Safari, lazy-loaded hls.js elsewhere), search, watchlist, sign-in/up, the full Studio flow with pipeline status, per-title analytics, and scout visibility controls, and the scout portal
 - **Shared** ([packages/shared](packages/shared)): one set of types and constants consumed by both sides
@@ -106,7 +109,7 @@ The seed creates a small catalog around the Blender Foundation open movies plus 
 | `westgate@demo.sweam` | Scout applicant with a pending application to decide |
 | `admin@demo.sweam` | Platform administrator |
 
-The seeded stats are chosen to make the mechanics visible. Open Discover and Sintel (90 plays, devoted audience) outranks Big Buck Bunny (2,100 plays, indifferent audience). Sign in as the scout and the fastest-growing board leads with Tears of Steel mid-launch-spike, Elephants Dream is absent everywhere scout-facing because its creator has not opted in, and Ana's Studio analytics for Sintel already shows a one-sheet view and an expression of interest from Northlight Studios. Sign in as the admin and the console opens with Westgate Media's application waiting for a decision and one open report in the moderation queue.
+The seeded stats are chosen to make the mechanics visible. Open Discover and Sintel (90 plays, devoted audience) outranks Big Buck Bunny (2,100 plays, indifferent audience). Sign in as the scout and the fastest-growing board leads with Tears of Steel mid-launch-spike, Elephants Dream is absent everywhere scout-facing because its creator has not opted in, and Ana's Studio analytics for Sintel already shows a one-sheet view and an expression of interest from Northlight Studios. Sign in as the admin and the console opens with Westgate Media's application waiting for a decision, one open report in the moderation queue, and Nova's $10.00 payout awaiting review. Ana's earnings page shows $21.78 available from a seeded impressions ledger that follows the real revenue math row for row.
 
 ### Verify everything
 

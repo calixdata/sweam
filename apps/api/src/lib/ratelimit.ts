@@ -28,6 +28,8 @@ export const RATE_LIMITS = {
   scoutApply: { name: 'scout-apply', limit: 3, windowS: 24 * 60 * 60 },
   /** Single-PUT uploads and multipart inits; parts are bounded by their init. */
   upload: { name: 'upload', limit: 30, windowS: 60 * 60 },
+  /** Pre-roll impression beacons; a human watches far fewer prerolls than this. */
+  adImpression: { name: 'ad-impression', limit: 30, windowS: 5 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /** Start of the fixed window containing nowMs, in epoch seconds. */

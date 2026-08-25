@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { apiGet } from '../api';
 import { useAuth } from '../auth';
@@ -10,6 +11,8 @@ export function Layout() {
   const mainRef = useRef<HTMLElement>(null);
   const isFirstRender = useRef(true);
   const [unread, setUnread] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [logoFailed, setLogoFailed] = useState(false);
 
   // Refresh the notifications badge on every navigation; a stale badge is
   // worse than one extra count query.
@@ -39,6 +42,15 @@ export function Layout() {
     mainRef.current?.focus();
   }, [location.pathname]);
 
+  function handleSearch(event: FormEvent) {
+    event.preventDefault();
+    const trimmed = searchTerm.trim();
+    if (trimmed) {
+      navigate(`/search?q=${encodeURIComponent(trimmed)}`);
+      setSearchTerm('');
+    }
+  }
+
   async function handleSignOut() {
     await signOut();
     navigate('/');
@@ -50,80 +62,111 @@ export function Layout() {
         Skip to main content
       </a>
       <header className="site-header">
-        <nav aria-label="Primary">
-          <Link to="/" className="brand" aria-label="Sweam home">
-            Sweam
-          </Link>
-          <ul className="nav-links">
-            <li>
-              <NavLink to="/" end>
-                Home
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/discover">Discover</NavLink>
-            </li>
-            <li>
-              <NavLink to="/search">Search</NavLink>
-            </li>
-            {user && (
-              <li>
-                <NavLink to="/watchlist">My list</NavLink>
-              </li>
-            )}
-            {user && (
-              <li>
-                <NavLink to="/studio">Studio</NavLink>
-              </li>
-            )}
-            <li>
-              <NavLink to="/scout">Scout</NavLink>
-            </li>
-            {user && (
-              <li>
-                <NavLink
-                  to="/notifications"
-                  aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
-                >
-                  Notifications{unread > 0 ? ` (${unread})` : ''}
-                </NavLink>
-              </li>
-            )}
-            {user?.isAdmin && (
-              <li>
-                <NavLink to="/admin">Admin</NavLink>
-              </li>
-            )}
-          </ul>
-          <div className="nav-auth">
-            {user ? (
-              <>
-                <span className="nav-user">{user.displayName}</span>
-                <button type="button" className="button button-quiet" onClick={handleSignOut}>
-                  Sign out
-                </button>
-              </>
-            ) : (
-              <>
-                <Link className="button button-quiet" to="/signin">
-                  Sign in
-                </Link>
-                <Link className="button" to="/signup">
-                  Join Sweam
-                </Link>
-              </>
-            )}
+        <div className="header-inner">
+          <div className="header-row">
+            <Link to="/" className="brand" aria-label="Sweam home">
+              {logoFailed ? (
+                <span className="brand-text">Sweam</span>
+              ) : (
+                <img
+                  src="/brand/sweam-wordmark.png"
+                  alt="Sweam"
+                  className="brand-img"
+                  onError={() => setLogoFailed(true)}
+                />
+              )}
+            </Link>
+            <form role="search" className="header-search" onSubmit={handleSearch}>
+              <label htmlFor="header-search-input" className="visually-hidden">
+                Search titles and creators
+              </label>
+              <input
+                id="header-search-input"
+                type="search"
+                placeholder="Search titles and creators"
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+              />
+              <button type="submit" className="button button-quiet">
+                Search
+              </button>
+            </form>
+            <div className="header-account">
+              {user ? (
+                <>
+                  <span className="nav-user">{user.displayName}</span>
+                  <button type="button" className="button button-quiet" onClick={handleSignOut}>
+                    Sign out
+                  </button>
+                </>
+              ) : (
+                <>
+                  <Link className="button button-quiet" to="/signin">
+                    Sign in
+                  </Link>
+                  <Link className="button" to="/signup">
+                    Join Sweam
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
-        </nav>
+          <div className="header-row">
+            <nav aria-label="Primary">
+              <ul className="nav-links">
+                <li>
+                  <NavLink to="/" end>
+                    Home
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink to="/discover">Discover</NavLink>
+                </li>
+                <li>
+                  <NavLink to="/browse">Browse</NavLink>
+                </li>
+                {user && (
+                  <li>
+                    <NavLink to="/watchlist">My list</NavLink>
+                  </li>
+                )}
+              </ul>
+            </nav>
+            <nav aria-label="Workspaces">
+              <ul className="nav-links nav-links-secondary">
+                {user && (
+                  <li>
+                    <NavLink
+                      to="/notifications"
+                      aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+                    >
+                      Notifications{unread > 0 ? ` (${unread})` : ''}
+                    </NavLink>
+                  </li>
+                )}
+                {user && (
+                  <li>
+                    <NavLink to="/studio">Studio</NavLink>
+                  </li>
+                )}
+                <li>
+                  <NavLink to="/scout">Scout</NavLink>
+                </li>
+                {user?.isAdmin && (
+                  <li>
+                    <NavLink to="/admin">Admin</NavLink>
+                  </li>
+                )}
+              </ul>
+            </nav>
+          </div>
+        </div>
       </header>
       <main id="main" ref={mainRef} tabIndex={-1}>
         <Outlet />
       </main>
       <footer className="site-footer">
-        <p>
-          Sweam is an open-source portfolio project. Demo catalog: Blender Foundation open movies
-          (CC-BY, © Blender Foundation, blender.org).
-        </p>
+        <p>© 2026 Sweam</p>
       </footer>
     </>
   );

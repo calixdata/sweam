@@ -4,6 +4,8 @@
  * it must stay dependency-free.
  */
 
+export * from './money';
+
 /** The kinds of catalog entries a creator can publish. */
 export type ContentKind = 'film' | 'series' | 'short' | 'documentary';
 
@@ -308,7 +310,8 @@ export type NotificationKind =
   | 'scout_decision'
   | 'takedown'
   | 'takedown_released'
-  | 'strike';
+  | 'strike'
+  | 'payout';
 
 export interface NotificationItem {
   id: string;
@@ -340,6 +343,8 @@ export interface AdminOverview {
   transcode: { queued: number; running: number; failed: number };
   totalPlays: number;
   totalWatchHours: number;
+  pendingPayouts: number;
+  revenueMillicents: number;
 }
 
 export interface AdminScoutApplication {
@@ -387,6 +392,74 @@ export interface AdminTranscodeJob {
   updatedAt: string;
   episodeName: string;
   titleName: string;
+}
+
+// ---------------------------------------------------------------------------
+// Monetization (AVOD)
+// ---------------------------------------------------------------------------
+
+/** The ad handed to the player for a pre-roll slot. */
+export interface PrerollAd {
+  id: string;
+  sponsor: string;
+  headline: string;
+  mediaUrl: string;
+  clickUrl: string;
+  durationS: number;
+}
+
+export type PayoutStatus = 'pending' | 'paid' | 'rejected';
+
+export interface PayoutEntry {
+  id: string;
+  amountMillicents: number;
+  status: PayoutStatus;
+  requestedAt: string;
+  decidedAt: string | null;
+}
+
+/** A creator's earnings view: the ledger, the split, and payout state. */
+export interface EarningsSummary {
+  lifetimeMillicents: number;
+  availableMillicents: number;
+  pendingMillicents: number;
+  paidMillicents: number;
+  perTitle: { titleName: string; impressions: number; creatorMillicents: number }[];
+  daily: { day: string; impressions: number; creatorMillicents: number }[];
+  payouts: PayoutEntry[];
+  minPayoutMillicents: number;
+  creatorSharePercent: number;
+}
+
+export interface AdminAd {
+  id: string;
+  sponsor: string;
+  headline: string;
+  mediaUrl: string;
+  clickUrl: string;
+  durationS: number;
+  cpmCents: number;
+  active: boolean;
+  impressions: number;
+  revenueMillicents: number;
+}
+
+export interface AdminPayout {
+  id: string;
+  amountMillicents: number;
+  requestedAt: string;
+  creator: { handle: string; displayName: string };
+}
+
+export interface AdminMonetization {
+  totals: {
+    impressions: number;
+    revenueMillicents: number;
+    creatorMillicents: number;
+    platformMillicents: number;
+  };
+  ads: AdminAd[];
+  pendingPayouts: AdminPayout[];
 }
 
 /** Every API error responds with this envelope and a machine-readable code. */

@@ -128,6 +128,11 @@ function StudioDashboard({ handle }: { handle: string }) {
     <div className="page page-narrow">
       <h1>Studio</h1>
       <p className="page-intro">Signed in as @{handle}.</p>
+      <p>
+        <Link className="button button-quiet" to="/studio/earnings">
+          Earnings and payouts
+        </Link>
+      </p>
 
       {(standing.suspended || standing.activeStrikes > 0 || standing.takedowns.length > 0) && (
         <section aria-labelledby="standing-heading">

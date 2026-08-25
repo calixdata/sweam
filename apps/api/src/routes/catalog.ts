@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { ContinueWatchingItem, HomePayload, Rail, TitleSummary } from '@sweam/shared';
+import { CONTENT_KINDS, GENRES } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { fail } from '../lib/http';
 import type { TitleRow, TitleStatsRow } from '../lib/mappers';
@@ -79,6 +80,44 @@ catalogRoutes.get('/home', async (c) => {
   await recordImpressions(c.env.DB, spotlight.map((t) => t.id));
 
   return c.json(payload);
+});
+
+/** The browse grid: the published catalog filtered by genre and kind. */
+catalogRoutes.get('/browse', async (c) => {
+  const genre = c.req.query('genre') ?? '';
+  const kind = c.req.query('kind') ?? '';
+  const sort = c.req.query('sort') ?? 'new';
+  if (genre && !(GENRES as readonly string[]).includes(genre)) {
+    fail(400, 'bad_genre', 'Unknown genre.');
+  }
+  if (kind && !(CONTENT_KINDS as readonly string[]).includes(kind)) {
+    fail(400, 'bad_kind', 'Unknown kind.');
+  }
+  if (sort !== 'new' && sort !== 'popular') fail(400, 'bad_sort', 'Sort is new or popular.');
+
+  const conditions = ['t.published = 1'];
+  const bindings: string[] = [];
+  if (genre) {
+    conditions.push('t.genre = ?');
+    bindings.push(genre);
+  }
+  if (kind) {
+    conditions.push('t.kind = ?');
+    bindings.push(kind);
+  }
+
+  const { results } = await c.env.DB.prepare(
+    `SELECT ${TITLE_SELECT}, COALESCE(s.plays, 0) AS plays
+     ${TITLE_FROM}
+     LEFT JOIN title_stats s ON s.title_id = t.id
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY ${sort === 'popular' ? 's.plays DESC, t.published_at DESC' : 't.published_at DESC'}
+     LIMIT 60`,
+  )
+    .bind(...bindings)
+    .all<TitleRow>();
+
+  return c.json({ titles: results.map(mapTitle) });
 });
 
 catalogRoutes.get('/search', async (c) => {

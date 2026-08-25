@@ -8,6 +8,8 @@ import { Home } from './pages/Home';
 import { NotFound } from './pages/NotFound';
 import { Admin } from './pages/Admin';
 import { AdminModeration } from './pages/AdminModeration';
+import { AdminMonetization } from './pages/AdminMonetization';
+import { Browse } from './pages/Browse';
 import { Notifications } from './pages/Notifications';
 import { Scout } from './pages/Scout';
 import { ScoutOneSheet } from './pages/ScoutOneSheet';
@@ -16,6 +18,7 @@ import { SignIn } from './pages/SignIn';
 import { SignUp } from './pages/SignUp';
 import { Studio } from './pages/Studio';
 import { StudioAnalytics } from './pages/StudioAnalytics';
+import { StudioEarnings } from './pages/StudioEarnings';
 import { StudioTitle } from './pages/StudioTitle';
 import { TitlePage } from './pages/TitlePage';
 import { Watch } from './pages/Watch';
@@ -36,6 +39,7 @@ export function App() {
       <Route element={<Layout />}>
         <Route index element={<Home />} />
         <Route path="/discover" element={<Discover />} />
+        <Route path="/browse" element={<Browse />} />
         <Route path="/search" element={<Search />} />
         <Route path="/t/:slug" element={<TitlePage />} />
         <Route path="/watch/:episodeId" element={<Watch />} />
@@ -48,6 +52,14 @@ export function App() {
           }
         />
         <Route path="/studio" element={<Studio />} />
+        <Route
+          path="/studio/earnings"
+          element={
+            <RequireAuth>
+              <StudioEarnings />
+            </RequireAuth>
+          }
+        />
         <Route
           path="/studio/t/:titleId"
           element={
@@ -83,6 +95,7 @@ export function App() {
         />
         <Route path="/admin" element={<Admin />} />
         <Route path="/admin/moderation" element={<AdminModeration />} />
+        <Route path="/admin/monetization" element={<AdminMonetization />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="*" element={<NotFound />} />

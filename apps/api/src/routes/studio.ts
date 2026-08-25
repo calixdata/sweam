@@ -1,7 +1,9 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type {
+  EarningsSummary,
   MultipartInit,
+  PayoutEntry,
   StudioEpisode,
   StudioStanding,
   StudioTitleDetail,
@@ -9,6 +11,7 @@ import type {
   TitleAnalytics,
   TranscodeStatus,
 } from '@sweam/shared';
+import { CREATOR_REVENUE_SHARE, MIN_PAYOUT_MILLICENTS } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { loadDailySeries, loadRetention } from '../lib/analytics';
 import { fail, nowIso, parseBody } from '../lib/http';
@@ -395,6 +398,124 @@ studioRoutes.delete('/episodes/:episodeId', requireCreator, async (c) => {
   const episode = await ownedEpisode(c, c.req.param('episodeId'));
   await c.env.DB.prepare('DELETE FROM episodes WHERE id = ?').bind(episode.id).run();
   return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Earnings and payouts
+// ---------------------------------------------------------------------------
+
+async function payoutTotals(
+  db: D1Database,
+  creatorId: string,
+): Promise<{ pending: number; paid: number }> {
+  const { results } = await db
+    .prepare(
+      `SELECT status, COALESCE(SUM(amount_millicents), 0) AS total
+       FROM payout_requests WHERE creator_id = ? GROUP BY status`,
+    )
+    .bind(creatorId)
+    .all<{ status: string; total: number }>();
+  const byStatus = new Map(results.map((row) => [row.status, row.total]));
+  return { pending: byStatus.get('pending') ?? 0, paid: byStatus.get('paid') ?? 0 };
+}
+
+studioRoutes.get('/earnings', requireCreator, async (c) => {
+  const user = currentUser(c);
+  const [lifetimeRow, payouts, perTitleResult, dailyResult, payoutList] = await Promise.all([
+    c.env.DB.prepare(
+      'SELECT COALESCE(SUM(creator_millicents), 0) AS n FROM ad_impressions WHERE creator_id = ?',
+    )
+      .bind(user.id)
+      .first<{ n: number }>(),
+    payoutTotals(c.env.DB, user.id),
+    c.env.DB.prepare(
+      `SELECT t.name AS title_name, COUNT(*) AS impressions, SUM(ai.creator_millicents) AS earned
+       FROM ad_impressions ai JOIN titles t ON t.id = ai.title_id
+       WHERE ai.creator_id = ?
+       GROUP BY ai.title_id ORDER BY earned DESC`,
+    )
+      .bind(user.id)
+      .all<{ title_name: string; impressions: number; earned: number }>(),
+    c.env.DB.prepare(
+      `SELECT date(created_at) AS day, COUNT(*) AS impressions, SUM(creator_millicents) AS earned
+       FROM ad_impressions
+       WHERE creator_id = ? AND date(created_at) >= date('now', '-13 days')
+       GROUP BY day ORDER BY day`,
+    )
+      .bind(user.id)
+      .all<{ day: string; impressions: number; earned: number }>(),
+    c.env.DB.prepare(
+      `SELECT id, amount_millicents, status, requested_at, decided_at
+       FROM payout_requests WHERE creator_id = ?
+       ORDER BY requested_at DESC LIMIT 20`,
+    )
+      .bind(user.id)
+      .all<{
+        id: string;
+        amount_millicents: number;
+        status: PayoutEntry['status'];
+        requested_at: string;
+        decided_at: string | null;
+      }>(),
+  ]);
+
+  const lifetime = lifetimeRow?.n ?? 0;
+  const payload: EarningsSummary = {
+    lifetimeMillicents: lifetime,
+    availableMillicents: Math.max(0, lifetime - payouts.pending - payouts.paid),
+    pendingMillicents: payouts.pending,
+    paidMillicents: payouts.paid,
+    perTitle: perTitleResult.results.map((row) => ({
+      titleName: row.title_name,
+      impressions: row.impressions,
+      creatorMillicents: row.earned,
+    })),
+    daily: dailyResult.results.map((row) => ({
+      day: row.day,
+      impressions: row.impressions,
+      creatorMillicents: row.earned,
+    })),
+    payouts: payoutList.results.map((row) => ({
+      id: row.id,
+      amountMillicents: row.amount_millicents,
+      status: row.status,
+      requestedAt: row.requested_at,
+      decidedAt: row.decided_at,
+    })),
+    minPayoutMillicents: MIN_PAYOUT_MILLICENTS,
+    creatorSharePercent: Math.round(CREATOR_REVENUE_SHARE * 100),
+  };
+  return c.json(payload);
+});
+
+/** Requests a payout of the full available balance. */
+studioRoutes.post('/payouts', requireCreator, async (c) => {
+  const user = currentUser(c);
+  const existing = await c.env.DB.prepare(
+    "SELECT 1 AS x FROM payout_requests WHERE creator_id = ? AND status = 'pending'",
+  )
+    .bind(user.id)
+    .first();
+  if (existing) fail(409, 'payout_pending', 'You already have a payout awaiting review.');
+
+  const lifetimeRow = await c.env.DB.prepare(
+    'SELECT COALESCE(SUM(creator_millicents), 0) AS n FROM ad_impressions WHERE creator_id = ?',
+  )
+    .bind(user.id)
+    .first<{ n: number }>();
+  const totals = await payoutTotals(c.env.DB, user.id);
+  const available = Math.max(0, (lifetimeRow?.n ?? 0) - totals.pending - totals.paid);
+  if (available < MIN_PAYOUT_MILLICENTS) {
+    fail(400, 'below_minimum', 'Payouts unlock at $10.00 of available earnings.');
+  }
+
+  await c.env.DB.prepare(
+    `INSERT INTO payout_requests (id, creator_id, amount_millicents, status, requested_at)
+     VALUES (?, ?, ?, 'pending', ?)`,
+  )
+    .bind(crypto.randomUUID(), user.id, available, nowIso())
+    .run();
+  return c.json({ requested: true, amountMillicents: available }, 201);
 });
 
 // ---------------------------------------------------------------------------

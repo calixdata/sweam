@@ -61,7 +61,18 @@ export function Home() {
         </section>
       )}
       {payload.rails.map((rail) => (
-        <Rail key={rail.key} heading={rail.heading} titles={rail.titles} />
+        <Rail
+          key={rail.key}
+          heading={rail.heading}
+          titles={rail.titles}
+          seeAllHref={
+            rail.key.startsWith('genre-')
+              ? `/browse?genre=${encodeURIComponent(rail.heading)}`
+              : rail.key === 'new'
+                ? '/browse'
+                : undefined
+          }
+        />
       ))}
     </div>
   );

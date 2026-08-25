@@ -20,6 +20,9 @@
 -- Tears of Steel is mid-launch spike, Sintel is accelerating week over week,
 -- Big Buck Bunny is big but flat-to-declining.
 
+DELETE FROM payout_requests;
+DELETE FROM ad_impressions;
+DELETE FROM ads;
 DELETE FROM notifications;
 DELETE FROM rate_limits;
 DELETE FROM strikes;
@@ -247,3 +250,54 @@ INSERT INTO notifications (id, user_id, kind, body, link, read, created_at) VALU
   ('ntf_seed_1', 'usr_ana', 'scout_interest',
    'Northlight Studios expressed interest in Sintel. Their contact details are in your analytics.',
    '/studio/t/ttl_sintel/analytics', 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'));
+
+-- ---------------------------------------------------------------------------
+-- Monetization: house ads and a synthetic-but-consistent impressions ledger.
+-- The house ads reuse the CC-BY Blender films as stand-in creative. Ledger
+-- amounts follow the real math exactly: revenue = cpm_cents millicents per
+-- impression, creator share 55% (1200 -> 660, 1500 -> 825). Recursive CTEs
+-- keep the seed compact while producing real per-impression rows spread over
+-- the last 14 days.
+-- ---------------------------------------------------------------------------
+
+INSERT INTO ads (id, sponsor, headline, media_url, click_url, duration_s, cpm_cents, active, created_at) VALUES
+  ('ad_house_1', 'Sweam', 'Discover your next favorite creator',
+   'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+   '/discover', 10, 1200, 1, '2026-08-01T12:00:00.000Z'),
+  ('ad_house_2', 'Sweam Studio', 'Publish your film where discovery is fair',
+   'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+   '/studio', 12, 1500, 1, '2026-08-01T12:05:00.000Z');
+
+WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 2500)
+INSERT INTO ad_impressions (id, ad_id, title_id, creator_id, viewer, revenue_millicents, creator_millicents, created_at)
+SELECT lower(hex(randomblob(16))), 'ad_house_1', 'ttl_sintel', 'usr_ana',
+  CASE WHEN x % 3 = 0 THEN 'anon' ELSE 'user' END, 1200, 660,
+  strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || (x % 14) || ' days')
+FROM seq;
+
+WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 800)
+INSERT INTO ad_impressions (id, ad_id, title_id, creator_id, viewer, revenue_millicents, creator_millicents, created_at)
+SELECT lower(hex(randomblob(16))), 'ad_house_1', 'ttl_tos', 'usr_ana',
+  CASE WHEN x % 4 = 0 THEN 'anon' ELSE 'user' END, 1200, 660,
+  strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || (x % 3) || ' days')
+FROM seq;
+
+WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 3000)
+INSERT INTO ad_impressions (id, ad_id, title_id, creator_id, viewer, revenue_millicents, creator_millicents, created_at)
+SELECT lower(hex(randomblob(16))), 'ad_house_2', 'ttl_bbb', 'usr_nova',
+  CASE WHEN x % 2 = 0 THEN 'anon' ELSE 'user' END, 1500, 825,
+  strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || (x % 14) || ' days')
+FROM seq;
+
+WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 400)
+INSERT INTO ad_impressions (id, ad_id, title_id, creator_id, viewer, revenue_millicents, creator_millicents, created_at)
+SELECT lower(hex(randomblob(16))), 'ad_house_1', 'ttl_anthology', 'usr_mira',
+  CASE WHEN x % 3 = 0 THEN 'anon' ELSE 'user' END, 1200, 660,
+  strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || (x % 2) || ' days')
+FROM seq;
+
+-- Nova already has a payout awaiting review, so the admin monetization page
+-- has a live decision on first run. Ana is above the $10 minimum and can
+-- request one; Mira ($2.64 lifetime) demonstrates the gate.
+INSERT INTO payout_requests (id, creator_id, amount_millicents, status, requested_at) VALUES
+  ('pay_seed_1', 'usr_nova', 1000000, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'));

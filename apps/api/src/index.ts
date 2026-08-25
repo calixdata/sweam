@@ -4,6 +4,7 @@ import type { ApiErrorBody } from '@sweam/shared';
 import type { AppEnv } from './env';
 import { withUser } from './lib/session';
 import { adminRoutes } from './routes/admin';
+import { adRoutes } from './routes/ads';
 import { authRoutes } from './routes/auth';
 import { catalogRoutes } from './routes/catalog';
 import { discoverRoutes } from './routes/discover';
@@ -33,6 +34,7 @@ app.route('/api/studio', studioRoutes);
 app.route('/api/scout', scoutRoutes);
 app.route('/api/transcode', transcodeRoutes);
 app.route('/api/admin', adminRoutes);
+app.route('/api/ads', adRoutes);
 app.route('/media', mediaRoutes);
 
 app.notFound((c) => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { AdminOverview, AdminScoutApplication, AdminTranscodeJob } from '@sweam/shared';
+import { formatMillicents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote, Loading } from '../components/Status';
@@ -94,8 +95,12 @@ function AdminDashboard() {
         Platform operations. Moderation lives on the{' '}
         <Link to="/admin/moderation">moderation page</Link>
         {overview.openReports > 0
-          ? ` (${overview.openReports} open report${overview.openReports === 1 ? '' : 's'}).`
-          : ' (queue is empty).'}
+          ? ` (${overview.openReports} open report${overview.openReports === 1 ? '' : 's'})`
+          : ' (queue is empty)'}
+        ; ads and payouts on the <Link to="/admin/monetization">monetization page</Link>
+        {overview.pendingPayouts > 0
+          ? ` (${overview.pendingPayouts} payout${overview.pendingPayouts === 1 ? '' : 's'} pending).`
+          : '.'}
       </p>
 
       {notice && (
@@ -147,6 +152,13 @@ function AdminDashboard() {
               <tr>
                 <th scope="row">Scout applications</th>
                 <td>{overview.pendingScoutApplications} pending</td>
+              </tr>
+              <tr>
+                <th scope="row">Advertising</th>
+                <td>
+                  {formatMillicents(overview.revenueMillicents)} gross revenue,{' '}
+                  {overview.pendingPayouts} payout{overview.pendingPayouts === 1 ? '' : 's'} pending
+                </td>
               </tr>
             </tbody>
           </table>

@@ -140,6 +140,16 @@ The moderation model, end to end:
 
 **Notifications** store prerendered text plus an optional app link, so the list is a plain indexed read and an entry stays accurate even if what it describes is later renamed or deleted. The nav badge is a count query refreshed on navigation; opening the page marks everything read.
 
+### Monetization
+
+The catalog is free to watch; revenue is AVOD pre-rolls, and the creator split (55%) is a published constant in [packages/shared/src/money.ts](../packages/shared/src/money.ts), not a private deal.
+
+The ledger is integer millicents (1/1000 cent) end to end: a CPM priced in cents earns exactly `cpm_cents` millicents per impression, so sums never touch floating point and 1,000 impressions at a $12 CPM is exactly $12.00. Each served impression writes one row with its revenue and creator share **frozen at serve time**, so later CPM or split changes never rewrite history. The impression is recorded when ad playback actually starts, rate limited per viewer.
+
+The pre-roll slot itself: nothing autoplays (the viewer starts the ad with a button press, which also satisfies browser audio policies), the ad is pausable, and it is skippable after five seconds. Frequency capping is one pre-roll per title per browser session, held client-side; the server-side pacing ledger is roadmap work.
+
+Payouts: creators request their full available balance ($10.00 minimum, one open request at a time); admins mark requests paid or rejected, a rejection returning the amount to available, and either decision notifies the creator. Real money movement needs a payment provider and tax onboarding, so payout status is deliberately a ledger fact until that decision is made — the same local-first honesty rule as email.
+
 ## Security posture
 
 - Passwords: PBKDF2-SHA256, 100k iterations, per-user salt, constant-time comparison, versioned storage format so the work factor can be raised without a migration.
