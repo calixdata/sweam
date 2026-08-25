@@ -69,7 +69,7 @@ A working vertical slice, end to end:
 
 ## Getting started
 
-Prerequisites: Node 20+ and npm. No Cloudflare account is needed for local development; D1 and R2 run as local simulations.
+Prerequisites: Node 22+ and npm (Wrangler 4 requires Node 22). No Cloudflare account is needed for local development; D1 and R2 run as local simulations.
 
 ```bash
 npm install
