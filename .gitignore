@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+
+# Cloudflare local state
+.wrangler/
+.dev.vars
+
+# Environment
+.env
+.env.*
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log

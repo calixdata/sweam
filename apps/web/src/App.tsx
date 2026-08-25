@@ -1,0 +1,59 @@
+import type { ReactNode } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { useAuth } from './auth';
+import { Layout } from './components/Layout';
+import { Loading } from './components/Status';
+import { Discover } from './pages/Discover';
+import { Home } from './pages/Home';
+import { NotFound } from './pages/NotFound';
+import { Search } from './pages/Search';
+import { SignIn } from './pages/SignIn';
+import { SignUp } from './pages/SignUp';
+import { Studio } from './pages/Studio';
+import { StudioTitle } from './pages/StudioTitle';
+import { TitlePage } from './pages/TitlePage';
+import { Watch } from './pages/Watch';
+import { Watchlist } from './pages/Watchlist';
+
+/** Redirects signed-out visitors to sign-in, remembering where they were headed. */
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  if (loading) return <Loading />;
+  if (!user) return <Navigate to="/signin" state={{ from: location.pathname }} replace />;
+  return <>{children}</>;
+}
+
+export function App() {
+  return (
+    <Routes>
+      <Route element={<Layout />}>
+        <Route index element={<Home />} />
+        <Route path="/discover" element={<Discover />} />
+        <Route path="/search" element={<Search />} />
+        <Route path="/t/:slug" element={<TitlePage />} />
+        <Route path="/watch/:episodeId" element={<Watch />} />
+        <Route
+          path="/watchlist"
+          element={
+            <RequireAuth>
+              <Watchlist />
+            </RequireAuth>
+          }
+        />
+        <Route path="/studio" element={<Studio />} />
+        <Route
+          path="/studio/t/:titleId"
+          element={
+            <RequireAuth>
+              <StudioTitle />
+            </RequireAuth>
+          }
+        />
+        <Route path="/signin" element={<SignIn />} />
+        <Route path="/signup" element={<SignUp />} />
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
+  );
+}

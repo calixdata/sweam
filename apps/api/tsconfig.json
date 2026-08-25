@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "types": ["@cloudflare/workers-types"],
+    "baseUrl": ".",
+    "paths": {
+      "@sweam/shared": ["../../packages/shared/src/index.ts"]
+    }
+  },
+  "include": ["src", "test", "vitest.config.ts"]
+}

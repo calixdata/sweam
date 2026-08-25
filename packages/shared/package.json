@@ -1,0 +1,14 @@
+{
+  "name": "@sweam/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Types and constants shared by the Sweam API and web app.",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
+}

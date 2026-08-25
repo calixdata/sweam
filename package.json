@@ -1,0 +1,33 @@
+{
+  "name": "sweam",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Free streaming for independent creators: catalog-grade presentation with equal-visibility discovery.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,cyan \"npm run dev -w @sweam/api\" \"npm run dev -w @sweam/web\"",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "format": "prettier --write \"**/*.{ts,tsx,css,md,json}\"",
+    "db:reset": "npm run db:migrate -w @sweam/api && npm run db:seed -w @sweam/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "concurrently": "^9.1.0",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.19.0"
+  }
+}

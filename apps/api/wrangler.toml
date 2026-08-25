@@ -1,0 +1,23 @@
+# Sweam API worker.
+#
+# Local development needs no Cloudflare account: `wrangler dev` runs D1 and R2
+# simulations on disk under .wrangler/state. Before a real deploy, create the
+# resources (`wrangler d1 create sweam-db`, `wrangler r2 bucket create
+# sweam-media`) and replace database_id below with the id you are given.
+
+name = "sweam-api"
+main = "src/index.ts"
+compatibility_date = "2025-08-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sweam-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "sweam-media"
+
+[vars]
+ENVIRONMENT = "development"
