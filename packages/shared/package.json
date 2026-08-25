@@ -1,6 +1,6 @@
 {
   "name": "@sweam/shared",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "Types and constants shared by the Sweam API and web app.",

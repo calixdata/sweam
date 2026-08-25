@@ -23,8 +23,9 @@ The feature that closes the loop on the platform thesis: a vetted, ranked view f
 Shipped: the admin console (overview, in-product scout application decisions, transcode queue health with requeue, HLS orphan garbage collection); the viewer report flow feeding a moderation queue; DMCA and guidelines takedowns with a release lifecycle and republish blocking; the strike system with 90-day-window suspension at three active strikes and revocation; fixed-window rate limiting on sign-in, sign-up, reports, uploads, scout applications, and anonymous beacons; and in-app notifications for every moderation and scout event. Still open from this phase:
 
 - Email verification and password reset: needs an email provider, which breaks the local-first promise, so it ships with the first deployment decision instead of a mock
-- Comments with moderation, creator follows, and new-episode notifications
 - Per-creator storage quotas
+
+Community (comments with the three-role moderation chain, comment reports, creator follows with public pages, the following rail, and new-episode follower notifications) shipped in v0.6. Still open there: comment pagination past the first 500, deeper threading, muting and blocklists, and queued notification fan-out at scale.
 
 ## v0.5: Sustainability (shipped)
 

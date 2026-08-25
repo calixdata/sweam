@@ -10,6 +10,7 @@ import { Admin } from './pages/Admin';
 import { AdminModeration } from './pages/AdminModeration';
 import { AdminMonetization } from './pages/AdminMonetization';
 import { Browse } from './pages/Browse';
+import { CreatorPage } from './pages/CreatorPage';
 import { Notifications } from './pages/Notifications';
 import { Scout } from './pages/Scout';
 import { ScoutOneSheet } from './pages/ScoutOneSheet';
@@ -42,6 +43,7 @@ export function App() {
         <Route path="/browse" element={<Browse />} />
         <Route path="/search" element={<Search />} />
         <Route path="/t/:slug" element={<TitlePage />} />
+        <Route path="/c/:handle" element={<CreatorPage />} />
         <Route path="/watch/:episodeId" element={<Watch />} />
         <Route
           path="/watchlist"

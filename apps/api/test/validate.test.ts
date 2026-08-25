@@ -142,6 +142,27 @@ describe('reportResolveSchema', () => {
   });
 });
 
+describe('community schemas', () => {
+  it('accepts a comment and defaults parentId to null', async () => {
+    const { commentCreateSchema } = await import('../src/lib/validate');
+    const parsed = commentCreateSchema.parse({ body: '  Loved the ending.  ' });
+    expect(parsed.body).toBe('Loved the ending.');
+    expect(parsed.parentId).toBeNull();
+  });
+
+  it('rejects empty and oversized comment bodies', async () => {
+    const { commentCreateSchema } = await import('../src/lib/validate');
+    expect(commentCreateSchema.safeParse({ body: '   ' }).success).toBe(false);
+    expect(commentCreateSchema.safeParse({ body: 'x'.repeat(1001) }).success).toBe(false);
+  });
+
+  it('restricts comment report reasons to the published set', async () => {
+    const { commentReportSchema } = await import('../src/lib/validate');
+    expect(commentReportSchema.safeParse({ reason: 'spam' }).success).toBe(true);
+    expect(commentReportSchema.safeParse({ reason: 'copyright' }).success).toBe(false);
+  });
+});
+
 describe('progressSchema', () => {
   it('accepts a normal beacon and rejects nonsense', () => {
     expect(progressSchema.safeParse({ positionS: 120, durationS: 596 }).success).toBe(true);

@@ -15,6 +15,7 @@ import { CREATOR_REVENUE_SHARE, MIN_PAYOUT_MILLICENTS } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { loadDailySeries, loadRetention } from '../lib/analytics';
 import { fail, nowIso, parseBody } from '../lib/http';
+import { notifyFollowers } from '../lib/notify';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { SUSPENSION_STRIKES, activeStrikeCount, assertGoodStanding } from '../lib/standing';
 import type { EpisodeRow } from '../lib/mappers';
@@ -272,11 +273,25 @@ studioRoutes.post('/titles/:titleId/publish', requireCreator, async (c) => {
   }
 
   if (body.published) {
+    const before = await c.env.DB.prepare('SELECT published_at FROM titles WHERE id = ?')
+      .bind(row.id)
+      .first<{ published_at: string | null }>();
     await c.env.DB.prepare(
       'UPDATE titles SET published = 1, published_at = COALESCE(published_at, ?) WHERE id = ?',
     )
       .bind(nowIso(), row.id)
       .run();
+    // A first publish announces the title to the creator's followers;
+    // republishing after an unpublish or takedown release does not re-ping.
+    if (before?.published_at === null) {
+      await notifyFollowers(
+        c.env.DB,
+        currentUser(c).id,
+        'new_episode',
+        `${currentUser(c).displayName} published ${row.name}.`,
+        `/t/${row.slug}`,
+      );
+    }
   } else {
     await c.env.DB.prepare('UPDATE titles SET published = 0 WHERE id = ?').bind(row.id).run();
   }
@@ -320,6 +335,16 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
     throw err;
   }
   if (sourceUrl) await enqueueTranscode(c.env.DB, id, sourceUrl);
+  // New episodes on an already-published title go straight to followers.
+  if (row.published === 1) {
+    await notifyFollowers(
+      c.env.DB,
+      currentUser(c).id,
+      'new_episode',
+      `New episode of ${row.name}: S${body.season} E${body.episode}, ${body.name}.`,
+      `/watch/${id}`,
+    );
+  }
   return c.json({ id, transcodeQueued: sourceUrl !== null }, 201);
 });
 

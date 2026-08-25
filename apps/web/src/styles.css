@@ -675,6 +675,81 @@ input[type='file'] {
   margin-top: 2rem;
 }
 
+/* ---------------------------------------------------------------- comments */
+
+.comments-section {
+  margin-top: 2rem;
+}
+
+.comment-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.comment {
+  border-top: 1px solid var(--border);
+  padding: 0.7rem 0;
+}
+
+.comment-reply {
+  border-top: none;
+  border-left: 2px solid var(--border);
+  margin-left: 1rem;
+  padding-left: 0.9rem;
+}
+
+.comment-meta {
+  margin: 0 0 0.2rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.comment-body {
+  margin: 0 0 0.3rem;
+  max-width: 65ch;
+  white-space: pre-wrap;
+}
+
+.comment-removed {
+  margin: 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.comment-actions {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.button-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--link);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.comment-reported {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.comment-report-choices {
+  display: inline-flex;
+  gap: 0.6rem;
+}
+
+.comment-form {
+  margin: 0.75rem 0;
+  max-width: 560px;
+}
+
 .resolve-form {
   margin: 0.75rem 0 0;
 }

@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type {
   AdminAd,
+  AdminCommentReport,
   AdminMonetization,
   AdminOverview,
   AdminPayout,
@@ -9,6 +10,7 @@ import type {
   AdminStrike,
   AdminTakedown,
   AdminTranscodeJob,
+  CommentReportReason,
   ReportReason,
   TakedownKind,
   TranscodeStatus,
@@ -22,6 +24,7 @@ import { SUSPENSION_STRIKES, strikeCutoffIso } from '../lib/standing';
 import {
   adCreateSchema,
   adUpdateSchema,
+  commentReportResolveSchema,
   payoutDecideSchema,
   reportResolveSchema,
   scoutDecideSchema,
@@ -289,6 +292,94 @@ adminRoutes.post('/reports/:reportId/resolve', async (c) => {
       `A strike was issued on your account regarding ${report.title_name}. ${SUSPENSION_STRIKES} active strikes suspend publishing.`,
       '/studio',
     );
+  }
+  return c.json({ resolved: true, action: body.action });
+});
+
+// ---------------------------------------------------------------------------
+// Comment reports
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/comment-reports', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT cr.id, cr.reason, cr.created_at,
+       co.id AS comment_id, co.body, u.display_name AS author_name,
+       t.name AS title_name, t.slug AS title_slug,
+       ru.display_name AS reporter_name
+     FROM comment_reports cr
+     JOIN comments co ON co.id = cr.comment_id
+     JOIN users u ON u.id = co.author_id
+     JOIN titles t ON t.id = co.title_id
+     JOIN users ru ON ru.id = cr.reporter_id
+     WHERE cr.status = 'open' AND co.status = 'visible'
+     ORDER BY cr.created_at
+     LIMIT 100`,
+  ).all<{
+    id: string;
+    reason: CommentReportReason;
+    created_at: string;
+    comment_id: string;
+    body: string;
+    author_name: string;
+    title_name: string;
+    title_slug: string;
+    reporter_name: string;
+  }>();
+
+  const reports: AdminCommentReport[] = results.map((row) => ({
+    id: row.id,
+    reason: row.reason,
+    createdAt: row.created_at,
+    comment: {
+      id: row.comment_id,
+      body: row.body,
+      authorName: row.author_name,
+      titleName: row.title_name,
+      titleSlug: row.title_slug,
+    },
+    reporter: { displayName: row.reporter_name },
+  }));
+  return c.json({ reports });
+});
+
+adminRoutes.post('/comment-reports/:reportId/resolve', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, commentReportResolveSchema);
+  const report = await c.env.DB.prepare(
+    `SELECT cr.id, cr.comment_id, co.author_id, t.name AS title_name
+     FROM comment_reports cr
+     JOIN comments co ON co.id = cr.comment_id
+     JOIN titles t ON t.id = co.title_id
+     WHERE cr.id = ? AND cr.status = 'open'`,
+  )
+    .bind(c.req.param('reportId'))
+    .first<{ id: string; comment_id: string; author_id: string; title_name: string }>();
+  if (!report) fail(404, 'report_not_found', 'No open comment report with that id.');
+
+  const now = nowIso();
+  if (body.action === 'remove') {
+    // Removing the comment settles every open report against it at once.
+    await c.env.DB.batch([
+      c.env.DB.prepare("UPDATE comments SET status = 'removed_by_admin' WHERE id = ?").bind(
+        report.comment_id,
+      ),
+      c.env.DB.prepare(
+        `UPDATE comment_reports SET status = 'resolved', resolved_by = ?, resolved_at = ?
+         WHERE comment_id = ? AND status = 'open'`,
+      ).bind(admin.id, now, report.comment_id),
+    ]);
+    await notify(
+      c.env.DB,
+      report.author_id,
+      'comment',
+      `Your comment on ${report.title_name} was removed by moderators.`,
+    );
+  } else {
+    await c.env.DB.prepare(
+      `UPDATE comment_reports SET status = 'dismissed', resolved_by = ?, resolved_at = ? WHERE id = ?`,
+    )
+      .bind(admin.id, now, report.id)
+      .run();
   }
   return c.json({ resolved: true, action: body.action });
 });

@@ -20,6 +20,9 @@
 -- Tears of Steel is mid-launch spike, Sintel is accelerating week over week,
 -- Big Buck Bunny is big but flat-to-declining.
 
+DELETE FROM comment_reports;
+DELETE FROM comments;
+DELETE FROM follows;
 DELETE FROM payout_requests;
 DELETE FROM ad_impressions;
 DELETE FROM ads;
@@ -301,3 +304,50 @@ FROM seq;
 -- request one; Mira ($2.64 lifetime) demonstrates the gate.
 INSERT INTO payout_requests (id, creator_id, amount_millicents, status, requested_at) VALUES
   ('pay_seed_1', 'usr_nova', 1000000, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'));
+
+-- ---------------------------------------------------------------------------
+-- Community: follows, comment threads (including a removed-parent placeholder
+-- and a reported comment for the admin queue), and a follower notification.
+-- ---------------------------------------------------------------------------
+
+INSERT INTO follows (follower_id, creator_id, created_at) VALUES
+  ('usr_sam', 'usr_ana',  '2026-08-20T10:00:00.000Z'),
+  ('usr_sam', 'usr_mira', '2026-08-23T10:00:00.000Z'),
+  ('usr_v01', 'usr_ana',  '2026-08-19T10:00:00.000Z'),
+  ('usr_v02', 'usr_ana',  '2026-08-20T11:00:00.000Z'),
+  ('usr_v03', 'usr_ana',  '2026-08-21T11:00:00.000Z'),
+  ('usr_v04', 'usr_ana',  '2026-08-22T11:00:00.000Z'),
+  ('usr_v01', 'usr_nova', '2026-08-18T09:00:00.000Z'),
+  ('usr_v02', 'usr_nova', '2026-08-19T09:00:00.000Z'),
+  ('usr_v03', 'usr_nova', '2026-08-20T09:00:00.000Z');
+
+INSERT INTO comments (id, title_id, author_id, parent_id, body, status, created_at) VALUES
+  ('cmt_sintel_1', 'ttl_sintel', 'usr_sam', NULL,
+   'That final shot stayed with me for days. The pacing in the middle act is fearless.',
+   'visible', '2026-08-23T21:10:00.000Z'),
+  ('cmt_sintel_2', 'ttl_sintel', 'usr_ana', 'cmt_sintel_1',
+   'Thank you, Sam. The middle act was the hardest cut we made.',
+   'visible', '2026-08-24T08:00:00.000Z'),
+  ('cmt_sintel_3', 'ttl_sintel', 'usr_v02', NULL,
+   'Watched it twice in one evening. The dragon reveal earns every second of buildup.',
+   'visible', '2026-08-24T20:15:00.000Z'),
+  ('cmt_bbb_1', 'ttl_bbb', 'usr_v05', NULL,
+   'Still the best revenge arc in animation.',
+   'visible', '2026-08-22T18:00:00.000Z'),
+  ('cmt_bbb_2', 'ttl_bbb', 'usr_v08', NULL,
+   'First!', 'removed_by_creator', '2026-08-22T18:05:00.000Z'),
+  ('cmt_bbb_3', 'ttl_bbb', 'usr_v06', 'cmt_bbb_2',
+   'The butterfly scene gets me every time.',
+   'visible', '2026-08-22T19:00:00.000Z'),
+  ('cmt_bbb_4', 'ttl_bbb', 'usr_v09', NULL,
+   'Check out my channel for free movie downloads!!!',
+   'visible', '2026-08-24T12:00:00.000Z');
+
+INSERT INTO comment_reports (id, comment_id, reporter_id, reason, status, created_at) VALUES
+  ('crep_seed_1', 'cmt_bbb_4', 'usr_v07', 'spam', 'open',
+   strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'));
+
+INSERT INTO notifications (id, user_id, kind, body, link, read, created_at) VALUES
+  ('ntf_seed_2', 'usr_sam', 'new_episode',
+   'Mira Chen published Open Cinema Anthology.',
+   '/t/open-cinema-anthology', 0, '2026-08-24T16:05:00.000Z');

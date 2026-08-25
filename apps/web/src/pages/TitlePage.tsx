@@ -5,6 +5,7 @@ import type { EpisodeSummary, TitleDetail } from '@sweam/shared';
 import { CONTENT_KIND_LABELS, REPORT_REASONS, REPORT_REASON_LABELS } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { CommentsSection } from '../components/CommentsSection';
 import { ErrorNote, Loading } from '../components/Status';
 import { formatDuration, usePageTitle } from '../hooks';
 
@@ -90,7 +91,9 @@ export function TitlePage() {
         <h1>{title.name}</h1>
         <p className="title-meta">
           {CONTENT_KIND_LABELS[title.kind]} · {title.genre} · {title.advisory} · by{' '}
-          <strong>{title.creator.displayName}</strong> (@{title.creator.handle})
+          <Link to={`/c/${title.creator.handle}`}>
+            {title.creator.displayName} (@{title.creator.handle})
+          </Link>
         </p>
         <p className="title-synopsis">{title.synopsis}</p>
         <div className="title-actions">
@@ -146,6 +149,8 @@ export function TitlePage() {
           ))}
         </section>
       )}
+
+      <CommentsSection titleSlug={title.slug} creatorHandle={title.creator.handle} />
 
       <ReportSection titleId={title.id} titleSlug={title.slug} signedIn={user !== null} />
     </div>

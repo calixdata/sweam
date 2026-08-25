@@ -311,7 +311,10 @@ export type NotificationKind =
   | 'takedown'
   | 'takedown_released'
   | 'strike'
-  | 'payout';
+  | 'payout'
+  | 'new_episode'
+  | 'comment'
+  | 'follow';
 
 export interface NotificationItem {
   id: string;
@@ -460,6 +463,57 @@ export interface AdminMonetization {
   };
   ads: AdminAd[];
   pendingPayouts: AdminPayout[];
+}
+
+// ---------------------------------------------------------------------------
+// Community
+// ---------------------------------------------------------------------------
+
+export type CommentStatus =
+  | 'visible'
+  | 'removed_by_author'
+  | 'removed_by_creator'
+  | 'removed_by_admin';
+
+/**
+ * One comment in a title's thread. Removed comments appear only as
+ * placeholders (empty body, status says why) and only when they still have
+ * visible replies; otherwise they are dropped from the payload entirely.
+ */
+export interface CommentItem {
+  id: string;
+  body: string;
+  status: CommentStatus;
+  createdAt: string;
+  author: { displayName: string; handle: string | null };
+  /** True when the title's own creator wrote it (shown as a badge). */
+  authorIsCreator: boolean;
+  /** True when the signed-in viewer wrote it. */
+  mine: boolean;
+  replies: CommentItem[];
+}
+
+export const COMMENT_REPORT_REASONS = ['spam', 'abuse', 'other'] as const;
+
+export type CommentReportReason = (typeof COMMENT_REPORT_REASONS)[number];
+
+/** A creator's public page. */
+export interface CreatorPublicPage {
+  handle: string;
+  displayName: string;
+  bio: string;
+  verified: boolean;
+  followerCount: number;
+  followedByMe: boolean;
+  titles: TitleSummary[];
+}
+
+export interface AdminCommentReport {
+  id: string;
+  reason: CommentReportReason;
+  createdAt: string;
+  comment: { id: string; body: string; authorName: string; titleName: string; titleSlug: string };
+  reporter: { displayName: string };
 }
 
 /** Every API error responds with this envelope and a machine-readable code. */

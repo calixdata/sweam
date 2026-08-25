@@ -150,6 +150,12 @@ The pre-roll slot itself: nothing autoplays (the viewer starts the ad with a but
 
 Payouts: creators request their full available balance ($10.00 minimum, one open request at a time); admins mark requests paid or rejected, a rejection returning the amount to available, and either decision notifies the creator. Real money movement needs a payment provider and tax onboarding, so payout status is deliberately a ledger fact until that decision is made — the same local-first honesty rule as email.
 
+### Community
+
+Comments are title-scoped and flat with one level of replies (the API rejects deeper nesting). Removal is a soft-delete recording the remover's role, and the visibility rules are a pure, tested function ([apps/api/src/lib/comments.ts](../apps/api/src/lib/comments.ts)): visible comments render; a removed parent with visible replies stays as an empty-body placeholder so threads never orphan; removed bodies never appear in any payload. Three authorities share one removal endpoint: authors delete their own, the title's creator removes anything on their title, admins remove anything, and any removal not by the author notifies the author. Comment reports feed the same admin moderation page as title reports; removing a reported comment settles every open report against it at once. Comments are rate limited per user.
+
+Follows power three things: public creator pages (`/c/:handle`, with follower counts), the "From creators you follow" rail on Home, and fan-out notifications, sent as a single INSERT...SELECT over the followers of a creator when they first publish a title or add an episode to a published one (republishing does not re-ping). At large follower counts that fan-out becomes a queued job; at current scale one statement is the honest implementation.
+
 ## Security posture
 
 - Passwords: PBKDF2-SHA256, 100k iterations, per-user salt, constant-time comparison, versioned storage format so the work factor can be raised without a migration.

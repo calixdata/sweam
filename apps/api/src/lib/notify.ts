@@ -20,3 +20,25 @@ export async function notify(
     .bind(crypto.randomUUID(), userId, kind, body, link, nowIso())
     .run();
 }
+
+/**
+ * Fan a notification out to everyone following a creator, as one
+ * INSERT...SELECT. Fine at current scale; at large follower counts this
+ * becomes a queued job, noted in ARCHITECTURE.md.
+ */
+export async function notifyFollowers(
+  db: D1Database,
+  creatorId: string,
+  kind: NotificationKind,
+  body: string,
+  link: string | null = null,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO notifications (id, user_id, kind, body, link, read, created_at)
+       SELECT lower(hex(randomblob(16))), follower_id, ?, ?, ?, 0, ?
+       FROM follows WHERE creator_id = ?`,
+    )
+    .bind(kind, body, link, nowIso(), creatorId)
+    .run();
+}

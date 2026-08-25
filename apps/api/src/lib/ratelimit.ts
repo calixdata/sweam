@@ -30,6 +30,7 @@ export const RATE_LIMITS = {
   upload: { name: 'upload', limit: 30, windowS: 60 * 60 },
   /** Pre-roll impression beacons; a human watches far fewer prerolls than this. */
   adImpression: { name: 'ad-impression', limit: 30, windowS: 5 * 60 },
+  comment: { name: 'comment', limit: 20, windowS: 60 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /** Start of the fixed window containing nowMs, in epoch seconds. */

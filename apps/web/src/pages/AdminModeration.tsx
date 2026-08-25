@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { AdminReport, AdminStrike, AdminTakedown } from '@sweam/shared';
+import type { AdminCommentReport, AdminReport, AdminStrike, AdminTakedown } from '@sweam/shared';
 import { REPORT_REASON_LABELS } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
@@ -26,6 +26,7 @@ export function AdminModeration() {
 
 function ModerationQueue() {
   const [reports, setReports] = useState<AdminReport[] | null>(null);
+  const [commentReports, setCommentReports] = useState<AdminCommentReport[] | null>(null);
   const [takedowns, setTakedowns] = useState<AdminTakedown[] | null>(null);
   const [strikes, setStrikes] = useState<AdminStrike[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,12 +34,14 @@ function ModerationQueue() {
 
   const load = useCallback(async () => {
     try {
-      const [reportData, takedownData, strikeData] = await Promise.all([
+      const [reportData, commentReportData, takedownData, strikeData] = await Promise.all([
         apiGet<{ reports: AdminReport[] }>('/api/admin/reports'),
+        apiGet<{ reports: AdminCommentReport[] }>('/api/admin/comment-reports'),
         apiGet<{ takedowns: AdminTakedown[] }>('/api/admin/takedowns'),
         apiGet<{ strikes: AdminStrike[] }>('/api/admin/strikes'),
       ]);
       setReports(reportData.reports);
+      setCommentReports(commentReportData.reports);
       setTakedowns(takedownData.takedowns);
       setStrikes(strikeData.strikes);
     } catch (err) {
@@ -51,7 +54,19 @@ function ModerationQueue() {
   }, [load]);
 
   if (error) return <ErrorNote message={error} />;
-  if (!reports || !takedowns || !strikes) return <Loading label="Loading the moderation queue" />;
+  if (!reports || !commentReports || !takedowns || !strikes) {
+    return <Loading label="Loading the moderation queue" />;
+  }
+
+  async function resolveCommentReport(report: AdminCommentReport, action: 'dismiss' | 'remove') {
+    await apiSend('POST', `/api/admin/comment-reports/${report.id}/resolve`, { action });
+    setNotice(
+      action === 'remove'
+        ? `Removed the reported comment on ${report.comment.titleName}.`
+        : 'Comment report dismissed.',
+    );
+    await load();
+  }
 
   return (
     <div className="page page-narrow">
@@ -91,6 +106,45 @@ function ModerationQueue() {
                     await load();
                   }}
                 />
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section aria-labelledby="mod-comment-reports">
+        <h2 id="mod-comment-reports">Reported comments</h2>
+        {commentReports.length === 0 ? (
+          <p>No reported comments.</p>
+        ) : (
+          <ul className="interest-list">
+            {commentReports.map((report) => (
+              <li key={report.id}>
+                <h3>
+                  {report.reason} report on a comment at{' '}
+                  <Link to={`/t/${report.comment.titleSlug}`}>{report.comment.titleName}</Link>
+                </h3>
+                <p>
+                  By {report.comment.authorName} · reported by {report.reporter.displayName} on{' '}
+                  {report.createdAt.slice(0, 10)}
+                </p>
+                <blockquote>{report.comment.body}</blockquote>
+                <div className="episode-actions">
+                  <button
+                    type="button"
+                    className="button button-danger"
+                    onClick={() => resolveCommentReport(report, 'remove')}
+                  >
+                    Remove comment
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-quiet"
+                    onClick={() => resolveCommentReport(report, 'dismiss')}
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

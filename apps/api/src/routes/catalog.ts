@@ -63,7 +63,28 @@ catalogRoutes.get('/home', async (c) => {
     byGenre.set(row.genre, rail);
   }
 
-  const rails: Rail[] = [{ key: 'spotlight', heading: 'Spotlight', titles: spotlight }];
+  const rails: Rail[] = [];
+  const user = c.get('user');
+  if (user) {
+    const { results: followingRows } = await c.env.DB.prepare(
+      `SELECT ${TITLE_SELECT}
+       ${TITLE_FROM}
+       JOIN follows f ON f.creator_id = t.creator_id
+       WHERE f.follower_id = ? AND t.published = 1
+       ORDER BY t.published_at DESC
+       LIMIT ${RAIL_SIZE}`,
+    )
+      .bind(user.id)
+      .all<TitleRow>();
+    if (followingRows.length > 0) {
+      rails.push({
+        key: 'following',
+        heading: 'From creators you follow',
+        titles: followingRows.map(mapTitle),
+      });
+    }
+  }
+  rails.push({ key: 'spotlight', heading: 'Spotlight', titles: spotlight });
   if (newThisWeek.length > 0) {
     rails.push({ key: 'new', heading: 'New this week', titles: newThisWeek });
   }
@@ -72,7 +93,7 @@ catalogRoutes.get('/home', async (c) => {
   }
 
   const payload: HomePayload = {
-    continueWatching: await continueWatching(c.env.DB, c.get('user')?.id ?? null),
+    continueWatching: await continueWatching(c.env.DB, user?.id ?? null),
     rails: rails.filter((rail) => rail.titles.length > 0),
   };
 

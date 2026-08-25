@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { ADVISORIES, CONTENT_KINDS, GENRES, REPORT_REASONS } from '@sweam/shared';
+import {
+  ADVISORIES,
+  COMMENT_REPORT_REASONS,
+  CONTENT_KINDS,
+  GENRES,
+  REPORT_REASONS,
+} from '@sweam/shared';
 
 /**
  * Every request body and query parameter in the API is validated by one of
@@ -227,4 +233,22 @@ export const adImpressionSchema = z.object({
 
 export const payoutDecideSchema = z.object({
   paid: z.boolean(),
+});
+
+// ---------------------------------------------------------------------------
+// Community
+// ---------------------------------------------------------------------------
+
+export const commentCreateSchema = z.object({
+  body: z.string().trim().min(1, 'Write something first.').max(1000),
+  /** Reply target: a top-level comment on the same title, or null. */
+  parentId: z.string().min(1).max(64).nullable().default(null),
+});
+
+export const commentReportSchema = z.object({
+  reason: z.enum(COMMENT_REPORT_REASONS),
+});
+
+export const commentReportResolveSchema = z.object({
+  action: z.enum(['dismiss', 'remove']),
 });
