@@ -142,6 +142,33 @@ describe('reportResolveSchema', () => {
   });
 });
 
+describe('submissionCreateSchema', () => {
+  const valid = {
+    titleName: 'Midnight Frequencies',
+    kind: 'documentary',
+    genre: 'Documentary',
+    synopsis: 'A 40-minute documentary about pirate radio operators broadcasting after dark.',
+    workUrl: 'https://example.com/screener/midnight',
+    rightsConfirmed: true,
+  };
+
+  it('accepts a complete submission', async () => {
+    const { submissionCreateSchema } = await import('../src/lib/validate');
+    expect(submissionCreateSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('requires the rights confirmation to be literally true', async () => {
+    const { submissionCreateSchema } = await import('../src/lib/validate');
+    expect(submissionCreateSchema.safeParse({ ...valid, rightsConfirmed: false }).success).toBe(false);
+  });
+
+  it('requires an https screener link and a substantive synopsis', async () => {
+    const { submissionCreateSchema } = await import('../src/lib/validate');
+    expect(submissionCreateSchema.safeParse({ ...valid, workUrl: 'http://example.com/x' }).success).toBe(false);
+    expect(submissionCreateSchema.safeParse({ ...valid, synopsis: 'Short.' }).success).toBe(false);
+  });
+});
+
 describe('community schemas', () => {
   it('accepts a comment and defaults parentId to null', async () => {
     const { commentCreateSchema } = await import('../src/lib/validate');

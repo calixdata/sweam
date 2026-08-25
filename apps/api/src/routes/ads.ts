@@ -3,6 +3,7 @@ import type { PrerollAd } from '@sweam/shared';
 import { creatorShareMillicents, impressionRevenueMillicents } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
+import { getCreatorEligibility } from '../lib/monetize';
 import { RATE_LIMITS, clientIp, enforceRateLimit } from '../lib/ratelimit';
 import { adImpressionSchema } from '../lib/validate';
 
@@ -66,6 +67,11 @@ adRoutes.post('/:adId/impression', async (c) => {
     .first<{ id: string; creator_id: string }>();
   if (!title) fail(404, 'title_not_found', 'No such published title.');
 
+  // The creator share accrues only while the creator meets the published
+  // monetization thresholds and is in good standing; the platform records the
+  // gross either way (ads run on non-monetized content, as on YouTube).
+  const eligibility = await getCreatorEligibility(c.env.DB, title.creator_id);
+
   await c.env.DB.prepare(
     `INSERT INTO ad_impressions (id, ad_id, title_id, creator_id, viewer, revenue_millicents, creator_millicents, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -77,7 +83,7 @@ adRoutes.post('/:adId/impression', async (c) => {
       title.creator_id,
       user ? 'user' : 'anon',
       impressionRevenueMillicents(ad.cpm_cents),
-      creatorShareMillicents(ad.cpm_cents),
+      eligibility.eligible ? creatorShareMillicents(ad.cpm_cents) : 0,
       nowIso(),
     )
     .run();

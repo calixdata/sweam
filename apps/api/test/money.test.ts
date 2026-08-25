@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   CREATOR_REVENUE_SHARE,
   MIN_PAYOUT_MILLICENTS,
+  MONETIZATION_THRESHOLDS,
   creatorShareMillicents,
+  evaluateMonetizationEligibility,
   formatMillicents,
   impressionRevenueMillicents,
 } from '@sweam/shared';
@@ -43,6 +45,53 @@ describe('creatorShareMillicents', () => {
     for (const cpm of [1, 7, 999, 1200, 100_000]) {
       expect(creatorShareMillicents(cpm)).toBeLessThanOrEqual(impressionRevenueMillicents(cpm));
     }
+  });
+});
+
+describe('evaluateMonetizationEligibility', () => {
+  const qualifying = {
+    followers: MONETIZATION_THRESHOLDS.minFollowers,
+    watchSeconds: MONETIZATION_THRESHOLDS.minWatchSeconds,
+    publishedTitles: MONETIZATION_THRESHOLDS.minPublishedTitles,
+    suspended: false,
+  };
+
+  it('grants eligibility exactly at the published thresholds', () => {
+    const result = evaluateMonetizationEligibility(qualifying);
+    expect(result.eligible).toBe(true);
+    expect(result.followers.met && result.watchSeconds.met && result.publishedTitles.met).toBe(true);
+  });
+
+  it('fails when any single dimension is short', () => {
+    expect(evaluateMonetizationEligibility({ ...qualifying, followers: qualifying.followers - 1 }).eligible).toBe(false);
+    expect(evaluateMonetizationEligibility({ ...qualifying, watchSeconds: qualifying.watchSeconds - 1 }).eligible).toBe(false);
+    expect(evaluateMonetizationEligibility({ ...qualifying, publishedTitles: 0 }).eligible).toBe(false);
+  });
+
+  it('suspension pauses monetization regardless of the other numbers', () => {
+    const result = evaluateMonetizationEligibility({
+      ...qualifying,
+      followers: 1_000_000,
+      suspended: true,
+    });
+    expect(result.eligible).toBe(false);
+    expect(result.goodStanding).toBe(false);
+  });
+
+  it('reports per-check progress for the earnings page', () => {
+    const result = evaluateMonetizationEligibility({
+      followers: 2,
+      watchSeconds: 30_000,
+      publishedTitles: 1,
+      suspended: false,
+    });
+    expect(result.followers).toEqual({
+      required: MONETIZATION_THRESHOLDS.minFollowers,
+      actual: 2,
+      met: false,
+    });
+    expect(result.watchSeconds.actual).toBe(30_000);
+    expect(result.publishedTitles.met).toBe(true);
   });
 });
 

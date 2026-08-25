@@ -34,7 +34,25 @@ export function Home() {
 
   return (
     <div className="page">
-      <h1 className="visually-hidden">Sweam home</h1>
+      {user ? (
+        <h1 className="visually-hidden">Sweam home</h1>
+      ) : (
+        <section className="hero" aria-labelledby="hero-heading">
+          <h1 id="hero-heading">Free streaming for independent creators</h1>
+          <p>
+            Films, series, and documentaries competing on whether viewers finish them, not on
+            follower counts. Free to watch, no account needed.
+          </p>
+          <div className="title-actions">
+            <Link className="button" to="/browse">
+              Start watching
+            </Link>
+            <Link className="button button-quiet" to="/submit">
+              Submit your work
+            </Link>
+          </div>
+        </section>
+      )}
       {payload.continueWatching.length > 0 && (
         <section className="rail" aria-labelledby="continue-heading">
           <h2 id="continue-heading">Continue watching</h2>

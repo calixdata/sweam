@@ -8,6 +8,7 @@ import type {
   AdminReport,
   AdminScoutApplication,
   AdminStrike,
+  AdminSubmission,
   AdminTakedown,
   AdminTranscodeJob,
   CommentReportReason,
@@ -28,8 +29,10 @@ import {
   payoutDecideSchema,
   reportResolveSchema,
   scoutDecideSchema,
+  submissionDecideSchema,
   takedownCreateSchema,
 } from '../lib/validate';
+import { mapSubmission } from './submissions';
 
 /**
  * The admin console API. Admins are provisioned in the `admins` table by
@@ -66,6 +69,7 @@ adminRoutes.get('/overview', async (c) => {
     ),
     c.env.DB.prepare("SELECT COUNT(*) AS n FROM payout_requests WHERE status = 'pending'"),
     c.env.DB.prepare('SELECT COALESCE(SUM(revenue_millicents), 0) AS n FROM ad_impressions'),
+    c.env.DB.prepare("SELECT COUNT(*) AS n FROM submissions WHERE status = 'pending'"),
   ]);
 
   const count = (index: number) => (results[index]?.results?.[0] as { n: number } | undefined)?.n ?? 0;
@@ -94,8 +98,74 @@ adminRoutes.get('/overview', async (c) => {
     totalWatchHours: Math.round((totals.watch ?? 0) / 3600),
     pendingPayouts: count(10),
     revenueMillicents: count(11),
+    pendingSubmissions: count(12),
   };
   return c.json(payload);
+});
+
+// ---------------------------------------------------------------------------
+// Submissions review
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/submissions', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT s.id, s.title_name, s.kind, s.genre, s.synopsis, s.work_url, s.status, s.note,
+       s.created_at, s.decided_at,
+       u.display_name, u.email, cp.handle
+     FROM submissions s
+     JOIN users u ON u.id = s.user_id
+     LEFT JOIN creator_profiles cp ON cp.user_id = s.user_id
+     WHERE s.status = 'pending'
+     ORDER BY s.created_at
+     LIMIT 100`,
+  ).all<{
+    id: string;
+    title_name: string;
+    kind: AdminSubmission['kind'];
+    genre: AdminSubmission['genre'];
+    synopsis: string;
+    work_url: string;
+    status: AdminSubmission['status'];
+    note: string;
+    created_at: string;
+    decided_at: string | null;
+    display_name: string;
+    email: string;
+    handle: string | null;
+  }>();
+
+  const submissions: AdminSubmission[] = results.map((row) => ({
+    ...mapSubmission(row),
+    submitter: { displayName: row.display_name, email: row.email, handle: row.handle },
+  }));
+  return c.json({ submissions });
+});
+
+adminRoutes.post('/submissions/:submissionId/decide', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, submissionDecideSchema);
+  const submission = await c.env.DB.prepare(
+    "SELECT id, user_id, title_name FROM submissions WHERE id = ? AND status = 'pending'",
+  )
+    .bind(c.req.param('submissionId'))
+    .first<{ id: string; user_id: string; title_name: string }>();
+  if (!submission) fail(404, 'submission_not_found', 'No pending submission with that id.');
+
+  await c.env.DB.prepare(
+    'UPDATE submissions SET status = ?, note = ?, decided_at = ?, decided_by = ? WHERE id = ?',
+  )
+    .bind(body.accept ? 'accepted' : 'declined', body.note, nowIso(), admin.id, submission.id)
+    .run();
+  await notify(
+    c.env.DB,
+    submission.user_id,
+    'submission',
+    body.accept
+      ? `Your submission "${submission.title_name}" was accepted. Set up your creator profile in the Studio and publish it when ready.${body.note ? ` Reviewer note: ${body.note}` : ''}`
+      : `Your submission "${submission.title_name}" was not selected this time.${body.note ? ` Reviewer note: ${body.note}` : ''}`,
+    body.accept ? '/studio' : '/submit',
+  );
+  return c.json({ status: body.accept ? 'accepted' : 'declined' });
 });
 
 // ---------------------------------------------------------------------------

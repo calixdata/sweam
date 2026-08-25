@@ -21,6 +21,7 @@ import { Studio } from './pages/Studio';
 import { StudioAnalytics } from './pages/StudioAnalytics';
 import { StudioEarnings } from './pages/StudioEarnings';
 import { StudioTitle } from './pages/StudioTitle';
+import { Submit } from './pages/Submit';
 import { TitlePage } from './pages/TitlePage';
 import { Watch } from './pages/Watch';
 import { Watchlist } from './pages/Watchlist';
@@ -41,6 +42,7 @@ export function App() {
         <Route index element={<Home />} />
         <Route path="/discover" element={<Discover />} />
         <Route path="/browse" element={<Browse />} />
+        <Route path="/submit" element={<Submit />} />
         <Route path="/search" element={<Search />} />
         <Route path="/t/:slug" element={<TitlePage />} />
         <Route path="/c/:handle" element={<CreatorPage />} />

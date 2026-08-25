@@ -15,6 +15,7 @@ import { CREATOR_REVENUE_SHARE, MIN_PAYOUT_MILLICENTS } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { loadDailySeries, loadRetention } from '../lib/analytics';
 import { fail, nowIso, parseBody } from '../lib/http';
+import { getCreatorEligibility } from '../lib/monetize';
 import { notifyFollowers } from '../lib/notify';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { SUSPENSION_STRIKES, activeStrikeCount, assertGoodStanding } from '../lib/standing';
@@ -446,7 +447,7 @@ async function payoutTotals(
 
 studioRoutes.get('/earnings', requireCreator, async (c) => {
   const user = currentUser(c);
-  const [lifetimeRow, payouts, perTitleResult, dailyResult, payoutList] = await Promise.all([
+  const [lifetimeRow, payouts, perTitleResult, dailyResult, payoutList, eligibility] = await Promise.all([
     c.env.DB.prepare(
       'SELECT COALESCE(SUM(creator_millicents), 0) AS n FROM ad_impressions WHERE creator_id = ?',
     )
@@ -482,6 +483,7 @@ studioRoutes.get('/earnings', requireCreator, async (c) => {
         requested_at: string;
         decided_at: string | null;
       }>(),
+    getCreatorEligibility(c.env.DB, user.id),
   ]);
 
   const lifetime = lifetimeRow?.n ?? 0;
@@ -509,6 +511,7 @@ studioRoutes.get('/earnings', requireCreator, async (c) => {
     })),
     minPayoutMillicents: MIN_PAYOUT_MILLICENTS,
     creatorSharePercent: Math.round(CREATOR_REVENUE_SHARE * 100),
+    eligibility,
   };
   return c.json(payload);
 });

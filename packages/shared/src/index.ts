@@ -6,6 +6,8 @@
 
 export * from './money';
 
+import type { MonetizationEligibility } from './money';
+
 /** The kinds of catalog entries a creator can publish. */
 export type ContentKind = 'film' | 'series' | 'short' | 'documentary';
 
@@ -314,7 +316,8 @@ export type NotificationKind =
   | 'payout'
   | 'new_episode'
   | 'comment'
-  | 'follow';
+  | 'follow'
+  | 'submission';
 
 export interface NotificationItem {
   id: string;
@@ -348,6 +351,7 @@ export interface AdminOverview {
   totalWatchHours: number;
   pendingPayouts: number;
   revenueMillicents: number;
+  pendingSubmissions: number;
 }
 
 export interface AdminScoutApplication {
@@ -421,7 +425,7 @@ export interface PayoutEntry {
   decidedAt: string | null;
 }
 
-/** A creator's earnings view: the ledger, the split, and payout state. */
+/** A creator's earnings view: the ledger, the split, payout state, and eligibility. */
 export interface EarningsSummary {
   lifetimeMillicents: number;
   availableMillicents: number;
@@ -432,6 +436,7 @@ export interface EarningsSummary {
   payouts: PayoutEntry[];
   minPayoutMillicents: number;
   creatorSharePercent: number;
+  eligibility: MonetizationEligibility;
 }
 
 export interface AdminAd {
@@ -463,6 +468,31 @@ export interface AdminMonetization {
   };
   ads: AdminAd[];
   pendingPayouts: AdminPayout[];
+}
+
+// ---------------------------------------------------------------------------
+// Submissions
+// ---------------------------------------------------------------------------
+
+export type SubmissionStatus = 'pending' | 'accepted' | 'declined';
+
+/** A curated-intake submission: finished work pitched for inclusion on Sweam. */
+export interface SubmissionItem {
+  id: string;
+  titleName: string;
+  kind: ContentKind;
+  genre: Genre;
+  synopsis: string;
+  workUrl: string;
+  status: SubmissionStatus;
+  /** Reviewer note, shared with the submitter on decision. */
+  note: string;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+export interface AdminSubmission extends SubmissionItem {
+  submitter: { displayName: string; email: string; handle: string | null };
 }
 
 // ---------------------------------------------------------------------------

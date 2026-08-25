@@ -1,6 +1,6 @@
 {
   "name": "@sweam/api",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "Sweam API: Cloudflare Worker serving the catalog, discovery ranking, auth, studio, and media byte-range streaming.",
@@ -16,7 +16,7 @@
     "db:seed:remote": "wrangler d1 execute sweam-db --remote --file seed.sql"
   },
   "dependencies": {
-    "@sweam/shared": "0.7.0",
+    "@sweam/shared": "0.8.0",
     "hono": "^4.6.15",
     "zod": "^3.24.1"
   },

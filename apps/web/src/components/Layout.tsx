@@ -125,6 +125,9 @@ export function Layout() {
                 <li>
                   <NavLink to="/browse">Browse</NavLink>
                 </li>
+                <li>
+                  <NavLink to="/submit">Submit</NavLink>
+                </li>
                 {user && (
                   <li>
                     <NavLink to="/watchlist">My list</NavLink>

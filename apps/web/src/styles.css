@@ -168,9 +168,12 @@ body {
   font-weight: 600;
 }
 
-.nav-links-secondary a {
-  font-weight: 500;
-  font-size: 0.95rem;
+/* The workspace group reads as a sibling of primary nav, separated by a
+   quiet divider instead of a different type size (mixed sizes read as
+   clutter). */
+.nav-links-secondary {
+  border-left: 1px solid var(--border);
+  padding-left: 0.6rem;
 }
 
 .nav-links a:hover {
@@ -270,13 +273,16 @@ main:focus {
 }
 
 h1 {
-  font-size: 1.7rem;
-  margin: 0.5rem 0 0.75rem;
+  font-size: 1.9rem;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin: 0.75rem 0 0.75rem;
 }
 
 h2 {
-  font-size: 1.25rem;
-  margin: 1.75rem 0 0.6rem;
+  font-size: 1.3rem;
+  letter-spacing: -0.005em;
+  margin: 0 0 0.6rem;
 }
 
 h3 {
@@ -284,8 +290,38 @@ h3 {
   margin: 0.4rem 0 0.2rem;
 }
 
+/* One vertical rhythm for every page: sections breathe the same amount. */
+.page > section {
+  margin-top: 2.25rem;
+}
+
+.page > section:first-child,
+.page > .hero {
+  margin-top: 0.5rem;
+}
+
 a {
   color: var(--link);
+}
+
+/* -------------------------------------------------------------------- hero */
+
+.hero {
+  background: linear-gradient(160deg, var(--surface-2), var(--bg) 75%);
+  border-radius: 14px;
+  padding: 2.25rem 1.75rem;
+  margin-bottom: 2rem;
+}
+
+.hero h1 {
+  margin-top: 0;
+  max-width: 22ch;
+}
+
+.hero p {
+  max-width: 52ch;
+  color: var(--muted);
+  font-size: 1.05rem;
 }
 
 /* ----------------------------------------------------------------- buttons */
@@ -313,13 +349,14 @@ a {
 }
 
 .button-quiet {
-  background: var(--surface-2);
+  background: transparent;
   color: var(--text);
   border-color: var(--border);
 }
 
 .button-quiet:hover {
-  background: var(--border);
+  background: var(--surface-2);
+  border-color: var(--muted);
 }
 
 .button-danger {
@@ -378,15 +415,18 @@ a {
   display: block;
   color: var(--text);
   text-decoration: none;
-  background: var(--surface);
-  border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.5rem;
+  padding: 0.4rem;
   height: 100%;
 }
 
 .title-card a:hover {
-  border-color: var(--accent);
+  background: var(--surface);
+}
+
+.title-card a:hover .poster {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .title-card h3 {
@@ -403,12 +443,23 @@ a {
   display: block;
 }
 
+/* Poster placeholder: a single quiet monogram on a genre-tinted gradient.
+   The title lives below the artwork exactly once. */
+.poster-monogram {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(255 255 255 / 0.85);
+  font-weight: 800;
+  font-size: 2.6rem;
+}
+
+/* Continue-watching cards still use a small text panel. */
 .poster-text {
   display: flex;
   align-items: flex-end;
   padding: 0.5rem;
   background: linear-gradient(160deg, var(--surface-2), #10141d 70%);
-  border: 1px solid var(--border);
   color: var(--muted);
   font-weight: 700;
   font-size: 0.9rem;

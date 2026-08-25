@@ -27,6 +27,8 @@ Shipped: the admin console (overview, in-product scout application decisions, tr
 
 Community (comments with the three-role moderation chain, comment reports, creator follows with public pages, the following rail, and new-episode follower notifications) shipped in v0.6. Still open there: comment pagination past the first 500, deeper threading, muting and blocklists, and queued notification fan-out at scale.
 
+v0.7 shipped the Creator Program: the research-grounded monetization policy (docs/CREATOR-PROGRAM.md), serve-time eligibility enforcement with earnings-page progress, and the public submissions intake with admin review. Still open there: threshold growth-path automation as the platform scales, and screener hosting for submissions (currently external links).
+
 ## v0.5: Sustainability (shipped)
 
 Shipped: AVOD pre-rolls (viewer-initiated, pausable, skippable after five seconds, one per title per session) with the published 55% creator share; the integer-millicents impression ledger with splits frozen at serve time; creator earnings dashboards with $10-minimum payout requests; and admin ad inventory plus payout review. Still open from this phase:

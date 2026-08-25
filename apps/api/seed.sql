@@ -20,6 +20,7 @@
 -- Tears of Steel is mid-launch spike, Sintel is accelerating week over week,
 -- Big Buck Bunny is big but flat-to-declining.
 
+DELETE FROM submissions;
 DELETE FROM comment_reports;
 DELETE FROM comments;
 DELETE FROM follows;
@@ -292,16 +293,19 @@ SELECT lower(hex(randomblob(16))), 'ad_house_2', 'ttl_bbb', 'usr_nova',
   strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || (x % 14) || ' days')
 FROM seq;
 
+-- Mira is below the monetization thresholds (1 follower, under 1,000 watch
+-- minutes), so her impressions accrue no creator share: the platform records
+-- the gross, her earnings page shows live progress toward eligibility.
 WITH RECURSIVE seq(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM seq WHERE x < 400)
 INSERT INTO ad_impressions (id, ad_id, title_id, creator_id, viewer, revenue_millicents, creator_millicents, created_at)
 SELECT lower(hex(randomblob(16))), 'ad_house_1', 'ttl_anthology', 'usr_mira',
-  CASE WHEN x % 3 = 0 THEN 'anon' ELSE 'user' END, 1200, 660,
+  CASE WHEN x % 3 = 0 THEN 'anon' ELSE 'user' END, 1200, 0,
   strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || (x % 2) || ' days')
 FROM seq;
 
 -- Nova already has a payout awaiting review, so the admin monetization page
 -- has a live decision on first run. Ana is above the $10 minimum and can
--- request one; Mira ($2.64 lifetime) demonstrates the gate.
+-- request one; Mira demonstrates the eligibility gate above.
 INSERT INTO payout_requests (id, creator_id, amount_millicents, status, requested_at) VALUES
   ('pay_seed_1', 'usr_nova', 1000000, 'pending', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'));
 
@@ -319,7 +323,10 @@ INSERT INTO follows (follower_id, creator_id, created_at) VALUES
   ('usr_v04', 'usr_ana',  '2026-08-22T11:00:00.000Z'),
   ('usr_v01', 'usr_nova', '2026-08-18T09:00:00.000Z'),
   ('usr_v02', 'usr_nova', '2026-08-19T09:00:00.000Z'),
-  ('usr_v03', 'usr_nova', '2026-08-20T09:00:00.000Z');
+  ('usr_v03', 'usr_nova', '2026-08-20T09:00:00.000Z'),
+  ('usr_v04', 'usr_nova', '2026-08-21T09:00:00.000Z'),
+  ('usr_v05', 'usr_nova', '2026-08-21T09:30:00.000Z'),
+  ('usr_v06', 'usr_nova', '2026-08-22T09:00:00.000Z');
 
 INSERT INTO comments (id, title_id, author_id, parent_id, body, status, created_at) VALUES
   ('cmt_sintel_1', 'ttl_sintel', 'usr_sam', NULL,
@@ -351,3 +358,10 @@ INSERT INTO notifications (id, user_id, kind, body, link, read, created_at) VALU
   ('ntf_seed_2', 'usr_sam', 'new_episode',
    'Mira Chen published Open Cinema Anthology.',
    '/t/open-cinema-anthology', 0, '2026-08-24T16:05:00.000Z');
+
+-- A pending content submission so the admin intake queue has a live decision.
+INSERT INTO submissions (id, user_id, title_name, kind, genre, synopsis, work_url, rights_confirmed, status, created_at) VALUES
+  ('sub_seed_1', 'usr_v10', 'Midnight Frequencies', 'documentary', 'Documentary',
+   'A 40-minute documentary about pirate radio operators broadcasting after dark from rooftops across three cities. Finished, color-graded, with licensed music.',
+   'https://example.com/screeners/midnight-frequencies', 1, 'pending',
+   strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'));

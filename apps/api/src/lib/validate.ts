@@ -236,6 +236,36 @@ export const payoutDecideSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Submissions
+// ---------------------------------------------------------------------------
+
+export const submissionCreateSchema = z.object({
+  titleName: z.string().trim().min(1, 'The work needs a name.').max(120),
+  kind,
+  genre,
+  synopsis: z
+    .string()
+    .trim()
+    .min(20, 'Tell us about the work in at least a couple of sentences.')
+    .max(2000),
+  /** A screener or portfolio link reviewers can watch: https only. */
+  workUrl: z
+    .string()
+    .trim()
+    .url('Link a screener reviewers can watch (https URL).')
+    .max(2048)
+    .refine((value) => value.startsWith('https://'), 'The screener link must be https.'),
+  rightsConfirmed: z.literal(true, {
+    errorMap: () => ({ message: 'You must confirm you hold the rights to this work.' }),
+  }),
+});
+
+export const submissionDecideSchema = z.object({
+  accept: z.boolean(),
+  note: z.string().trim().max(1000).default(''),
+});
+
+// ---------------------------------------------------------------------------
 // Community
 // ---------------------------------------------------------------------------
 

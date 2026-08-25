@@ -64,6 +64,43 @@ export function StudioEarnings() {
         </p>
       )}
 
+      <section aria-labelledby="earnings-eligibility">
+        <h2 id="earnings-eligibility">Monetization eligibility</h2>
+        {earnings.eligibility.eligible ? (
+          <p className="status" role="status">
+            You are monetizing: your {earnings.creatorSharePercent}% share accrues on every ad
+            served against your titles.
+          </p>
+        ) : (
+          <p className="status" role="status">
+            Not monetizing yet. Ads may run on your titles, but your share starts accruing the
+            moment every threshold below is met. The full policy is in the public Creator Program
+            document.
+          </p>
+        )}
+        <ul>
+          <li>
+            Followers: {earnings.eligibility.followers.actual.toLocaleString()} of{' '}
+            {earnings.eligibility.followers.required.toLocaleString()} required —{' '}
+            {earnings.eligibility.followers.met ? 'met' : 'not yet'}
+          </li>
+          <li>
+            Watch time: {Math.round(earnings.eligibility.watchSeconds.actual / 60).toLocaleString()}{' '}
+            of {Math.round(earnings.eligibility.watchSeconds.required / 60).toLocaleString()} minutes
+            required — {earnings.eligibility.watchSeconds.met ? 'met' : 'not yet'}
+          </li>
+          <li>
+            Published titles: {earnings.eligibility.publishedTitles.actual.toLocaleString()} of{' '}
+            {earnings.eligibility.publishedTitles.required.toLocaleString()} required —{' '}
+            {earnings.eligibility.publishedTitles.met ? 'met' : 'not yet'}
+          </li>
+          <li>
+            Account standing:{' '}
+            {earnings.eligibility.goodStanding ? 'good' : 'suspended (monetization paused)'}
+          </li>
+        </ul>
+      </section>
+
       <section aria-labelledby="earnings-summary">
         <h2 id="earnings-summary">Balance</h2>
         <div className="table-scroll">
