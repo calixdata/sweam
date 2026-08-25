@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { apiGet } from '../api';
 import { useAuth } from '../auth';
+import { BrandWordmark } from './BrandWordmark';
 
 export function Layout() {
   const { user, signOut } = useAuth();
@@ -12,7 +13,6 @@ export function Layout() {
   const isFirstRender = useRef(true);
   const [unread, setUnread] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
-  const [logoFailed, setLogoFailed] = useState(false);
 
   // Refresh the notifications badge on every navigation; a stale badge is
   // worse than one extra count query.
@@ -65,16 +65,7 @@ export function Layout() {
         <div className="header-inner">
           <div className="header-row">
             <Link to="/" className="brand" aria-label="Sweam home">
-              {logoFailed ? (
-                <span className="brand-text">Sweam</span>
-              ) : (
-                <img
-                  src="/brand/sweam-wordmark.png"
-                  alt="Sweam"
-                  className="brand-img"
-                  onError={() => setLogoFailed(true)}
-                />
-              )}
+              <BrandWordmark size="header" />
             </Link>
             <form role="search" className="header-search" onSubmit={handleSearch}>
               <label htmlFor="header-search-input" className="visually-hidden">

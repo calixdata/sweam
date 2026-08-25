@@ -109,26 +109,81 @@ body {
   flex-shrink: 0;
 }
 
-/* The wordmark art is black-on-white; the chip gives it a clean seat on the
-   dark chrome instead of a ragged floating rectangle. */
-.brand-img {
-  height: 30px;
-  width: auto;
-  background: #fff;
-  border-radius: 6px;
-  padding: 3px 8px;
+/* Vector wordmark: transparent, letters inherit `color`, the wave and bowtie
+   "M" carry the brand gradient. Larger than the old raster chip, and the "M"
+   twists in 3D. */
+.brand-wordmark {
   display: block;
-}
-
-.brand-text {
-  font-size: 1.3rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  width: auto;
+  overflow: visible;
   color: var(--text);
 }
 
-.brand-text::first-letter {
-  color: var(--accent-strong);
+.brand-wordmark--header {
+  height: 46px;
+}
+
+.brand-wordmark--hero {
+  height: clamp(76px, 15vw, 152px);
+}
+
+.sweam-letters {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 26;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sweam-m {
+  transform-box: view-box;
+  transform-origin: 591px 124px;
+  animation: sweam-twist 7s linear infinite;
+}
+
+.sweam-wave {
+  transform-box: view-box;
+  animation: sweam-wave 5s ease-in-out infinite;
+}
+
+.brand:hover .sweam-m,
+.brand-hero:hover .sweam-m {
+  animation-duration: 2.2s;
+}
+
+.brand:hover .brand-wordmark,
+.brand-hero:hover .brand-wordmark {
+  filter: drop-shadow(0 0 10px rgba(53, 199, 240, 0.35));
+}
+
+@keyframes sweam-twist {
+  from {
+    transform: perspective(700px) rotateY(0deg);
+  }
+  to {
+    transform: perspective(700px) rotateY(360deg);
+  }
+}
+
+@keyframes sweam-wave {
+  0%,
+  100% {
+    transform: translateX(0);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateX(10px);
+    opacity: 1;
+  }
+}
+
+/* Motion is decorative; hold everything still for viewers who ask for less. */
+@media (prefers-reduced-motion: reduce) {
+  .sweam-m,
+  .sweam-wave {
+    animation: none;
+    transform: none;
+  }
 }
 
 .header-search {
@@ -316,6 +371,11 @@ a {
 .hero h1 {
   margin-top: 0;
   max-width: 22ch;
+}
+
+.brand-hero .brand-wordmark--hero {
+  margin-bottom: 1.25rem;
+  margin-left: -0.35rem;
 }
 
 .hero p {

@@ -1,6 +1,6 @@
 {
   "name": "@sweam/transcoder",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "type": "module",
   "description": "Sweam transcoder worker: claims jobs from the API, runs ffmpeg to produce HLS ladders and thumbnails, and uploads the outputs back.",
@@ -12,7 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@sweam/shared": "0.8.0"
+    "@sweam/shared": "0.8.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
