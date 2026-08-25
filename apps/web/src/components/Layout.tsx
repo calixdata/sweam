@@ -3,7 +3,6 @@ import type { FormEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { apiGet } from '../api';
 import { useAuth } from '../auth';
-import { BrandWordmark } from './BrandWordmark';
 
 export function Layout() {
   const { user, signOut } = useAuth();
@@ -65,7 +64,7 @@ export function Layout() {
         <div className="header-inner">
           <div className="header-row">
             <Link to="/" className="brand" aria-label="Sweam home">
-              <BrandWordmark size="header" />
+              <img className="brand-logo" src="/brand/sweam-wordmark-dark.png" alt="Sweam" />
             </Link>
             <form role="search" className="header-search" onSubmit={handleSearch}>
               <label htmlFor="header-search-input" className="visually-hidden">

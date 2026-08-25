@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import type { HomePayload } from '@sweam/shared';
 import { ApiError, apiGet } from '../api';
 import { useAuth } from '../auth';
-import { BrandWordmark } from '../components/BrandWordmark';
 import { Rail } from '../components/Rail';
 import { ErrorNote, Loading } from '../components/Status';
 import { formatDuration, usePageTitle } from '../hooks';
@@ -38,8 +37,8 @@ export function Home() {
       {user ? (
         <h1 className="visually-hidden">Sweam home</h1>
       ) : (
-        <section className="hero brand-hero" aria-labelledby="hero-heading">
-          <BrandWordmark size="hero" />
+        <section className="hero" aria-labelledby="hero-heading">
+          <img className="brand-logo--hero" src="/brand/sweam-wordmark-dark.png" alt="Sweam" />
           <h1 id="hero-heading">Free streaming for independent creators</h1>
           <p>
             Films, series, and documentaries competing on whether viewers finish them, not on

@@ -1,31 +1,28 @@
 # Sweam brand assets
 
-The Sweam wordmark: SWEAM in a heavy geometric cut, a blue-to-cyan sound-wave
-ribbon beneath it, a play triangle in the A, and a gradient bowtie "M".
+The Sweam wordmark, as designed: SWEAM with a blue-to-cyan wave, a play triangle
+in the A, and a gradient bowtie M.
 
 ## Files
 
-- **`sweam-wordmark.svg`** — the vector wordmark (source of truth). Transparent,
-  scales to any size. Letters default to dark and flip to near-white under
-  `prefers-color-scheme: dark`, so it reads on either background. The bowtie "M"
-  twists in 3D and the wave drifts; both animations are held still under
-  `prefers-reduced-motion: reduce`.
-- **`sweam-mark.svg`** — the bowtie "M" alone, used as the app favicon.
-- **`sweam-wordmark.png`** — the original raster wordmark (kept for the README
-  banner and any place a static raster is needed).
+- **`sweam-wordmark.png`** — the original wordmark. Transparent background,
+  dark (near-black) letters with blue accents. Use on light surfaces.
+- **`sweam-wordmark-dark.png`** — the dark-UI rendition used by the app. The
+  identical artwork with the near-black letters knocked out to near-white
+  (`#eef1f7`) so it reads on the dark chrome; the blue accents are unchanged and
+  the alpha (anti-aliased edges) is preserved. Nothing is reshaped — only the
+  neutral-dark ink is recolored.
+
+The dark rendition is generated from the original by recoloring only the
+low-saturation dark pixels; see the note in the commit that added it.
 
 ## In the app
 
-The web app renders the wordmark inline via
-`apps/web/src/components/BrandWordmark.tsx`, not as an `<img>`: letters use
-`currentColor` (white on the dark chrome), the wave and "M" carry the brand
-gradient, and the "M" twists — faster on hover. All motion lives in
-`apps/web/src/styles.css` behind one `prefers-reduced-motion` guard. It appears
-at header size in the top bar and at hero size on the signed-out home page.
+The web app shows the wordmark transparently with no backdrop: the header uses
+`sweam-wordmark-dark.png` at ~42px, and the signed-out home shows it larger in
+the hero. Accessible name is always "Sweam".
 
-## Guidelines
+## Palette
 
-- Accessible name is always "Sweam" (the wordmark art is aria-hidden where the
-  surrounding link or heading already carries the name).
-- Palette drawn from the mark: background `#0b0d12`, accent blue `#2f6df0`,
-  highlight `#35c7f0`.
+Drawn from the mark: background `#0b0d12`, accent blue `#2f6df0`, highlight
+`#35c7f0`.
