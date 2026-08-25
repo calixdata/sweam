@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import type { EpisodeSummary, StudioTitleDetail, StudioTitleSummary } from '@sweam/shared';
+import type { EpisodeSummary, StudioTitleDetail, StudioTitleSummary, TitleAnalytics } from '@sweam/shared';
 import type { AppEnv } from '../env';
+import { loadDailySeries, loadRetention } from '../lib/analytics';
 import { fail, nowIso, parseBody } from '../lib/http';
 import type { EpisodeRow } from '../lib/mappers';
 import { mapEpisode } from '../lib/mappers';
@@ -40,6 +41,7 @@ interface StudioTitleRow {
   advisory: StudioTitleDetail['advisory'];
   poster_url: string | null;
   published: number;
+  scoutable: number;
   episode_count: number;
   impressions: number;
   plays: number;
@@ -66,7 +68,7 @@ function mapStudioSummary(row: StudioTitleRow): StudioTitleSummary {
 }
 
 const STUDIO_TITLE_QUERY = `
-  SELECT t.id, t.slug, t.name, t.kind, t.genre, t.synopsis, t.advisory, t.poster_url, t.published,
+  SELECT t.id, t.slug, t.name, t.kind, t.genre, t.synopsis, t.advisory, t.poster_url, t.published, t.scoutable,
     (SELECT COUNT(*) FROM episodes e WHERE e.title_id = t.id) AS episode_count,
     COALESCE(s.impressions, 0) AS impressions,
     COALESCE(s.plays, 0) AS plays,
@@ -164,6 +166,7 @@ studioRoutes.get('/titles/:titleId', requireCreator, async (c) => {
     synopsis: row.synopsis,
     advisory: row.advisory,
     posterUrl: row.poster_url,
+    scoutable: row.scoutable === 1,
     episodes: await titleEpisodes(c, row.id),
   };
   return c.json(payload);
@@ -182,6 +185,7 @@ studioRoutes.patch('/titles/:titleId', requireCreator, async (c) => {
     synopsis: body.synopsis,
     advisory: body.advisory,
     poster_url: body.posterUrl,
+    scoutable: body.scoutable === undefined ? undefined : body.scoutable ? 1 : 0,
   };
   for (const [column, value] of Object.entries(columns)) {
     if (value !== undefined) {
@@ -308,6 +312,71 @@ studioRoutes.delete('/episodes/:episodeId', requireCreator, async (c) => {
   const episode = await ownedEpisode(c, c.req.param('episodeId'));
   await c.env.DB.prepare('DELETE FROM episodes WHERE id = ?').bind(episode.id).run();
   return c.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Analytics
+// ---------------------------------------------------------------------------
+
+const ANALYTICS_DAILY_DAYS = 30;
+const ANALYTICS_LIST_LIMIT = 50;
+
+/**
+ * The creator's view of their title's performance: the same daily series and
+ * retention curves a scout sees on the one-sheet, plus the other side of the
+ * loop — who opened the one-sheet and who expressed interest.
+ */
+studioRoutes.get('/titles/:titleId/analytics', requireCreator, async (c) => {
+  const row = await ownedTitle(c, c.req.param('titleId'));
+
+  const [daily, retention, viewsResult, interestsResult] = await Promise.all([
+    loadDailySeries(c.env.DB, row.id, ANALYTICS_DAILY_DAYS),
+    loadRetention(c.env.DB, row.id),
+    c.env.DB.prepare(
+      `SELECT sp.org_name, v.viewed_at
+       FROM onesheet_views v
+       JOIN scout_profiles sp ON sp.user_id = v.scout_user_id
+       WHERE v.title_id = ?
+       ORDER BY v.viewed_at DESC
+       LIMIT ${ANALYTICS_LIST_LIMIT}`,
+    )
+      .bind(row.id)
+      .all<{ org_name: string; viewed_at: string }>(),
+    c.env.DB.prepare(
+      `SELECT sp.org_name, sp.org_url, sp.contact_email, i.note, i.created_at
+       FROM scout_interests i
+       JOIN scout_profiles sp ON sp.user_id = i.scout_user_id
+       WHERE i.title_id = ?
+       ORDER BY i.created_at DESC
+       LIMIT ${ANALYTICS_LIST_LIMIT}`,
+    )
+      .bind(row.id)
+      .all<{
+        org_name: string;
+        org_url: string | null;
+        contact_email: string;
+        note: string;
+        created_at: string;
+      }>(),
+  ]);
+
+  const payload: TitleAnalytics = {
+    scoutable: row.scoutable === 1,
+    daily,
+    retention,
+    oneSheetViews: viewsResult.results.map((view) => ({
+      orgName: view.org_name,
+      viewedAt: view.viewed_at,
+    })),
+    interests: interestsResult.results.map((interest) => ({
+      orgName: interest.org_name,
+      orgUrl: interest.org_url,
+      contactEmail: interest.contact_email,
+      note: interest.note,
+      createdAt: interest.created_at,
+    })),
+  };
+  return c.json(payload);
 });
 
 // ---------------------------------------------------------------------------

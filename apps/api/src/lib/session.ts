@@ -31,16 +31,20 @@ interface SessionRow {
   email: string;
   display_name: string;
   handle: string | null;
+  scout_status: 'pending' | 'approved' | null;
+  scout_org: string | null;
 }
 
 export async function resolveSession(db: D1Database, token: string): Promise<SessionUser | null> {
   const tokenHash = await sha256Hex(token);
   const row = await db
     .prepare(
-      `SELECT s.expires_at, s.token_hash, u.id, u.email, u.display_name, cp.handle
+      `SELECT s.expires_at, s.token_hash, u.id, u.email, u.display_name, cp.handle,
+        sp.status AS scout_status, sp.org_name AS scout_org
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        LEFT JOIN creator_profiles cp ON cp.user_id = u.id
+       LEFT JOIN scout_profiles sp ON sp.user_id = u.id
        WHERE s.token_hash = ?`,
     )
     .bind(tokenHash)
@@ -50,7 +54,14 @@ export async function resolveSession(db: D1Database, token: string): Promise<Ses
     await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(tokenHash).run();
     return null;
   }
-  return { id: row.id, email: row.email, displayName: row.display_name, handle: row.handle };
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    handle: row.handle,
+    scout:
+      row.scout_status && row.scout_org ? { status: row.scout_status, orgName: row.scout_org } : null,
+  };
 }
 
 export async function destroySession(db: D1Database, token: string): Promise<void> {
@@ -73,6 +84,16 @@ export const requireCreator = createMiddleware<AppEnv>(async (c, next) => {
   const user = c.get('user');
   if (!user) fail(401, 'auth_required', 'Sign in to continue.');
   if (!user.handle) fail(403, 'creator_required', 'Create a creator profile to use the Studio.');
+  await next();
+});
+
+export const requireScout = createMiddleware<AppEnv>(async (c, next) => {
+  const user = c.get('user');
+  if (!user) fail(401, 'auth_required', 'Sign in to continue.');
+  if (!user.scout) fail(403, 'scout_required', 'Apply for scout access to use the scout portal.');
+  if (user.scout.status !== 'approved') {
+    fail(403, 'scout_pending', 'Your scout application is pending review.');
+  }
   await next();
 });
 

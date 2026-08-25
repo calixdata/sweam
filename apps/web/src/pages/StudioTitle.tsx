@@ -84,6 +84,9 @@ export function StudioTitle() {
         <button type="button" className="button" onClick={togglePublish}>
           {title.published ? 'Unpublish' : 'Publish'}
         </button>
+        <Link className="button button-quiet" to={`/studio/t/${title.id}/analytics`}>
+          Analytics and scout activity
+        </Link>
         <button type="button" className="button button-danger" onClick={deleteTitle}>
           Delete title
         </button>
@@ -101,6 +104,7 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
   const [genre, setGenre] = useState<string>(title.genre);
   const [advisory, setAdvisory] = useState<string>(title.advisory);
   const [synopsis, setSynopsis] = useState(title.synopsis);
+  const [scoutable, setScoutable] = useState(title.scoutable);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -117,6 +121,7 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
         genre,
         advisory,
         synopsis,
+        scoutable,
       });
       setSaved(true);
       await onSaved();
@@ -187,6 +192,20 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
             value={synopsis}
             onChange={(event) => setSynopsis(event.target.value)}
           />
+        </div>
+        <div className="field field-checkbox">
+          <input
+            id="edit-scoutable"
+            type="checkbox"
+            checked={scoutable}
+            aria-describedby="edit-scoutable-hint"
+            onChange={(event) => setScoutable(event.target.checked)}
+          />
+          <label htmlFor="edit-scoutable">Visible in the scout portal</label>
+          <p className="field-hint" id="edit-scoutable-hint">
+            Opt in to let vetted network and studio scouts see this title's momentum stats and
+            retention curves. You will see every one-sheet view and interest in Analytics.
+          </p>
         </div>
         {error && (
           <p className="status status-error" role="alert">

@@ -495,6 +495,36 @@ input[type='file'] {
   font-size: 0.85rem;
 }
 
+.field-checkbox input[type='checkbox'] {
+  width: auto;
+  margin-right: 0.5rem;
+}
+
+.field-checkbox label {
+  display: inline;
+}
+
+.interest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.interest-list > li {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.interest-list blockquote {
+  margin: 0.5rem 0 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}
+
 .studio-form {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -503,6 +533,10 @@ input[type='file'] {
 }
 
 /* ------------------------------------------------------------------ tables */
+
+.table-scroll {
+  overflow-x: auto;
+}
 
 .studio-table {
   width: 100%;

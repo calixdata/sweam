@@ -6,10 +6,13 @@ import { Loading } from './components/Status';
 import { Discover } from './pages/Discover';
 import { Home } from './pages/Home';
 import { NotFound } from './pages/NotFound';
+import { Scout } from './pages/Scout';
+import { ScoutOneSheet } from './pages/ScoutOneSheet';
 import { Search } from './pages/Search';
 import { SignIn } from './pages/SignIn';
 import { SignUp } from './pages/SignUp';
 import { Studio } from './pages/Studio';
+import { StudioAnalytics } from './pages/StudioAnalytics';
 import { StudioTitle } from './pages/StudioTitle';
 import { TitlePage } from './pages/TitlePage';
 import { Watch } from './pages/Watch';
@@ -47,6 +50,23 @@ export function App() {
           element={
             <RequireAuth>
               <StudioTitle />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/studio/t/:titleId/analytics"
+          element={
+            <RequireAuth>
+              <StudioAnalytics />
+            </RequireAuth>
+          }
+        />
+        <Route path="/scout" element={<Scout />} />
+        <Route
+          path="/scout/t/:titleId"
+          element={
+            <RequireAuth>
+              <ScoutOneSheet />
             </RequireAuth>
           }
         />

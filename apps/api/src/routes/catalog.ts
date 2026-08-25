@@ -135,8 +135,17 @@ async function continueWatching(db: D1Database, userId: string | null): Promise<
 export async function recordImpressions(db: D1Database, titleIds: string[]): Promise<void> {
   if (titleIds.length === 0) return;
   const placeholders = titleIds.map(() => '?').join(', ');
-  await db
-    .prepare(`UPDATE title_stats SET impressions = impressions + 1 WHERE title_id IN (${placeholders})`)
-    .bind(...titleIds)
-    .run();
+  const dailyTuples = titleIds.map(() => "(?, date('now'), 1, 0, 0, 0, 0)").join(', ');
+  await db.batch([
+    db
+      .prepare(`UPDATE title_stats SET impressions = impressions + 1 WHERE title_id IN (${placeholders})`)
+      .bind(...titleIds),
+    db
+      .prepare(
+        `INSERT INTO title_stats_daily (title_id, day, impressions, plays, completes, likes, watch_seconds)
+         VALUES ${dailyTuples}
+         ON CONFLICT (title_id, day) DO UPDATE SET impressions = impressions + 1`,
+      )
+      .bind(...titleIds),
+  ]);
 }

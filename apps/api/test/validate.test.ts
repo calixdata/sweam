@@ -3,8 +3,10 @@ import {
   creatorProfileSchema,
   episodeCreateSchema,
   progressSchema,
+  scoutApplySchema,
   signUpSchema,
   titleCreateSchema,
+  titleUpdateSchema,
 } from '../src/lib/validate';
 
 describe('signUpSchema', () => {
@@ -74,6 +76,43 @@ describe('episodeCreateSchema', () => {
     expect(episodeCreateSchema.safeParse({ ...base, season: 0 }).success).toBe(false);
     expect(episodeCreateSchema.safeParse({ ...base, episode: 501 }).success).toBe(false);
     expect(episodeCreateSchema.safeParse({ ...base, season: 1, episode: 1 }).success).toBe(true);
+  });
+});
+
+describe('titleUpdateSchema', () => {
+  it('accepts a scoutable-only update', () => {
+    const parsed = titleUpdateSchema.safeParse({ scoutable: true });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.scoutable).toBe(true);
+  });
+
+  it('rejects an empty update', () => {
+    expect(titleUpdateSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe('scoutApplySchema', () => {
+  it('accepts a full application and normalizes the contact email', () => {
+    const parsed = scoutApplySchema.parse({
+      orgName: 'Northlight Studios',
+      orgUrl: 'https://northlight.example',
+      contactEmail: 'Scouting@Northlight.example',
+    });
+    expect(parsed.contactEmail).toBe('scouting@northlight.example');
+  });
+
+  it('defaults a missing website to null but rejects a malformed one', () => {
+    expect(
+      scoutApplySchema.parse({ orgName: 'Northlight', contactEmail: 'a@b.co' }).orgUrl,
+    ).toBeNull();
+    expect(
+      scoutApplySchema.safeParse({ orgName: 'Northlight', orgUrl: 'not a url', contactEmail: 'a@b.co' })
+        .success,
+    ).toBe(false);
+  });
+
+  it('rejects one-character organization names', () => {
+    expect(scoutApplySchema.safeParse({ orgName: 'X', contactEmail: 'a@b.co' }).success).toBe(false);
   });
 });
 

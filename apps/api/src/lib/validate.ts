@@ -50,6 +50,10 @@ export const titleCreateSchema = z.object({
 });
 
 export const titleUpdateSchema = titleCreateSchema
+  .extend({
+    /** Creator opt-in to the scout portal; only meaningful on update. */
+    scoutable: z.boolean(),
+  })
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Provide at least one field to update.');
 
@@ -76,4 +80,20 @@ export const progressSchema = z.object({
 
 export const searchQuerySchema = z.object({
   q: z.string().trim().min(1, 'Enter a search term.').max(80),
+});
+
+export const scoutApplySchema = z.object({
+  orgName: z.string().trim().min(2, 'Organization name is required.').max(120),
+  orgUrl: z
+    .string()
+    .trim()
+    .url('Enter a full https URL, or leave it blank.')
+    .max(2048)
+    .nullable()
+    .default(null),
+  contactEmail: email,
+});
+
+export const scoutInterestSchema = z.object({
+  note: z.string().trim().max(500).default(''),
 });

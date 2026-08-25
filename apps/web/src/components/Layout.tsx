@@ -56,6 +56,9 @@ export function Layout() {
                 <NavLink to="/studio">Studio</NavLink>
               </li>
             )}
+            <li>
+              <NavLink to="/scout">Scout</NavLink>
+            </li>
           </ul>
           <div className="nav-auth">
             {user ? (

@@ -8,6 +8,7 @@ import { catalogRoutes } from './routes/catalog';
 import { discoverRoutes } from './routes/discover';
 import { mediaRoutes } from './routes/media';
 import { meRoutes } from './routes/me';
+import { scoutRoutes } from './routes/scout';
 import { studioRoutes } from './routes/studio';
 import { titleRoutes } from './routes/titles';
 import { watchRoutes } from './routes/watch';
@@ -27,6 +28,7 @@ app.route('/api/titles', titleRoutes);
 app.route('/api/watch', watchRoutes);
 app.route('/api/me', meRoutes);
 app.route('/api/studio', studioRoutes);
+app.route('/api/scout', scoutRoutes);
 app.route('/media', mediaRoutes);
 
 app.notFound((c) => {

@@ -61,11 +61,18 @@ meRoutes.put('/likes/:titleId', async (c) => {
   )
     .bind(user.id, titleId, nowIso())
     .run();
-  // Only bump the counter when a row was actually inserted (idempotent likes).
+  // Only bump the counters when a row was actually inserted (idempotent likes).
+  // Daily likes count like events and are never decremented; lifetime stats
+  // stay authoritative for net totals.
   if (result.meta.changes > 0) {
-    await c.env.DB.prepare('UPDATE title_stats SET likes = likes + 1 WHERE title_id = ?')
-      .bind(titleId)
-      .run();
+    await c.env.DB.batch([
+      c.env.DB.prepare('UPDATE title_stats SET likes = likes + 1 WHERE title_id = ?').bind(titleId),
+      c.env.DB.prepare(
+        `INSERT INTO title_stats_daily (title_id, day, impressions, plays, completes, likes, watch_seconds)
+         VALUES (?, date('now'), 0, 0, 0, 1, 0)
+         ON CONFLICT (title_id, day) DO UPDATE SET likes = likes + 1`,
+      ).bind(titleId),
+    ]);
   }
   return c.json({ likedByMe: true });
 });

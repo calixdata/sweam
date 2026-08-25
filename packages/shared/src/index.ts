@@ -34,12 +34,18 @@ export const ADVISORIES = ['TV-G', 'TV-PG', 'TV-14', 'TV-MA'] as const;
 
 export type Advisory = (typeof ADVISORIES)[number];
 
-/** The signed-in user attached to a session. `handle` is null until the user creates a creator profile. */
+export type ScoutStatus = 'pending' | 'approved';
+
+/**
+ * The signed-in user attached to a session. `handle` is null until the user
+ * creates a creator profile; `scout` is null until they apply for scout access.
+ */
 export interface SessionUser {
   id: string;
   email: string;
   displayName: string;
   handle: string | null;
+  scout: { status: ScoutStatus; orgName: string } | null;
 }
 
 export interface CreatorRef {
@@ -149,7 +155,97 @@ export interface StudioTitleDetail extends StudioTitleSummary {
   synopsis: string;
   advisory: Advisory;
   posterUrl: string | null;
+  /** Creator opt-in: whether this title is visible in the scout portal. */
+  scoutable: boolean;
   episodes: EpisodeSummary[];
+}
+
+// ---------------------------------------------------------------------------
+// Scout portal
+// ---------------------------------------------------------------------------
+
+/** One day of counters for a title (day is a UTC YYYY-MM-DD string). */
+export interface DailyPoint {
+  day: string;
+  impressions: number;
+  plays: number;
+  completes: number;
+  likes: number;
+}
+
+/**
+ * Audience retention for one episode: `curve[i]` is the fraction of tracked
+ * viewers whose furthest position reached checkpoint i/10 of the runtime
+ * (11 points, 0% through 100%). Empty when no viewer has been tracked.
+ */
+export interface EpisodeRetention {
+  episodeId: string;
+  season: number;
+  episode: number;
+  name: string;
+  viewers: number;
+  curve: number[];
+}
+
+export interface FinishLeader {
+  title: TitleSummary;
+  plays: number;
+  finishRate: number;
+}
+
+export interface GrowthLeader {
+  title: TitleSummary;
+  recentPlays: number;
+  priorPlays: number;
+  /** Smoothed week-over-week ratio; above 1 is growth. */
+  growth: number;
+}
+
+export interface GenreBreakout {
+  genre: Genre;
+  title: TitleSummary;
+  recentPlays: number;
+  growth: number;
+}
+
+export interface ScoutLeaderboards {
+  finishLeaders: FinishLeader[];
+  fastestGrowing: GrowthLeader[];
+  genreBreakouts: GenreBreakout[];
+}
+
+/** The per-title brief a scout sees. Viewing one is logged and shown to the creator. */
+export interface OneSheet {
+  title: TitleSummary;
+  creatorBio: string;
+  creatorVerified: boolean;
+  stats: TitleStats & { watchSeconds: number };
+  daily: DailyPoint[];
+  retention: EpisodeRetention[];
+  myInterest: boolean;
+}
+
+export interface OneSheetView {
+  orgName: string;
+  viewedAt: string;
+}
+
+/** A scout's expressed interest, as shown to the creator (the scout volunteered the contact details). */
+export interface ScoutInterestForCreator {
+  orgName: string;
+  orgUrl: string | null;
+  contactEmail: string;
+  note: string;
+  createdAt: string;
+}
+
+/** Creator-side analytics for one title: the same data scouts see, plus who looked. */
+export interface TitleAnalytics {
+  scoutable: boolean;
+  daily: DailyPoint[];
+  retention: EpisodeRetention[];
+  oneSheetViews: OneSheetView[];
+  interests: ScoutInterestForCreator[];
 }
 
 /** Every API error responds with this envelope and a machine-readable code. */

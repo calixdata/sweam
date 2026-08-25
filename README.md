@@ -44,13 +44,13 @@ That empty quadrant is where a generation of creators currently lives: too long-
 
 Follower counts are not an input. The Discover feed shows every title's ranking reason to viewers ("Viewers finish this one", "New voice getting its first audience"), because a fairness promise you cannot inspect is a slogan.
 
-**3. Built to be scouted.** Every title accumulates transparent momentum stats (plays, finish rate, likes, watch time). The roadmap's scout portal gives networks and studios a ranked view of breakout work, so "discovered by Hulu" becomes a product feature instead of a fluke.
+**3. Built to be scouted.** The scout portal (shipped in v0.3) gives vetted network and studio scouts ranked momentum boards (fastest-growing, finish-rate leaders, genre breakouts) and per-title one-sheets with daily performance series and audience retention curves. Creators opt in per title, scouts see exactly the numbers creators see, every one-sheet view is logged where the creator can read it, and interest arrives with the scout's organization and contact details. "Discovered by a network" is a product feature, not a fluke.
 
 **4. Accessibility as a feature, not a retrofit.** Captions are first-class metadata with a one-click transcript link. The player uses native controls (the most screen-reader-friendly option that exists), navigation is landmark-structured with skip links and focus management, and cards are real text rather than text baked into artwork.
 
 ---
 
-## What is in this repo (v0.1)
+## What is in this repo (v0.3)
 
 A working vertical slice, end to end:
 
@@ -62,7 +62,8 @@ A working vertical slice, end to end:
   - Creator Studio: profiles, titles, episodes, publish gating, likes, watchlists
   - Direct-to-R2 uploads (streamed, type- and size-gated)
   - **Real byte-range media serving** (RFC 9110 single ranges: `bytes=a-b`, `a-`, `-n`) so seeking and resume work like a streaming service, because that is what streaming is
-- **Web** ([apps/web](apps/web)): React + Vite + TypeScript. Home rails with continue-watching, Discover with visible ranking reasons, title and watch pages, search, watchlist, sign-in/up, and the full Studio flow
+  - **Scout portal** (v0.3): application-gated scout access; momentum boards over daily counters; per-title one-sheets with 30-day series and per-episode audience retention curves computed from furthest-watched positions; the interest loop, with every one-sheet view logged for the creator
+- **Web** ([apps/web](apps/web)): React + Vite + TypeScript. Home rails with continue-watching, Discover with visible ranking reasons, title and watch pages, search, watchlist, sign-in/up, the full Studio flow with per-title analytics and scout visibility controls, and the scout portal
 - **Shared** ([packages/shared](packages/shared)): one set of types and constants consumed by both sides
 - **Tests** ([apps/api/test](apps/api/test)): the ranking fairness properties, range parser edge cases, auth crypto round-trips, validation schemas, and slug rules
 - **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)): lint, typecheck, test, build on every push
@@ -89,8 +90,9 @@ The seed creates a small catalog around the Blender Foundation open movies plus 
 | `ana@demo.sweam` | Creator `@anavoss` (Sintel, Tears of Steel) |
 | `nova@demo.sweam` | Creator `@novareyes` (Big Buck Bunny, Elephants Dream) |
 | `mira@demo.sweam` | Creator `@miradocs` (Open Cinema Anthology, a 3-episode series) |
+| `scout@demo.sweam` | Approved scout for Northlight Studios |
 
-The seeded stats are chosen to make the fairness mechanics visible: open Discover and you will see Sintel (90 plays, devoted audience) outrank Big Buck Bunny (2,100 plays, indifferent audience), with the newest titles carried by the exploration and freshness terms.
+The seeded stats are chosen to make the mechanics visible. Open Discover and Sintel (90 plays, devoted audience) outranks Big Buck Bunny (2,100 plays, indifferent audience). Sign in as the scout and the fastest-growing board leads with Tears of Steel mid-launch-spike, Elephants Dream is absent everywhere scout-facing because its creator has not opted in, and Ana's Studio analytics for Sintel already shows a one-sheet view and an expression of interest from Northlight Studios.
 
 ### Verify everything
 
