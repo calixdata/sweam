@@ -139,6 +139,42 @@ export interface TitleStats {
   likes: number;
 }
 
+// ---------------------------------------------------------------------------
+// Media pipeline
+// ---------------------------------------------------------------------------
+
+export type TranscodeStatus = 'queued' | 'running' | 'done' | 'failed' | 'canceled';
+
+/**
+ * A creator's episode as shown in the Studio: the public fields plus the
+ * original upload, generated thumbnail, and the latest transcode job state
+ * (null when the episode uses an external source with no pipeline run).
+ */
+export interface StudioEpisode extends EpisodeSummary {
+  sourceUrl: string | null;
+  thumbnailUrl: string | null;
+  transcode: { status: TranscodeStatus; error: string | null; updatedAt: string } | null;
+}
+
+/** A claimed transcode job, as handed to a transcoder worker. */
+export interface TranscodeJobClaim {
+  id: string;
+  episodeId: string;
+  sourceUrl: string;
+  attempts: number;
+}
+
+export interface MultipartInit {
+  key: string;
+  uploadId: string;
+  partSize: number;
+}
+
+export interface MultipartPart {
+  partNumber: number;
+  etag: string;
+}
+
 /** A creator's own title as shown in the Studio dashboard (includes drafts). */
 export interface StudioTitleSummary {
   id: string;
@@ -157,7 +193,7 @@ export interface StudioTitleDetail extends StudioTitleSummary {
   posterUrl: string | null;
   /** Creator opt-in: whether this title is visible in the scout portal. */
   scoutable: boolean;
-  episodes: EpisodeSummary[];
+  episodes: StudioEpisode[];
 }
 
 // ---------------------------------------------------------------------------

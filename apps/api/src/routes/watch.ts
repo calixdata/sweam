@@ -5,7 +5,7 @@ import { fail, nowIso, parseBody } from '../lib/http';
 import type { EpisodeRow } from '../lib/mappers';
 import { mapEpisode } from '../lib/mappers';
 import { requireUser, currentUser } from '../lib/session';
-import { progressSchema } from '../lib/validate';
+import { progressSchema, viewBeaconSchema } from '../lib/validate';
 
 export const watchRoutes = new Hono<AppEnv>();
 
@@ -133,6 +133,69 @@ watchRoutes.post('/:episodeId/progress', requireUser, async (c) => {
          completed = MAX(progress.completed, excluded.completed),
          updated_at = excluded.updated_at`,
     ).bind(user.id, row.id, positionS, maxPositionS, durationS, completedNow ? 1 : 0, nowIso()),
+    c.env.DB.prepare(
+      `UPDATE title_stats SET
+         plays = plays + ?,
+         completes = completes + ?,
+         watch_seconds = watch_seconds + ?
+       WHERE title_id = ?`,
+    ).bind(isFirstBeacon ? 1 : 0, newlyCompleted ? 1 : 0, watchDelta, row.title_id),
+    c.env.DB.prepare(
+      `INSERT INTO title_stats_daily (title_id, day, impressions, plays, completes, likes, watch_seconds)
+       VALUES (?, date('now'), 0, ?, ?, 0, ?)
+       ON CONFLICT (title_id, day) DO UPDATE SET
+         plays = plays + excluded.plays,
+         completes = completes + excluded.completes,
+         watch_seconds = watch_seconds + excluded.watch_seconds`,
+    ).bind(row.title_id, isFirstBeacon ? 1 : 0, newlyCompleted ? 1 : 0, watchDelta),
+  ]);
+
+  return c.json({ ok: true, completed: completedNow });
+});
+
+/**
+ * Anonymous view beacon. The view id is a random UUID the client generates
+ * per playback session; it is never tied to an account, IP, or fingerprint.
+ * Maintains the same counters as signed-in progress so signed-out plays,
+ * finishes, and retention count, without collecting identity. There is no
+ * resume: that stays an account feature.
+ */
+watchRoutes.post('/:episodeId/view', async (c) => {
+  const body = await parseBody(c, viewBeaconSchema);
+  const row = await loadEpisode(c.env.DB, c.req.param('episodeId'));
+  if (!row) fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
+  if (row.published !== 1) {
+    fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
+  }
+
+  const positionS = Math.round(Math.min(body.positionS, body.durationS));
+  const durationS = Math.round(body.durationS);
+
+  const existing = await c.env.DB.prepare(
+    'SELECT max_position_s, completed FROM anonymous_views WHERE view_id = ? AND episode_id = ?',
+  )
+    .bind(body.viewId, row.id)
+    .first<{ max_position_s: number; completed: number }>();
+
+  const maxPositionS = Math.max(positionS, existing?.max_position_s ?? 0);
+  const completedNow = durationS > 0 && maxPositionS / durationS >= COMPLETION_THRESHOLD;
+  const isFirstBeacon = !existing;
+  const newlyCompleted = completedNow && (existing?.completed ?? 0) === 0;
+  const watchDelta = Math.max(
+    0,
+    Math.min(maxPositionS - (existing?.max_position_s ?? 0), MAX_WATCH_DELTA_S),
+  );
+
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO anonymous_views (view_id, episode_id, title_id, max_position_s, duration_s, completed, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (view_id, episode_id) DO UPDATE SET
+         max_position_s = excluded.max_position_s,
+         duration_s = excluded.duration_s,
+         completed = MAX(anonymous_views.completed, excluded.completed),
+         updated_at = excluded.updated_at`,
+    ).bind(body.viewId, row.id, row.title_id, maxPositionS, durationS, completedNow ? 1 : 0, nowIso(), nowIso()),
     c.env.DB.prepare(
       `UPDATE title_stats SET
          plays = plays + ?,

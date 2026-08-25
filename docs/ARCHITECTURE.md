@@ -6,15 +6,19 @@
 flowchart LR
   subgraph Browser
     WEB[React app - Vite build]
-    VIDEO[HTML5 video element]
+    VIDEO[HTML5 video - native or hls.js]
   end
   subgraph Cloudflare
     API[Worker - Hono router]
     D1[(D1 - SQLite)]
     R2[(R2 - media objects)]
   end
+  subgraph Any machine
+    TRANS[Transcoder worker - Node + ffmpeg]
+  end
   WEB -->|/api/* JSON, session cookie| API
   VIDEO -->|/media/* Range requests| API
+  TRANS -->|/api/transcode/* service token| API
   API --> D1
   API --> R2
 ```
@@ -61,8 +65,8 @@ Key decisions:
 
 ### Watch progress
 
-1. The player beacons `POST /api/watch/:episodeId/progress` at most every 10 seconds while playing, on pause, on end, and on page hide (via `navigator.sendBeacon`).
-2. The API upserts the resume position and the furthest position ever reached (`max_position_s`), marks the episode completed when the furthest position crosses 90% of duration, and maintains both `title_stats` and today's `title_stats_daily` row in the same D1 batch. Completion and retention read the furthest position, so seeking backward after finishing does not un-complete an episode or shrink the curve.
+1. The player beacons at most every 10 seconds while playing, on pause, on end, and on page hide (via `navigator.sendBeacon`). Signed-in viewers hit `POST /api/watch/:episodeId/progress`; signed-out viewers hit `POST /api/watch/:episodeId/view` with a random per-session UUID the client generates, never tied to an account, IP, or fingerprint, so anonymous plays count without collecting identity (resume stays an account feature).
+2. The API upserts the resume position and the furthest position ever reached (`max_position_s`), marks the episode completed when the furthest position crosses 90% of duration, and maintains both `title_stats` and today's `title_stats_daily` row in the same D1 batch. Completion and retention read the furthest position, so seeking backward after finishing does not un-complete an episode or shrink the curve. Anonymous sessions maintain the same counters and feed the same retention curves.
 3. Completed episodes restart from zero on the next visit instead of resuming into the credits.
 
 ### Discovery ranking
@@ -91,6 +95,23 @@ The parser lives in [`apps/api/src/lib/range.ts`](../apps/api/src/lib/range.ts) 
 
 `PUT /api/studio/upload/:filename` streams the request body straight into R2 (the Worker never buffers the file), gated by an allowlist of content types (MP4, WebM, WebVTT, JPEG, PNG, WebP), a Content-Length requirement, and a 512 MB cap. The returned `/media/...` URL is what episode records store.
 
+Files over 32 MB go multipart: the client initializes an upload (8 MB parts), PUTs each part with up to three retries, and completes with the collected etags. Part state persists to localStorage keyed by the file's name, size, and modification time, so an interrupted upload of the same file resumes from the next part even after a page reload; server-side, R2's own multipart session is the durable state. A resume against a session the server no longer has aborts cleanly and restarts once.
+
+### Media pipeline
+
+ffmpeg cannot run inside a Worker, and a hosted transcoding product would break this repo's local-first promise. So the pipeline splits: the Worker is the **control plane** (job queue, output validation, the episode flip to HLS) and [apps/transcoder](../apps/transcoder) is the **data plane**, a Node worker that runs wherever ffmpeg exists: a laptop, a VPS, a container. They share one trust boundary, a bearer token on `/api/transcode/*` (the API refuses the dev default token in production).
+
+Flow: a creator's uploaded `/media/` source is recorded as `episodes.source_url` and enqueued automatically on episode create or source change. A transcoder claims the job, probes the source (duration, height, audio), encodes a no-upscale HLS ladder in a single ffmpeg pass (split + scale per rendition, VOD playlists with independent segments, ffmpeg writing the master playlist), grabs a poster frame, uploads every output through the service API, and completes. The API verifies the master playlist actually exists in R2, then flips `episodes.video_url` to the master, sets the episode thumbnail and probed duration, and promotes the first thumbnail to the title poster if the creator has not set one.
+
+Queue semantics, all enforced in SQL ([apps/api/src/routes/transcode.ts](../apps/api/src/routes/transcode.ts)):
+
+- **At-least-once with atomic claims.** Claiming is a single UPDATE ... RETURNING on the oldest eligible job; parallel workers cannot double-claim.
+- **Capped attempts.** Attempts increment on claim; after 3 the job is `failed` with the error surfaced in the creator's Studio next to a retry button.
+- **Stale-claim reclaim.** A `running` job whose claim is older than 15 minutes is claimable again, so a dead worker cannot strand work.
+- **Supersede protection.** Re-enqueueing cancels the episode's active job; a canceled job's `complete` gets a 409 and its outputs, written under its own `hls/{episode}/{job}/` prefix, can never collide with its replacement's.
+
+Playlists reference variants and segments by bare relative names (ffmpeg runs inside the output directory), so the same files serve from any prefix. Playback: Safari plays HLS natively; other browsers lazy-load hls.js only when an `.m3u8` source needs it. External `https://` sources (like the demo catalog) bypass the pipeline entirely and play as-is.
+
 ### Scout portal
 
 Access is three-layered: any signed-in user can apply (`scout_profiles` row with status `pending`); only `approved` scouts pass `requireScout`; and every scout query is additionally filtered to `published = 1 AND scoutable = 1`, so a creator who never opts in is invisible to scouts no matter what. Approval is an operations step until the admin console ships (the seed file documents the one-line SQL).
@@ -112,7 +133,7 @@ Three deliberate privacy decisions: scouts see exactly the numbers the creator s
 - All inputs validated with zod; all SQL parameterized; LIKE patterns escape user input.
 - Ownership checks on every Studio route (title and episode loads are scoped to the signed-in creator; a miss is a 404, not a 403, to avoid confirming existence).
 - Draft titles are invisible everywhere public and watchable only by their creator.
-- Known gaps at v0.3, tracked in the roadmap: rate limiting, email verification, moderation/DMCA pipeline, anonymous plays are not counted in stats, and scout approval is a manual operations step pending the admin console.
+- Known gaps, tracked in the roadmap: rate limiting, email verification, moderation/DMCA pipeline, scout approval is a manual operations step pending the admin console, and HLS outputs from superseded transcode jobs are not garbage-collected yet.
 
 ## Why this stack
 

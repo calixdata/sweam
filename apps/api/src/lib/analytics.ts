@@ -38,9 +38,10 @@ interface ProgressRow {
 }
 
 /**
- * Retention per episode, computed from tracked viewers' furthest positions.
- * Aggregating raw progress rows on demand is fine at current scale; the
- * at-scale path (rollups per episode) is noted in ARCHITECTURE.md.
+ * Retention per episode, computed from tracked viewing sessions' furthest
+ * positions: signed-in progress rows and anonymous view sessions alike.
+ * Aggregating raw rows on demand is fine at current scale; the at-scale path
+ * (rollups per episode) is noted in ARCHITECTURE.md.
  */
 export async function loadRetention(db: D1Database, titleId: string): Promise<EpisodeRetention[]> {
   const { results: episodes } = await db
@@ -53,9 +54,12 @@ export async function loadRetention(db: D1Database, titleId: string): Promise<Ep
   const { results: rows } = await db
     .prepare(
       `SELECT episode_id, max_position_s, duration_s
-       FROM progress WHERE episode_id IN (${placeholders})`,
+       FROM progress WHERE episode_id IN (${placeholders})
+       UNION ALL
+       SELECT episode_id, max_position_s, duration_s
+       FROM anonymous_views WHERE episode_id IN (${placeholders})`,
     )
-    .bind(...episodes.map((e) => e.id))
+    .bind(...episodes.map((e) => e.id), ...episodes.map((e) => e.id))
     .all<ProgressRow>();
 
   const byEpisode = new Map<string, { maxPositionS: number; durationS: number }[]>();

@@ -60,10 +60,13 @@ A working vertical slice, end to end:
   - Discovery ranking with impression accounting
   - Watch progress beacons that maintain plays / finishes / watch-time counters
   - Creator Studio: profiles, titles, episodes, publish gating, likes, watchlists
-  - Direct-to-R2 uploads (streamed, type- and size-gated)
+  - Direct-to-R2 uploads (streamed, type- and size-gated), plus **resumable multipart uploads** past the single-PUT cap: 8 MB parts, per-part retry, and client-side resume state that survives a page reload
   - **Real byte-range media serving** (RFC 9110 single ranges: `bytes=a-b`, `a-`, `-n`) so seeking and resume work like a streaming service, because that is what streaming is
+  - **Transcode queue** (v0.2): a D1-backed job queue with atomic claims, capped attempts, stale-claim reclaim, and supersede protection; uploaded sources automatically become adaptive HLS ladders with generated thumbnails when a transcoder worker runs
+  - **Anonymous view beacons** (v0.2): signed-out plays, finishes, and retention count via a random per-session id, never tied to an account, IP, or fingerprint
   - **Scout portal** (v0.3): application-gated scout access; momentum boards over daily counters; per-title one-sheets with 30-day series and per-episode audience retention curves computed from furthest-watched positions; the interest loop, with every one-sheet view logged for the creator
-- **Web** ([apps/web](apps/web)): React + Vite + TypeScript. Home rails with continue-watching, Discover with visible ranking reasons, title and watch pages, search, watchlist, sign-in/up, the full Studio flow with per-title analytics and scout visibility controls, and the scout portal
+- **Transcoder** ([apps/transcoder](apps/transcoder)): the pipeline's data plane. A Node worker (run it anywhere ffmpeg exists) that claims jobs, probes sources, encodes a no-upscale HLS ladder (1080p/720p/480p/360p) in a single ffmpeg pass, grabs a poster frame, and uploads everything back through the service API
+- **Web** ([apps/web](apps/web)): React + Vite + TypeScript. Home rails with continue-watching, Discover with visible ranking reasons, title and watch pages, an HLS-capable player (native on Safari, lazy-loaded hls.js elsewhere), search, watchlist, sign-in/up, the full Studio flow with pipeline status, per-title analytics, and scout visibility controls, and the scout portal
 - **Shared** ([packages/shared](packages/shared)): one set of types and constants consumed by both sides
 - **Tests** ([apps/api/test](apps/api/test)): the ranking fairness properties, range parser edge cases, auth crypto round-trips, validation schemas, and slug rules
 - **CI** ([.github/workflows/ci.yml](.github/workflows/ci.yml)): lint, typecheck, test, build on every push
@@ -79,6 +82,14 @@ npm run dev        # API on http://127.0.0.1:8787, web on http://localhost:5173
 ```
 
 Open http://localhost:5173. The web dev server proxies `/api` and `/media` to the Worker, so everything is same-origin with zero CORS configuration.
+
+To turn creator uploads into adaptive HLS, also run the transcoder worker (the one component that needs ffmpeg; on Windows: `winget install Gyan.FFmpeg`):
+
+```bash
+npm run dev:transcoder
+```
+
+Everything else works without it: uploads play as their source files until a transcoder picks the job up, and the demo catalog streams as-is.
 
 ### Demo accounts
 
@@ -107,13 +118,14 @@ npm run build
 
 ```
 apps/
-  api/            Cloudflare Worker: routes, ranking, auth, media serving
+  api/            Cloudflare Worker: routes, ranking, transcode queue, auth, media serving
     migrations/   D1 schema
     seed.sql      Demo catalog and accounts
     test/         Vitest unit tests for the core logic
-  web/            React app: catalog, Discover, player, Studio
+  transcoder/     Node + ffmpeg worker: HLS ladders and thumbnails (runs anywhere)
+  web/            React app: catalog, Discover, player, Studio, scout portal
 packages/
-  shared/         Types and constants used by both apps
+  shared/         Types and constants used by every app
 docs/
   ARCHITECTURE.md System design, data model, request flows, security notes
   ROADMAP.md      Where this goes next

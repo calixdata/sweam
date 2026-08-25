@@ -1,13 +1,14 @@
 # Sweam roadmap
 
-Shipped so far: v0.1 (the working vertical slice: catalog, discovery, playback, Studio, uploads, range serving) and v0.3 (the scout portal, built ahead of v0.2 because it closes the loop on the platform thesis and did not depend on the media pipeline).
+Shipped so far: v0.1 (the working vertical slice: catalog, discovery, playback, Studio, uploads, range serving), v0.3 (the scout portal, built ahead of v0.2 because it closes the loop on the platform thesis), and v0.2 (the media pipeline).
 
-## v0.2: Real media pipeline (next up)
+## v0.2: Real media pipeline (shipped)
 
-- Transcode-on-upload (queue + ffmpeg worker, or Cloudflare Stream) producing HLS ladders instead of serving source MP4s
-- Poster/thumbnail generation and storage
-- Multipart uploads past the 512 MB single-PUT cap, with resumable upload state
-- Anonymous view beacons so signed-out plays count in stats (privacy-preserving, no identity)
+Shipped: the transcode queue (atomic claims, capped attempts, stale reclaim, supersede protection) with a portable Node + ffmpeg worker producing no-upscale HLS ladders and poster thumbnails; hls.js playback; resumable multipart uploads; and anonymous view beacons (random per-session id, no identity) feeding plays, finishes, and retention. Still open from this phase:
+
+- Garbage collection for HLS outputs left by superseded or deleted jobs
+- Upload progress at byte granularity (the client reports per-part today)
+- Per-creator storage quotas before uploads are a public-abuse surface
 
 ## v0.3: The scout portal (shipped)
 

@@ -1,0 +1,22 @@
+{
+  "name": "@sweam/transcoder",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "Sweam transcoder worker: claims jobs from the API, runs ffmpeg to produce HLS ladders and thumbnails, and uploads the outputs back.",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
+    "once": "tsx src/index.ts --once",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@sweam/shared": "0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "vitest": "^3.0.0"
+  }
+}

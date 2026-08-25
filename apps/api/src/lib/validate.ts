@@ -97,3 +97,65 @@ export const scoutApplySchema = z.object({
 export const scoutInterestSchema = z.object({
   note: z.string().trim().max(500).default(''),
 });
+
+// ---------------------------------------------------------------------------
+// Media pipeline
+// ---------------------------------------------------------------------------
+
+export const multipartInitSchema = z.object({
+  filename: z.string().trim().min(1).max(200),
+  contentType: z.string().trim().min(1).max(100),
+});
+
+const multipartRef = {
+  key: z.string().min(1).max(1024),
+  uploadId: z.string().min(1).max(4096),
+};
+
+export const multipartCompleteSchema = z.object({
+  ...multipartRef,
+  parts: z
+    .array(
+      z.object({
+        partNumber: z.number().int().min(1).max(10_000),
+        etag: z.string().min(1).max(256),
+      }),
+    )
+    .min(1)
+    .max(10_000),
+});
+
+export const multipartAbortSchema = z.object(multipartRef);
+
+/** Anonymous beacon: a client-generated random session id, no identity. */
+export const viewBeaconSchema = progressSchema.extend({
+  viewId: z.string().uuid('viewId must be a UUID.'),
+});
+
+export const transcodeClaimSchema = z.object({
+  workerId: z.string().trim().min(1).max(120),
+});
+
+/** Output filenames are flat (no path separators); the API owns the prefix. */
+const outputFilename = /^[A-Za-z0-9_.-]+$/;
+
+export const transcodeCompleteSchema = z.object({
+  durationS: z.number().int().min(0).max(86_400),
+  master: z
+    .string()
+    .regex(outputFilename)
+    .refine((name) => name.endsWith('.m3u8'), 'master must be an .m3u8 playlist.'),
+  poster: z
+    .string()
+    .regex(outputFilename)
+    .refine(
+      (name) => /\.(jpe?g|png)$/.test(name),
+      'poster must be a .jpg, .jpeg, or .png file.',
+    )
+    .nullable()
+    .default(null),
+});
+
+export const transcodeFailSchema = z.object({
+  error: z.string().trim().min(1).max(2000),
+});

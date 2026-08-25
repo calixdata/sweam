@@ -10,6 +10,7 @@ import { mediaRoutes } from './routes/media';
 import { meRoutes } from './routes/me';
 import { scoutRoutes } from './routes/scout';
 import { studioRoutes } from './routes/studio';
+import { transcodeRoutes } from './routes/transcode';
 import { titleRoutes } from './routes/titles';
 import { watchRoutes } from './routes/watch';
 
@@ -29,6 +30,7 @@ app.route('/api/watch', watchRoutes);
 app.route('/api/me', meRoutes);
 app.route('/api/studio', studioRoutes);
 app.route('/api/scout', scoutRoutes);
+app.route('/api/transcode', transcodeRoutes);
 app.route('/media', mediaRoutes);
 
 app.notFound((c) => {

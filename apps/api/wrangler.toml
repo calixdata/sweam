@@ -21,3 +21,8 @@ bucket_name = "sweam-media"
 
 [vars]
 ENVIRONMENT = "development"
+# Shared secret for the transcoder worker's service API. This default is for
+# local development only; production deploys must override it with
+# `wrangler secret put TRANSCODER_TOKEN` (the API refuses the default value
+# when ENVIRONMENT is "production").
+TRANSCODER_TOKEN = "dev-transcoder-token"

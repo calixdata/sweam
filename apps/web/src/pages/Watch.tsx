@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import type Hls from 'hls.js';
 import type { WatchPayload } from '@sweam/shared';
 import { ApiError, apiGet } from '../api';
 import { useAuth } from '../auth';
@@ -8,6 +9,33 @@ import { formatDuration, usePageTitle } from '../hooks';
 
 /** Send a resume beacon at most this often while playing. */
 const BEACON_INTERVAL_MS = 10_000;
+
+/** In-memory fallback when sessionStorage is unavailable (private browsing). */
+const viewIdFallback = new Map<string, string>();
+
+/**
+ * Anonymous playback session id: random, per episode, per browser session.
+ * Never derived from the user, IP, or device, so signed-out plays count in
+ * stats without collecting identity.
+ */
+function getViewId(episodeId: string): string {
+  const key = `sweam-view-${episodeId}`;
+  try {
+    let id = sessionStorage.getItem(key);
+    if (!id) {
+      id = crypto.randomUUID();
+      sessionStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    let id = viewIdFallback.get(key);
+    if (!id) {
+      id = crypto.randomUUID();
+      viewIdFallback.set(key, id);
+    }
+    return id;
+  }
+}
 
 /**
  * The player deliberately uses the browser's native video controls: they are
@@ -46,14 +74,25 @@ export function Watch() {
   const sendProgress = useCallback(
     (force: boolean) => {
       const video = videoRef.current;
-      if (!video || !user || !episodeId) return;
+      if (!video || !episodeId) return;
       const now = Date.now();
       if (!force && now - lastBeaconAt.current < BEACON_INTERVAL_MS) return;
       if (!Number.isFinite(video.duration) || video.duration <= 0) return;
       lastBeaconAt.current = now;
-      const body = JSON.stringify({ positionS: video.currentTime, durationS: video.duration });
+
+      // Signed-in viewers get resume via /progress; everyone else counts via
+      // the anonymous /view beacon.
+      const beacon: Record<string, unknown> = {
+        positionS: video.currentTime,
+        durationS: video.duration,
+      };
+      let url = `/api/watch/${encodeURIComponent(episodeId)}/progress`;
+      if (!user) {
+        url = `/api/watch/${encodeURIComponent(episodeId)}/view`;
+        beacon.viewId = getViewId(episodeId);
+      }
+      const body = JSON.stringify(beacon);
       // sendBeacon survives page unload; fall back to fetch for older browsers.
-      const url = `/api/watch/${encodeURIComponent(episodeId)}/progress`;
       if (!navigator.sendBeacon?.(url, new Blob([body], { type: 'application/json' }))) {
         void fetch(url, {
           method: 'POST',
@@ -76,6 +115,43 @@ export function Watch() {
       flush();
     };
   }, [sendProgress]);
+
+  const videoUrl = payload?.episode.videoUrl ?? null;
+
+  // Attach the source: native for MP4/WebM (and Safari's built-in HLS),
+  // hls.js (lazy-loaded) for .m3u8 everywhere else.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoUrl) return;
+    let hls: Hls | null = null;
+    let cancelled = false;
+    const needsHlsJs =
+      videoUrl.endsWith('.m3u8') && video.canPlayType('application/vnd.apple.mpegurl') === '';
+
+    if (needsHlsJs) {
+      void import('hls.js').then(({ default: HlsModule }) => {
+        if (cancelled) return;
+        if (HlsModule.isSupported()) {
+          hls = new HlsModule();
+          hls.on(HlsModule.Events.ERROR, (_event, data) => {
+            if (data.fatal) setAnnouncement('Playback error. Try reloading the page.');
+          });
+          hls.loadSource(videoUrl);
+          hls.attachMedia(video);
+        } else {
+          setAnnouncement('This browser cannot play adaptive HLS streams.');
+        }
+      });
+    } else {
+      video.src = videoUrl;
+    }
+
+    return () => {
+      cancelled = true;
+      if (hls) hls.destroy();
+      else video.removeAttribute('src');
+    };
+  }, [videoUrl]);
 
   function handleLoadedMetadata() {
     const video = videoRef.current;
@@ -118,7 +194,6 @@ export function Watch() {
       <video
         ref={videoRef}
         className="player"
-        src={episode.videoUrl}
         controls
         preload="metadata"
         aria-label={`${title.name}: ${episode.name}`}

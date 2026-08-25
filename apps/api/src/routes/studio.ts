@@ -1,6 +1,13 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import type { EpisodeSummary, StudioTitleDetail, StudioTitleSummary, TitleAnalytics } from '@sweam/shared';
+import type {
+  MultipartInit,
+  StudioEpisode,
+  StudioTitleDetail,
+  StudioTitleSummary,
+  TitleAnalytics,
+  TranscodeStatus,
+} from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { loadDailySeries, loadRetention } from '../lib/analytics';
 import { fail, nowIso, parseBody } from '../lib/http';
@@ -12,10 +19,14 @@ import {
   creatorProfileSchema,
   episodeCreateSchema,
   episodeUpdateSchema,
+  multipartAbortSchema,
+  multipartCompleteSchema,
+  multipartInitSchema,
   publishSchema,
   titleCreateSchema,
   titleUpdateSchema,
 } from '../lib/validate';
+import { enqueueTranscode } from './transcode';
 
 export const studioRoutes = new Hono<AppEnv>();
 
@@ -87,14 +98,43 @@ async function ownedTitle(c: Context<AppEnv>, titleId: string): Promise<StudioTi
   return row;
 }
 
-async function titleEpisodes(c: Context<AppEnv>, titleId: string): Promise<EpisodeSummary[]> {
+/** An uploaded /media/ source goes through the pipeline; HLS outputs and external URLs do not. */
+function isPipelineSource(url: string): boolean {
+  return url.startsWith('/media/') && !url.startsWith('/media/hls/');
+}
+
+type StudioEpisodeRow = EpisodeRow & {
+  source_url: string | null;
+  thumbnail_url: string | null;
+  t_status: TranscodeStatus | null;
+  t_error: string | null;
+  t_updated: string | null;
+};
+
+async function titleEpisodes(c: Context<AppEnv>, titleId: string): Promise<StudioEpisode[]> {
   const { results } = await c.env.DB.prepare(
-    `SELECT id, season, episode, name, synopsis, video_url, captions_url, duration_s
-     FROM episodes WHERE title_id = ? ORDER BY season, episode`,
+    `SELECT e.id, e.season, e.episode, e.name, e.synopsis, e.video_url, e.captions_url, e.duration_s,
+       e.source_url, e.thumbnail_url,
+       j.status AS t_status, j.error AS t_error, j.updated_at AS t_updated
+     FROM episodes e
+     LEFT JOIN transcode_jobs j ON j.id = (
+       SELECT id FROM transcode_jobs
+       WHERE episode_id = e.id AND status != 'canceled'
+       ORDER BY created_at DESC LIMIT 1
+     )
+     WHERE e.title_id = ? ORDER BY e.season, e.episode`,
   )
     .bind(titleId)
-    .all<EpisodeRow>();
-  return results.map(mapEpisode);
+    .all<StudioEpisodeRow>();
+  return results.map((row) => ({
+    ...mapEpisode(row),
+    sourceUrl: row.source_url,
+    thumbnailUrl: row.thumbnail_url,
+    transcode:
+      row.t_status && row.t_updated
+        ? { status: row.t_status, error: row.t_error, updatedAt: row.t_updated }
+        : null,
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -233,11 +273,12 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
   const row = await ownedTitle(c, c.req.param('titleId'));
   const body = await parseBody(c, episodeCreateSchema);
   const id = crypto.randomUUID();
+  const sourceUrl = isPipelineSource(body.videoUrl) ? body.videoUrl : null;
 
   try {
     await c.env.DB.prepare(
-      `INSERT INTO episodes (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO episodes (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         id,
@@ -249,6 +290,7 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
         body.videoUrl,
         body.captionsUrl,
         body.durationS,
+        sourceUrl,
         nowIso(),
       )
       .run();
@@ -258,18 +300,22 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
     }
     throw err;
   }
-  return c.json({ id }, 201);
+  if (sourceUrl) await enqueueTranscode(c.env.DB, id, sourceUrl);
+  return c.json({ id, transcodeQueued: sourceUrl !== null }, 201);
 });
 
 /** Loads an episode only if its parent title belongs to the signed-in creator. */
-async function ownedEpisode(c: Context<AppEnv>, episodeId: string): Promise<{ id: string }> {
+async function ownedEpisode(
+  c: Context<AppEnv>,
+  episodeId: string,
+): Promise<{ id: string; source_url: string | null }> {
   const row = await c.env.DB.prepare(
-    `SELECT e.id FROM episodes e
+    `SELECT e.id, e.source_url FROM episodes e
      JOIN titles t ON t.id = e.title_id
      WHERE e.id = ? AND t.creator_id = ?`,
   )
     .bind(episodeId, currentUser(c).id)
-    .first<{ id: string }>();
+    .first<{ id: string; source_url: string | null }>();
   if (!row) fail(404, 'episode_not_found', 'No such episode in your Studio.');
   return row;
 }
@@ -277,6 +323,15 @@ async function ownedEpisode(c: Context<AppEnv>, episodeId: string): Promise<{ id
 studioRoutes.patch('/episodes/:episodeId', requireCreator, async (c) => {
   const episode = await ownedEpisode(c, c.req.param('episodeId'));
   const body = await parseBody(c, episodeUpdateSchema);
+
+  // A new uploaded source re-enters the pipeline; re-saving the same source
+  // or pointing at an external URL does not.
+  const newSource =
+    body.videoUrl !== undefined &&
+    isPipelineSource(body.videoUrl) &&
+    body.videoUrl !== episode.source_url
+      ? body.videoUrl
+      : null;
 
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -288,6 +343,7 @@ studioRoutes.patch('/episodes/:episodeId', requireCreator, async (c) => {
     video_url: body.videoUrl,
     captions_url: body.captionsUrl,
     duration_s: body.durationS,
+    source_url: newSource ?? undefined,
   };
   for (const [column, value] of Object.entries(columns)) {
     if (value !== undefined) {
@@ -305,7 +361,18 @@ studioRoutes.patch('/episodes/:episodeId', requireCreator, async (c) => {
     }
     throw err;
   }
-  return c.json({ ok: true });
+  if (newSource) await enqueueTranscode(c.env.DB, episode.id, newSource);
+  return c.json({ ok: true, transcodeQueued: newSource !== null });
+});
+
+/** Re-run the pipeline for an episode that has an uploaded source. */
+studioRoutes.post('/episodes/:episodeId/transcode', requireCreator, async (c) => {
+  const episode = await ownedEpisode(c, c.req.param('episodeId'));
+  if (!episode.source_url) {
+    fail(400, 'no_source', 'This episode has no uploaded source to transcode.');
+  }
+  await enqueueTranscode(c.env.DB, episode.id, episode.source_url);
+  return c.json({ queued: true });
 });
 
 studioRoutes.delete('/episodes/:episodeId', requireCreator, async (c) => {
@@ -402,14 +469,92 @@ studioRoutes.put('/upload/:filename', requireCreator, async (c) => {
   }
   if (!c.req.raw.body) fail(400, 'empty_body', 'Upload body is empty.');
 
-  const safeName = c.req
-    .param('filename')
+  const key = mediaKeyFor(currentUser(c).id, c.req.param('filename'));
+  await c.env.MEDIA.put(key, c.req.raw.body, { httpMetadata: { contentType } });
+  return c.json({ url: `/media/${key}` }, 201);
+});
+
+function mediaKeyFor(userId: string, filename: string): string {
+  const safeName = filename
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 80);
-  const key = `u/${currentUser(c).id}/${crypto.randomUUID()}/${safeName || 'upload'}`;
+  return `u/${userId}/${crypto.randomUUID()}/${safeName || 'upload'}`;
+}
 
-  await c.env.MEDIA.put(key, c.req.raw.body, { httpMetadata: { contentType } });
-  return c.json({ url: `/media/${key}` }, 201);
+// ---------------------------------------------------------------------------
+// Multipart uploads
+// ---------------------------------------------------------------------------
+
+/** R2 requires equal part sizes (except the last) with a 5 MiB minimum. */
+export const MULTIPART_PART_SIZE = 8 * 1024 * 1024;
+const MAX_PART_BYTES = 64 * 1024 * 1024;
+
+/** A multipart key must belong to the signed-in creator; a miss is a 404. */
+function assertOwnKey(c: Context<AppEnv>, key: string): void {
+  if (!key.startsWith(`u/${currentUser(c).id}/`)) {
+    fail(404, 'upload_not_found', 'No such upload.');
+  }
+}
+
+studioRoutes.post('/upload/multipart', requireCreator, async (c) => {
+  const body = await parseBody(c, multipartInitSchema);
+  if (!UPLOAD_CONTENT_TYPES.has(body.contentType)) {
+    fail(415, 'unsupported_type', 'Upload MP4/WebM video, WebVTT captions, or JPEG/PNG/WebP images.');
+  }
+  const key = mediaKeyFor(currentUser(c).id, body.filename);
+  const upload = await c.env.MEDIA.createMultipartUpload(key, {
+    httpMetadata: { contentType: body.contentType },
+  });
+  const payload: MultipartInit = { key, uploadId: upload.uploadId, partSize: MULTIPART_PART_SIZE };
+  return c.json(payload, 201);
+});
+
+studioRoutes.put('/upload/multipart/part', requireCreator, async (c) => {
+  const key = c.req.query('key') ?? '';
+  const uploadId = c.req.query('uploadId') ?? '';
+  const partNumber = Number(c.req.query('partNumber') ?? '0');
+  assertOwnKey(c, key);
+  if (!uploadId || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10_000) {
+    fail(400, 'bad_part', 'Provide uploadId and a part number between 1 and 10000.');
+  }
+  const contentLength = Number(c.req.header('content-length') ?? '0');
+  if (!Number.isFinite(contentLength) || contentLength <= 0 || contentLength > MAX_PART_BYTES) {
+    fail(400, 'bad_part_size', 'Each part needs a Content-Length up to 64 MB.');
+  }
+  if (!c.req.raw.body) fail(400, 'empty_body', 'Part body is empty.');
+
+  const upload = c.env.MEDIA.resumeMultipartUpload(key, uploadId);
+  try {
+    const part = await upload.uploadPart(partNumber, c.req.raw.body);
+    return c.json({ partNumber: part.partNumber, etag: part.etag });
+  } catch {
+    // R2 rejects parts for unknown/aborted uploads; tell the client to restart.
+    fail(409, 'upload_gone', 'That multipart upload no longer exists; start it again.');
+  }
+});
+
+studioRoutes.post('/upload/multipart/complete', requireCreator, async (c) => {
+  const body = await parseBody(c, multipartCompleteSchema);
+  assertOwnKey(c, body.key);
+  const upload = c.env.MEDIA.resumeMultipartUpload(body.key, body.uploadId);
+  try {
+    await upload.complete(body.parts.map((part) => ({ partNumber: part.partNumber, etag: part.etag })));
+  } catch {
+    fail(409, 'upload_gone', 'That multipart upload could not be completed; start it again.');
+  }
+  return c.json({ url: `/media/${body.key}` }, 201);
+});
+
+studioRoutes.post('/upload/multipart/abort', requireCreator, async (c) => {
+  const body = await parseBody(c, multipartAbortSchema);
+  assertOwnKey(c, body.key);
+  const upload = c.env.MEDIA.resumeMultipartUpload(body.key, body.uploadId);
+  try {
+    await upload.abort();
+  } catch {
+    // Aborting an already-gone upload is success from the client's view.
+  }
+  return c.json({ aborted: true });
 });

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { EpisodeSummary, StudioTitleDetail } from '@sweam/shared';
+import type { StudioEpisode, StudioTitleDetail } from '@sweam/shared';
 import { ADVISORIES, CONTENT_KINDS, CONTENT_KIND_LABELS, GENRES } from '@sweam/shared';
-import { ApiError, apiGet, apiSend, apiUpload } from '../api';
+import { ApiError, apiGet, apiSend } from '../api';
 import { ErrorNote, Loading } from '../components/Status';
 import { formatDuration, usePageTitle } from '../hooks';
+import { uploadMedia } from '../upload';
 
 export function StudioTitle() {
   const { titleId } = useParams<{ titleId: string }>();
@@ -225,6 +226,25 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
   );
 }
 
+/** One line summarizing where an episode sits in the media pipeline. */
+function pipelineLabel(episode: StudioEpisode): string | null {
+  if (episode.transcode) {
+    switch (episode.transcode.status) {
+      case 'queued':
+        return 'HLS: queued';
+      case 'running':
+        return 'HLS: processing';
+      case 'done':
+        return 'HLS ready';
+      case 'failed':
+        return `HLS failed${episode.transcode.error ? `: ${episode.transcode.error}` : ''}`;
+      case 'canceled':
+        return null;
+    }
+  }
+  return episode.sourceUrl ? null : 'external source';
+}
+
 function EpisodesSection({
   title,
   onChanged,
@@ -232,13 +252,18 @@ function EpisodesSection({
   title: StudioTitleDetail;
   onChanged: () => Promise<void>;
 }) {
-  const [editing, setEditing] = useState<EpisodeSummary | null>(null);
+  const [editing, setEditing] = useState<StudioEpisode | null>(null);
 
-  async function deleteEpisode(episode: EpisodeSummary) {
+  async function deleteEpisode(episode: StudioEpisode) {
     const confirmed = window.confirm(`Delete episode “${episode.name}”? This cannot be undone.`);
     if (!confirmed) return;
     await apiSend('DELETE', `/api/studio/episodes/${episode.id}`);
     if (editing?.id === episode.id) setEditing(null);
+    await onChanged();
+  }
+
+  async function retryTranscode(episode: StudioEpisode) {
+    await apiSend('POST', `/api/studio/episodes/${episode.id}/transcode`);
     await onChanged();
   }
 
@@ -259,6 +284,7 @@ function EpisodesSection({
                   <p className="episode-synopsis">
                     {formatDuration(episode.durationS)}
                     {episode.captionsUrl ? ' · captions attached' : ' · no captions'}
+                    {pipelineLabel(episode) ? ` · ${pipelineLabel(episode)}` : ''}
                   </p>
                 </div>
                 <div className="episode-actions">
@@ -269,6 +295,15 @@ function EpisodesSection({
                   >
                     Edit
                   </button>
+                  {episode.transcode?.status === 'failed' && (
+                    <button
+                      type="button"
+                      className="button button-quiet"
+                      onClick={() => retryTranscode(episode)}
+                    >
+                      Retry transcode
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="button button-danger"
@@ -304,7 +339,7 @@ function EpisodeForm({
   onCancelEdit,
 }: {
   titleId: string;
-  episode: EpisodeSummary | null;
+  episode: StudioEpisode | null;
   onDone: () => Promise<void>;
   onCancelEdit: () => void;
 }) {
@@ -322,13 +357,18 @@ function EpisodeForm({
   const isEdit = episode !== null;
 
   async function handleUpload(file: File, target: 'video' | 'captions') {
-    setUploadState(`Uploading ${file.name}…`);
     setError(null);
     try {
-      const { url } = await apiUpload(file);
-      if (target === 'video') setVideoUrl(url);
-      else setCaptionsUrl(url);
-      setUploadState(`Uploaded ${file.name}.`);
+      // Large files go multipart with resume; progress lands in the status line.
+      const { url } = await uploadMedia(file, (progress) => setUploadState(progress.message));
+      if (target === 'video') {
+        setVideoUrl(url);
+        setUploadState(
+          `Uploaded ${file.name}. It will be transcoded to adaptive HLS after you save the episode.`,
+        );
+      } else {
+        setCaptionsUrl(url);
+      }
     } catch (err) {
       setUploadState('');
       setError(err instanceof ApiError ? err.message : 'Upload failed.');
