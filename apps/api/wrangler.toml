@@ -37,6 +37,16 @@ TRANSCODER_TOKEN = "dev-transcoder-token"
 # ---------------------------------------------------------------------------
 [env.preview]
 name = "sweam"
+# Keep the workers.dev URL working alongside the custom domain (adding routes
+# would otherwise disable it).
+workers_dev = true
+# Custom domain, in addition to sweam.hi-3e9.workers.dev. Cloudflare provisions
+# the DNS record + edge cert automatically; the zone must be on this account
+# (it is — sweam.co uses Cloudflare nameservers).
+routes = [
+  { pattern = "sweam.co", custom_domain = true },
+  { pattern = "www.sweam.co", custom_domain = true },
+]
 
 [[env.preview.d1_databases]]
 binding = "DB"
