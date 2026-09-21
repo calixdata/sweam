@@ -1219,13 +1219,276 @@ input[type='checkbox'] {
 .site-footer {
   border-top: 1px solid var(--line);
   color: var(--muted);
+  font-size: 0.9rem;
+  background: #0a1120;
+}
+
+.footer-inner {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 2.75rem var(--gutter) 1.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 2fr);
+  gap: 2.5rem;
+}
+
+.footer-brand {
+  max-width: 36ch;
+}
+
+.footer-logo {
+  height: 26px;
+  width: auto;
+  margin-bottom: 0.85rem;
+}
+
+.footer-tagline {
+  margin: 0;
+  color: var(--muted);
+}
+
+.footer-nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+.footer-col h2 {
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text);
+  margin: 0 0 0.8rem;
+}
+
+.footer-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.footer-col a {
+  color: var(--muted);
+}
+
+.footer-col a:hover {
+  color: var(--link);
+}
+
+.footer-legal {
+  max-width: var(--wrap);
+  margin: 0 auto;
+  padding: 1.25rem var(--gutter) 2rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.footer-legal p {
+  margin: 0;
+}
+
+.footer-cookie-button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 0.4rem 0.9rem;
+  border-radius: var(--radius-control);
   font-size: 0.85rem;
 }
 
-.site-footer p {
+.footer-cookie-button:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+/* ----------------------------------------------------------- cookie banner */
+
+.cookie-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -12px 40px #0007;
+}
+
+.cookie-banner-inner {
   max-width: var(--wrap);
   margin: 0 auto;
-  padding: 2rem var(--gutter);
+  padding: 1.1rem var(--gutter);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.cookie-banner-copy {
+  flex: 1 1 420px;
+}
+
+.cookie-banner-copy h2 {
+  font-size: 1.05rem;
+  margin: 0 0 0.25rem;
+}
+
+.cookie-banner-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  max-width: 74ch;
+}
+
+.cookie-banner-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex: 0 0 auto;
+}
+
+/* ------------------------------------------------------- policy + info pages */
+
+.legal-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0 0 1.25rem;
+}
+
+.notice {
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin: 0 0 1.5rem;
+}
+
+.notice-draft {
+  border-color: #6a5220;
+  background: #241d10;
+}
+
+.notice-draft strong {
+  color: var(--amber);
+}
+
+.legal-toc {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.35rem;
+  background: var(--surface);
+  margin: 1.5rem 0 2.5rem;
+}
+
+.legal-toc h2 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--muted);
+  margin: 0 0 0.6rem;
+}
+
+.legal-toc ol {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.35rem;
+  color: var(--muted);
+}
+
+.legal-section {
+  margin-top: 2.25rem;
+}
+
+.legal-section h2,
+.faq-group h2 {
+  /* Anchor jumps clear the sticky header instead of hiding under it. */
+  scroll-margin-top: 90px;
+}
+
+.legal-section p,
+.legal-section li {
+  color: #dbe4f2;
+}
+
+.legal-section ul {
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.legal-section code {
+  background: var(--surface-2);
+  padding: 0.1rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.9em;
+}
+
+.consent-controls {
+  margin: 1rem 0;
+}
+
+.consent-controls-buttons {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+
+.faq-group {
+  margin-top: 2.5rem;
+}
+
+.faq-list {
+  margin: 0;
+}
+
+.faq-item {
+  padding: 1.1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.faq-item dt {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 1.05rem;
+  margin-bottom: 0.35rem;
+}
+
+.faq-item dd {
+  margin: 0;
+  color: #dbe4f2;
+}
+
+.contact-list {
+  margin: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.contact-item {
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.contact-item dt {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.contact-item dd {
+  margin: 0;
+  color: var(--muted);
 }
 
 /* ------------------------------------------------------------- responsive */
@@ -1286,9 +1549,30 @@ input[type='checkbox'] {
   .wrap {
     padding: 0 5% 3rem;
   }
+  .footer-inner {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+  .cookie-banner-inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+  .cookie-banner-actions {
+    justify-content: flex-end;
+  }
 }
 
 @media (max-width: 520px) {
+  .footer-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cookie-banner-actions {
+    flex-direction: column;
+  }
+  .cookie-banner-actions .button {
+    width: 100%;
+  }
   h1 {
     font-size: 1.9rem;
   }

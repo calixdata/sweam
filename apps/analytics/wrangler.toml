@@ -1,0 +1,53 @@
+# Sweam analytics worker (analytics.sweam.co).
+#
+# A standalone Worker that collects cookieless page views and serves a private
+# dashboard. It binds the SAME database as the main API (sweam-db) but does not
+# own the schema: the analytics_* tables are created by the API's migrations
+# (apps/api/migrations/0008_analytics.sql). Deploy with:
+#   npx wrangler deploy --env preview
+#
+# Before the dashboard will open on the live deploy, set two secrets (the live
+# config intentionally leaves them unset so no real password lives in git):
+#   npx wrangler secret put DASH_PASS --env preview
+#   npx wrangler secret put ANALYTICS_SALT --env preview
+
+name = "sweam-analytics"
+main = "src/index.ts"
+compatibility_date = "2025-08-01"
+
+# Local development defaults only. The live deploy (env.preview) uses secrets.
+[vars]
+ENVIRONMENT = "development"
+DASH_USER = "sweam"
+DASH_PASS = "dev-analytics-pass"
+ANALYTICS_SALT = "dev-analytics-salt"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sweam-db"
+database_id = "cb955161-edd2-41d9-8692-7da571815e0d"
+
+# ---------------------------------------------------------------------------
+# Always-on deploy at analytics.sweam.co.
+# ---------------------------------------------------------------------------
+[env.preview]
+name = "sweam-analytics"
+workers_dev = true
+routes = [{ pattern = "analytics.sweam.co", custom_domain = true }]
+
+[[env.preview.d1_databases]]
+binding = "DB"
+database_name = "sweam-db"
+database_id = "cb955161-edd2-41d9-8692-7da571815e0d"
+
+# Production posture: the dashboard refuses to open until DASH_PASS is set as a
+# secret, and DASH_USER can be overridden the same way. ANALYTICS_SALT should
+# also be set as a secret for correct, private unique-visitor counting.
+[env.preview.vars]
+ENVIRONMENT = "production"
+DASH_USER = "sweam"
+
+[env.preview.triggers]
+# Daily: fold days older than the 90-day raw window into the permanent rollup
+# and prune the raw hits (and their hashes).
+crons = ["17 4 * * *"]

@@ -11,6 +11,7 @@
     "packages/shared",
     "apps/api",
     "apps/web",
+    "apps/analytics",
     "apps/transcoder"
   ],
   "scripts": {

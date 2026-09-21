@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { trackPageView } from '../analytics';
 import { apiGet } from '../api';
 import { useAuth } from '../auth';
+import { resetConsent } from '../consent';
+import { CookieConsent } from './CookieConsent';
 
 export function Layout() {
   const { user, signOut } = useAuth();
@@ -39,6 +42,12 @@ export function Layout() {
       return;
     }
     mainRef.current?.focus();
+  }, [location.pathname]);
+
+  // Record a privacy-first page view on each navigation. The analytics client
+  // is a no-op unless the visitor has consented (and only on the real origin).
+  useEffect(() => {
+    trackPageView(location.pathname);
   }, [location.pathname]);
 
   function handleSearch(event: FormEvent) {
@@ -152,8 +161,79 @@ export function Layout() {
         <Outlet />
       </main>
       <footer className="site-footer">
-        <p>© 2026 Sweam</p>
+        <div className="footer-inner">
+          <div className="footer-brand">
+            <img className="footer-logo" src="/brand/sweam-logo.png" alt="Sweam" />
+            <p className="footer-tagline">
+              Where TikTok meets Tubi. Free streaming and equal-visibility discovery for independent
+              creators.
+            </p>
+          </div>
+          <nav className="footer-nav" aria-label="Footer">
+            <div className="footer-col">
+              <h2>Explore</h2>
+              <ul>
+                <li>
+                  <Link to="/">Home</Link>
+                </li>
+                <li>
+                  <Link to="/discover">Discover</Link>
+                </li>
+                <li>
+                  <Link to="/browse">Browse</Link>
+                </li>
+                <li>
+                  <Link to="/faq">FAQ</Link>
+                </li>
+              </ul>
+            </div>
+            <div className="footer-col">
+              <h2>Creators</h2>
+              <ul>
+                <li>
+                  <Link to="/submit">Submit your work</Link>
+                </li>
+                <li>
+                  <Link to="/scout">Scout portal</Link>
+                </li>
+                <li>
+                  <Link to="/legal/creator-agreement">Creator Agreement</Link>
+                </li>
+                <li>
+                  <Link to="/legal/community-guidelines">Community Guidelines</Link>
+                </li>
+              </ul>
+            </div>
+            <div className="footer-col">
+              <h2>Company</h2>
+              <ul>
+                <li>
+                  <Link to="/contact">Contact</Link>
+                </li>
+                <li>
+                  <Link to="/legal/terms">Terms of Service</Link>
+                </li>
+                <li>
+                  <Link to="/legal/privacy">Privacy Policy</Link>
+                </li>
+                <li>
+                  <Link to="/legal/cookies">Cookie Policy</Link>
+                </li>
+                <li>
+                  <Link to="/legal/ai">AI Disclosure</Link>
+                </li>
+              </ul>
+            </div>
+          </nav>
+        </div>
+        <div className="footer-legal">
+          <p>© 2026 Sweam. Operated by Falcyn.</p>
+          <button type="button" className="footer-cookie-button" onClick={resetConsent}>
+            Cookie settings
+          </button>
+        </div>
       </footer>
+      <CookieConsent />
     </>
   );
 }

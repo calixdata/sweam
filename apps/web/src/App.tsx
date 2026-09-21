@@ -10,7 +10,15 @@ import { Admin } from './pages/Admin';
 import { AdminModeration } from './pages/AdminModeration';
 import { AdminMonetization } from './pages/AdminMonetization';
 import { Browse } from './pages/Browse';
+import { Contact } from './pages/Contact';
 import { CreatorPage } from './pages/CreatorPage';
+import { Faq } from './pages/Faq';
+import { AiDisclosure } from './pages/legal/AiDisclosure';
+import { CommunityGuidelines } from './pages/legal/CommunityGuidelines';
+import { Cookies } from './pages/legal/Cookies';
+import { CreatorAgreement } from './pages/legal/CreatorAgreement';
+import { Privacy } from './pages/legal/Privacy';
+import { Terms } from './pages/legal/Terms';
 import { Notifications } from './pages/Notifications';
 import { Scout } from './pages/Scout';
 import { ScoutOneSheet } from './pages/ScoutOneSheet';
@@ -102,6 +110,14 @@ export function App() {
         <Route path="/admin/monetization" element={<AdminMonetization />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/faq" element={<Faq />} />
+        <Route path="/legal/terms" element={<Terms />} />
+        <Route path="/legal/privacy" element={<Privacy />} />
+        <Route path="/legal/cookies" element={<Cookies />} />
+        <Route path="/legal/ai" element={<AiDisclosure />} />
+        <Route path="/legal/community-guidelines" element={<CommunityGuidelines />} />
+        <Route path="/legal/creator-agreement" element={<CreatorAgreement />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
