@@ -156,13 +156,17 @@ apps/
 packages/
   shared/         Types and constants used by every app
 docs/
-  ARCHITECTURE.md System design, data model, request flows, security notes
-  ROADMAP.md      Where this goes next
+  ARCHITECTURE.md  System design, data model, request flows, security notes
+  CREATOR-PROGRAM.md  The researched, benchmarked monetization policy
+  POLICIES.md      Legal and compliance pages, and their draft status
+  ROADMAP.md       Where this goes next
 ```
 
 ## Documentation
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the pieces fit, the data model, the ranking math, and the security posture
+- [docs/CREATOR-PROGRAM.md](docs/CREATOR-PROGRAM.md): the researched, benchmarked monetization policy
+- [docs/POLICIES.md](docs/POLICIES.md): the user-facing legal and compliance pages (Terms, Privacy, Cookies, AI disclosure, Community Guidelines, Creator Agreement, FAQ, Contact) and their draft status
 - [docs/ROADMAP.md](docs/ROADMAP.md): transcoding and HLS, the scout portal, moderation, monetization
 - [CONTRIBUTING.md](CONTRIBUTING.md): standards for changes
 
