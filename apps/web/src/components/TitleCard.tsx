@@ -29,28 +29,26 @@ export function TitleCard({ title }: { title: TitleSummary }) {
   }, ${title.genre}, by ${title.creator.displayName}`;
   const hue = GENRE_HUES[title.genre] ?? 210;
 
+  const noPoster = !title.posterUrl;
   return (
     <article className="title-card">
       <Link to={`/t/${title.slug}`} aria-label={label}>
-        {title.posterUrl ? (
-          <img className="poster" src={title.posterUrl} alt="" loading="lazy" />
-        ) : (
-          <div
-            className="poster poster-monogram"
-            aria-hidden="true"
-            style={{
-              background: `linear-gradient(160deg, hsl(${hue} 42% 26%), hsl(${hue} 48% 12%))`,
-            }}
-          >
-            <span>{title.name.charAt(0)}</span>
-          </div>
-        )}
-        <h3>{title.name}</h3>
+        <div
+          className="poster"
+          style={
+            noPoster
+              ? { background: `linear-gradient(160deg, hsl(${hue} 42% 26%), hsl(${hue} 48% 12%))` }
+              : undefined
+          }
+        >
+          {title.posterUrl && <img src={title.posterUrl} alt="" loading="lazy" />}
+          <span className="tag-new card-tag">{CONTENT_KIND_LABELS[title.kind]}</span>
+          <span className="poster-title">{title.name}</span>
+        </div>
         <p className="card-meta">
-          {CONTENT_KIND_LABELS[title.kind]}
-          {title.kind === 'series' ? ` · ${title.episodeCount} ep` : ''} · {title.genre}
+          {title.genre}
+          {title.kind === 'series' ? ` · ${title.episodeCount} ep` : ''} · @{title.creator.handle}
         </p>
-        <p className="card-meta">@{title.creator.handle}</p>
       </Link>
     </article>
   );

@@ -4,7 +4,14 @@ import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/.wrangler/**', '**/node_modules/**', '**/coverage/**'],
+    ignores: [
+      '**/dist/**',
+      '**/.wrangler/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      'SWEAM WEBSITE UI/**',
+      'Sweam Temp/**',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,

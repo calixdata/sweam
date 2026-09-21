@@ -17,3 +17,10 @@ coverage/
 .DS_Store
 Thumbs.db
 *.log
+
+# Local design source and scratch (not app source)
+SWEAM WEBSITE UI/
+Sweam Temp/
+Sweam-Portfolio-*.png
+Sweam-Portfolio-*.webp
+perch-db-backup-*.sql

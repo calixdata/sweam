@@ -62,96 +62,89 @@ export function Layout() {
       </a>
       <header className="site-header">
         <div className="header-inner">
-          <div className="header-row">
-            <Link to="/" className="brand" aria-label="Sweam home">
-              <img className="brand-logo" src="/brand/sweam-wordmark-dark.png" alt="Sweam" />
-            </Link>
-            <form role="search" className="header-search" onSubmit={handleSearch}>
-              <label htmlFor="header-search-input" className="visually-hidden">
-                Search titles and creators
-              </label>
-              <input
-                id="header-search-input"
-                type="search"
-                placeholder="Search titles and creators"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-              <button type="submit" className="button button-quiet">
-                Search
-              </button>
-            </form>
-            <div className="header-account">
-              {user ? (
-                <>
-                  <span className="nav-user">{user.displayName}</span>
-                  <button type="button" className="button button-quiet" onClick={handleSignOut}>
-                    Sign out
-                  </button>
-                </>
-              ) : (
-                <>
-                  <Link className="button button-quiet" to="/signin">
-                    Sign in
-                  </Link>
-                  <Link className="button" to="/signup">
-                    Join Sweam
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="header-row">
-            <nav aria-label="Primary">
-              <ul className="nav-links">
+          <Link to="/" className="brand" aria-label="Sweam home">
+            <img className="brand-logo" src="/brand/sweam-logo.png" alt="Sweam" />
+          </Link>
+          <nav aria-label="Primary">
+            <ul className="nav-links">
+              <li>
+                <NavLink to="/" end>
+                  Home
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/discover">Discover</NavLink>
+              </li>
+              <li>
+                <NavLink to="/browse">Browse</NavLink>
+              </li>
+              <li>
+                <NavLink to="/submit">Submit</NavLink>
+              </li>
+              {user && (
                 <li>
-                  <NavLink to="/" end>
-                    Home
+                  <NavLink to="/watchlist">My list</NavLink>
+                </li>
+              )}
+            </ul>
+          </nav>
+          <nav aria-label="Workspaces">
+            <ul className="nav-links nav-links-secondary">
+              {user && (
+                <li>
+                  <NavLink
+                    to="/notifications"
+                    aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+                  >
+                    Notifications{unread > 0 ? ` (${unread})` : ''}
                   </NavLink>
                 </li>
+              )}
+              {user && (
                 <li>
-                  <NavLink to="/discover">Discover</NavLink>
+                  <NavLink to="/studio">Studio</NavLink>
                 </li>
+              )}
+              <li>
+                <NavLink to="/scout">Scout</NavLink>
+              </li>
+              {user?.isAdmin && (
                 <li>
-                  <NavLink to="/browse">Browse</NavLink>
+                  <NavLink to="/admin">Admin</NavLink>
                 </li>
-                <li>
-                  <NavLink to="/submit">Submit</NavLink>
-                </li>
-                {user && (
-                  <li>
-                    <NavLink to="/watchlist">My list</NavLink>
-                  </li>
-                )}
-              </ul>
-            </nav>
-            <nav aria-label="Workspaces">
-              <ul className="nav-links nav-links-secondary">
-                {user && (
-                  <li>
-                    <NavLink
-                      to="/notifications"
-                      aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
-                    >
-                      Notifications{unread > 0 ? ` (${unread})` : ''}
-                    </NavLink>
-                  </li>
-                )}
-                {user && (
-                  <li>
-                    <NavLink to="/studio">Studio</NavLink>
-                  </li>
-                )}
-                <li>
-                  <NavLink to="/scout">Scout</NavLink>
-                </li>
-                {user?.isAdmin && (
-                  <li>
-                    <NavLink to="/admin">Admin</NavLink>
-                  </li>
-                )}
-              </ul>
-            </nav>
+              )}
+            </ul>
+          </nav>
+          <form role="search" className="header-search" onSubmit={handleSearch}>
+            <label htmlFor="header-search-input" className="visually-hidden">
+              Search titles and creators
+            </label>
+            <input
+              id="header-search-input"
+              type="search"
+              placeholder="Search"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+          </form>
+          <div className="header-account">
+            {user ? (
+              <>
+                <span className="nav-user">{user.displayName}</span>
+                <button type="button" className="button button-quiet" onClick={handleSignOut}>
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <>
+                <Link className="button button-quiet" to="/signin">
+                  Sign in
+                </Link>
+                <Link className="button" to="/signup">
+                  Join Sweam
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
