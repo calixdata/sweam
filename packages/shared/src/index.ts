@@ -82,6 +82,8 @@ export interface EpisodeSummary {
   videoUrl: string;
   captionsUrl: string | null;
   durationS: number;
+  /** Signed credits from Verbatiim (who wrote the words, which engines made it), when it made the episode. */
+  aiCredits?: string | null;
 }
 
 /** Full title page payload. Viewer-specific fields are false for signed-out requests. */
@@ -317,7 +319,8 @@ export type NotificationKind =
   | 'new_episode'
   | 'comment'
   | 'follow'
-  | 'submission';
+  | 'submission'
+  | 'verbatiim';
 
 export interface NotificationItem {
   id: string;
@@ -552,4 +555,61 @@ export interface ApiErrorBody {
     code: string;
     message: string;
   };
+}
+
+// ---------------------------------------------------------------------------
+// Verbatiim: make an episode from prose, a screenplay, or one prompt
+// ---------------------------------------------------------------------------
+
+/** The film-and-clips engine's public name; change it here and every screen follows. */
+export const VERBATIIM_NAME = 'Verbatiim';
+
+export type VerbatiimMode = 'adapt' | 'fountain' | 'prompt';
+
+export const VERBATIIM_MODE_LABELS: Record<VerbatiimMode, string> = {
+  adapt: 'Adapt prose: your exact words become narration and dialogue',
+  fountain: 'Screenplay in Fountain format',
+  prompt: 'One prompt: the story is written for you',
+};
+
+/** Longest text accepted, matching Verbatiim's own limit. */
+export const VERBATIIM_MAX_TEXT = 400_000;
+/** Jobs a creator may start per day. */
+export const VERBATIIM_DAILY_LIMIT = 10;
+
+export type VerbatiimJobStatus = 'queued' | 'running' | 'importing' | 'done' | 'failed';
+
+export interface VerbatiimClip {
+  id: string;
+  score: number;
+  durationS: number;
+  title: string;
+  /** One plain-language reason per scoring factor. */
+  reasons: string[];
+  /** Sweam-hosted /media/ URLs once imported. */
+  videoUrl: string;
+  captionsUrl: string | null;
+}
+
+export interface VerbatiimJob {
+  id: string;
+  titleId: string;
+  episodeId: string | null;
+  mode: VerbatiimMode;
+  season: number;
+  episode: number;
+  name: string;
+  status: VerbatiimJobStatus;
+  /** Verbatiim's own stage-by-stage progress line, in plain words. */
+  progress: string | null;
+  error: string | null;
+  clips: VerbatiimClip[];
+  credits: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VerbatiimStatus {
+  connected: boolean;
+  name: string;
 }

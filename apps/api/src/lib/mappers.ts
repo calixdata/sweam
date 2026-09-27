@@ -64,6 +64,8 @@ export interface EpisodeRow {
   video_url: string;
   captions_url: string | null;
   duration_s: number;
+  /** Only selected by queries that show credits (the watch page). */
+  ai_credits?: string | null;
 }
 
 export function mapEpisode(row: EpisodeRow): EpisodeSummary {
@@ -76,6 +78,7 @@ export function mapEpisode(row: EpisodeRow): EpisodeSummary {
     videoUrl: row.video_url,
     captionsUrl: row.captions_url,
     durationS: row.duration_s,
+    ...(row.ai_credits !== undefined ? { aiCredits: row.ai_credits } : {}),
   };
 }
 

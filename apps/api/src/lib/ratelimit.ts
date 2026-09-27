@@ -32,6 +32,8 @@ export const RATE_LIMITS = {
   adImpression: { name: 'ad-impression', limit: 30, windowS: 5 * 60 },
   comment: { name: 'comment', limit: 20, windowS: 60 * 60 },
   submission: { name: 'submission', limit: 3, windowS: 24 * 60 * 60 },
+  /** Verbatiim film jobs a creator may start per day (each one renders a whole episode). */
+  verbatiim: { name: 'verbatiim', limit: 10, windowS: 24 * 60 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /** Start of the fixed window containing nowMs, in epoch seconds. */

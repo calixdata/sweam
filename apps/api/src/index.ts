@@ -17,6 +17,7 @@ import { studioRoutes } from './routes/studio';
 import { submissionRoutes } from './routes/submissions';
 import { transcodeRoutes } from './routes/transcode';
 import { titleRoutes } from './routes/titles';
+import { verbatiimStudioRoutes, verbatiimWebhookRoutes } from './routes/verbatiim';
 import { watchRoutes } from './routes/watch';
 
 const app = new Hono<AppEnv>();
@@ -35,7 +36,9 @@ app.route('/api/comments', commentRoutes);
 app.route('/api/creators', creatorRoutes);
 app.route('/api/watch', watchRoutes);
 app.route('/api/me', meRoutes);
+app.route('/api/studio/verbatiim', verbatiimStudioRoutes);
 app.route('/api/studio', studioRoutes);
+app.route('/api/integrations/verbatiim', verbatiimWebhookRoutes);
 app.route('/api/scout', scoutRoutes);
 app.route('/api/transcode', transcodeRoutes);
 app.route('/api/admin', adminRoutes);

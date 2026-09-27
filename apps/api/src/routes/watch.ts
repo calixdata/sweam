@@ -28,7 +28,7 @@ interface WatchRow extends EpisodeRow {
 async function loadEpisode(db: D1Database, episodeId: string): Promise<WatchRow | null> {
   return db
     .prepare(
-      `SELECT e.id, e.season, e.episode, e.name, e.synopsis, e.video_url, e.captions_url, e.duration_s,
+      `SELECT e.id, e.season, e.episode, e.name, e.synopsis, e.video_url, e.captions_url, e.duration_s, e.ai_credits,
         t.id AS title_id, t.slug AS title_slug, t.name AS title_name, t.kind AS title_kind,
         t.creator_id, t.published,
         u.display_name AS creator_name, cp.handle AS creator_handle

@@ -5,6 +5,7 @@ import type { StudioEpisode, StudioTitleDetail } from '@sweam/shared';
 import { ADVISORIES, CONTENT_KINDS, CONTENT_KIND_LABELS, GENRES } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { ErrorNote, Loading } from '../components/Status';
+import { VerbatiimPanel } from '../components/VerbatiimPanel';
 import { formatDuration, usePageTitle } from '../hooks';
 import { uploadMedia } from '../upload';
 
@@ -95,6 +96,7 @@ export function StudioTitle() {
 
       <TitleEditForm title={title} onSaved={load} />
       <EpisodesSection title={title} onChanged={load} />
+      <VerbatiimPanel title={title} onChanged={load} />
     </div>
   );
 }

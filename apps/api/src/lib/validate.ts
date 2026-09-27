@@ -5,6 +5,7 @@ import {
   CONTENT_KINDS,
   GENRES,
   REPORT_REASONS,
+  VERBATIIM_MAX_TEXT,
 } from '@sweam/shared';
 
 /**
@@ -281,4 +282,20 @@ export const commentReportSchema = z.object({
 
 export const commentReportResolveSchema = z.object({
   action: z.enum(['dismiss', 'remove']),
+});
+
+/** Starting a Verbatiim film. The rights confirmation mirrors the submission form's. */
+export const verbatiimJobSchema = z.object({
+  mode: z.enum(['adapt', 'fountain', 'prompt']),
+  text: z
+    .string()
+    .trim()
+    .min(1, 'Paste the prose, screenplay, or prompt.')
+    .max(VERBATIIM_MAX_TEXT, 'That text is too long for one episode.'),
+  name: z.string().trim().min(1, 'Episode name is required.').max(120),
+  synopsis: z.string().trim().max(2000).default(''),
+  season: z.number().int().min(1).max(100).default(1),
+  episode: z.number().int().min(1).max(500).default(1),
+  clipCount: z.number().int().min(0).max(10).default(3),
+  rightsConfirmed: z.literal(true, { errorMap: () => ({ message: 'Confirm you hold the rights to this text.' }) }),
 });

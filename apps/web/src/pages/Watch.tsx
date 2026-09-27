@@ -299,6 +299,22 @@ export function Watch() {
       )}
 
       {episode.synopsis && <p className="episode-synopsis">{episode.synopsis}</p>}
+
+      {episode.aiCredits && (
+        <section aria-labelledby="how-made-heading" className="how-made">
+          <h2 id="how-made-heading">How this was made</h2>
+          {episode.aiCredits
+            .trim()
+            .split('\n')
+            .filter(Boolean)
+            .slice(1) // the first line repeats the episode's own title
+            .map((line, i) => (
+              <p key={i} className="episode-synopsis">
+                {line}
+              </p>
+            ))}
+        </section>
+      )}
     </div>
   );
 }
