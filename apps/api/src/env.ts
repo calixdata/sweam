@@ -23,6 +23,12 @@ export interface Env {
    */
   ANTHROPIC_API_KEY?: string;
   AI_REVIEW_MODEL?: string;
+  /**
+   * Required only when ANTHROPIC_API_KEY is an org key not scoped to a single
+   * workspace; sent as the anthropic-workspace-id header. Not needed for a
+   * workspace-scoped key. Set with `wrangler secret put ANTHROPIC_WORKSPACE_ID`.
+   */
+  ANTHROPIC_WORKSPACE_ID?: string;
 }
 
 /** Hono generic: bindings plus the per-request variables middleware attaches. */

@@ -73,15 +73,19 @@ export async function reviewSubmission(
     `Title: ${submission.titleName}\nType: ${submission.kind}\nGenre: ${submission.genre}\n` +
     `Hosting: ${submission.hosting}\nDescription: ${submission.synopsis}`;
 
+  const headers: Record<string, string> = {
+    'x-api-key': env.ANTHROPIC_API_KEY as string,
+    'anthropic-version': '2023-06-01',
+    'content-type': 'application/json',
+  };
+  // Org keys that are not scoped to a single workspace require this header.
+  if (env.ANTHROPIC_WORKSPACE_ID) headers['anthropic-workspace-id'] = env.ANTHROPIC_WORKSPACE_ID;
+
   let res: Response;
   try {
     res = await fetch(ANTHROPIC_URL, {
       method: 'POST',
-      headers: {
-        'x-api-key': env.ANTHROPIC_API_KEY as string,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         model,
         max_tokens: 1024,
