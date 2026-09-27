@@ -566,6 +566,12 @@ export const VERBATIIM_NAME = 'Verbatiim';
 
 export type VerbatiimMode = 'adapt' | 'fountain' | 'prompt';
 
+/**
+ * A job's source: one of the text modes above, or a finished cut (video plus
+ * captions) imported through Verbatiim for captions, clips, and signed credits.
+ */
+export type VerbatiimJobMode = VerbatiimMode | 'import';
+
 export const VERBATIIM_MODE_LABELS: Record<VerbatiimMode, string> = {
   adapt: 'Adapt prose: your exact words become narration and dialogue',
   fountain: 'Screenplay in Fountain format',
@@ -595,7 +601,7 @@ export interface VerbatiimJob {
   id: string;
   titleId: string;
   episodeId: string | null;
-  mode: VerbatiimMode;
+  mode: VerbatiimJobMode;
   season: number;
   episode: number;
   name: string;

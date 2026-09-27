@@ -1,4 +1,4 @@
-import type { VerbatiimClip, VerbatiimJob, VerbatiimJobStatus, VerbatiimMode } from '@sweam/shared';
+import type { VerbatiimClip, VerbatiimJob, VerbatiimJobMode, VerbatiimJobStatus, VerbatiimMode } from '@sweam/shared';
 import { VERBATIIM_NAME } from '@sweam/shared';
 import type { Env } from '../env';
 import { nowIso } from './http';
@@ -128,7 +128,7 @@ export interface VerbatiimJobRow {
   creator_id: string;
   title_id: string;
   episode_id: string | null;
-  mode: VerbatiimMode;
+  mode: VerbatiimJobMode;
   season: number;
   episode: number;
   name: string;
