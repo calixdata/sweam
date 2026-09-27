@@ -49,9 +49,9 @@ export function apiSend<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: st
   });
 }
 
-/** Streams a file to the Studio uploader; returns the stored /media/... URL. */
-export async function apiUpload(file: File): Promise<{ url: string }> {
-  const res = await fetch(`/api/studio/upload/${encodeURIComponent(file.name)}`, {
+/** Streams a file to an uploader (Studio by default); returns the stored /media/... URL. */
+export async function apiUpload(file: File, base = '/api/studio/upload'): Promise<{ url: string }> {
+  const res = await fetch(`${base}/${encodeURIComponent(file.name)}`, {
     method: 'PUT',
     credentials: 'same-origin',
     headers: { 'content-type': file.type },

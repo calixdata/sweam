@@ -477,7 +477,41 @@ export interface AdminMonetization {
 // Submissions
 // ---------------------------------------------------------------------------
 
-export type SubmissionStatus = 'pending' | 'accepted' | 'declined';
+export type SubmissionStatus = 'pending' | 'under_review' | 'accepted' | 'declined' | 'withdrawn';
+
+export const SUBMISSION_STATUS_LABELS: Record<SubmissionStatus, string> = {
+  pending: 'Received',
+  under_review: 'Under review',
+  accepted: 'Accepted',
+  declined: 'Not selected',
+  withdrawn: 'Withdrawn',
+};
+
+/**
+ * The forward pipeline a submission moves through, for the status bar. Declined
+ * and withdrawn are terminal states that sit off this track.
+ */
+export const SUBMISSION_STATUS_STEPS: SubmissionStatus[] = ['pending', 'under_review', 'accepted'];
+
+export type AiRecommendation = 'accept' | 'decline' | 'needs_review';
+
+export const AI_RECOMMENDATION_LABELS: Record<AiRecommendation, string> = {
+  accept: 'Recommends accept',
+  decline: 'Recommends decline',
+  needs_review: 'Needs human review',
+};
+
+/** The stored result of an AI-assisted review, shown to admins in the CRM. */
+export interface AiSubmissionReview {
+  recommendation: AiRecommendation;
+  /** 0..1 self-reported confidence. */
+  confidence: number;
+  summary: string;
+  riskFlags: string[];
+  suggestedNote: string;
+  model: string;
+  reviewedAt: string;
+}
 
 /** A curated-intake submission: finished work pitched for inclusion on Sweam. */
 export interface SubmissionItem {
@@ -486,16 +520,25 @@ export interface SubmissionItem {
   kind: ContentKind;
   genre: Genre;
   synopsis: string;
+  /** External screener link (optional fallback); '' when the work was uploaded. */
   workUrl: string;
+  /** Sweam-hosted upload (/media/...), when the work was uploaded here directly. */
+  sourceUrl: string | null;
+  captionsUrl: string | null;
+  /** The Verbatiim project this was imported from, if any. */
+  verbatiimProjectId: string | null;
   status: SubmissionStatus;
   /** Reviewer note, shared with the submitter on decision. */
   note: string;
   createdAt: string;
+  updatedAt: string | null;
   decidedAt: string | null;
 }
 
 export interface AdminSubmission extends SubmissionItem {
   submitter: { displayName: string; email: string; handle: string | null };
+  /** The most recent AI review, or null if none has been run. */
+  aiReview: AiSubmissionReview | null;
 }
 
 // ---------------------------------------------------------------------------

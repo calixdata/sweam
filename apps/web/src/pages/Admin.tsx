@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { AdminOverview, AdminScoutApplication, AdminSubmission, AdminTranscodeJob } from '@sweam/shared';
-import { CONTENT_KIND_LABELS, formatMillicents } from '@sweam/shared';
+import type { AdminOverview, AdminScoutApplication, AdminTranscodeJob } from '@sweam/shared';
+import { formatMillicents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote, Loading } from '../components/Status';
@@ -26,22 +26,19 @@ export function Admin() {
 function AdminDashboard() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [applications, setApplications] = useState<AdminScoutApplication[] | null>(null);
-  const [submissions, setSubmissions] = useState<AdminSubmission[] | null>(null);
   const [jobs, setJobs] = useState<AdminTranscodeJob[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const [ov, apps, subs, transcode] = await Promise.all([
+      const [ov, apps, transcode] = await Promise.all([
         apiGet<AdminOverview>('/api/admin/overview'),
         apiGet<{ applications: AdminScoutApplication[] }>('/api/admin/scout-applications'),
-        apiGet<{ submissions: AdminSubmission[] }>('/api/admin/submissions'),
         apiGet<{ jobs: AdminTranscodeJob[] }>('/api/admin/transcode'),
       ]);
       setOverview(ov);
       setApplications(apps.applications);
-      setSubmissions(subs.submissions);
       setJobs(transcode.jobs);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load the admin dashboard.');
@@ -88,18 +85,8 @@ function AdminDashboard() {
     }
   }
 
-  async function decideSubmission(submission: AdminSubmission, accept: boolean, note: string) {
-    try {
-      await apiSend('POST', `/api/admin/submissions/${submission.id}/decide`, { accept, note });
-      setNotice(`${accept ? 'Accepted' : 'Declined'} "${submission.titleName}".`);
-      await load();
-    } catch (err) {
-      setNotice(err instanceof ApiError ? err.message : 'Decision failed.');
-    }
-  }
-
   if (error) return <ErrorNote message={error} />;
-  if (!overview || !applications || !submissions || !jobs) {
+  if (!overview || !applications || !jobs) {
     return <Loading label="Loading the admin dashboard" />;
   }
 
@@ -107,8 +94,12 @@ function AdminDashboard() {
     <div className="page page-narrow">
       <h1>Admin</h1>
       <p className="page-intro">
-        Platform operations. Moderation lives on the{' '}
-        <Link to="/admin/moderation">moderation page</Link>
+        Platform operations. Content submissions have their own{' '}
+        <Link to="/admin/submissions">review CRM</Link>
+        {overview.pendingSubmissions > 0
+          ? ` (${overview.pendingSubmissions} pending)`
+          : ' (queue is empty)'}
+        ; moderation lives on the <Link to="/admin/moderation">moderation page</Link>
         {overview.openReports > 0
           ? ` (${overview.openReports} open report${overview.openReports === 1 ? '' : 's'})`
           : ' (queue is empty)'}
@@ -170,7 +161,10 @@ function AdminDashboard() {
               </tr>
               <tr>
                 <th scope="row">Content submissions</th>
-                <td>{overview.pendingSubmissions} pending</td>
+                <td>
+                  {overview.pendingSubmissions} pending ·{' '}
+                  <Link to="/admin/submissions">open the CRM</Link>
+                </td>
               </tr>
               <tr>
                 <th scope="row">Advertising</th>
@@ -182,33 +176,6 @@ function AdminDashboard() {
             </tbody>
           </table>
         </div>
-      </section>
-
-      <section aria-labelledby="admin-submissions">
-        <h2 id="admin-submissions">Content submissions</h2>
-        {submissions.length === 0 ? (
-          <p>No pending submissions.</p>
-        ) : (
-          <ul className="interest-list">
-            {submissions.map((submission) => (
-              <li key={submission.id}>
-                <h3>
-                  {submission.titleName} ({CONTENT_KIND_LABELS[submission.kind]}, {submission.genre})
-                </h3>
-                <p>
-                  From {submission.submitter.displayName} ({submission.submitter.email}
-                  {submission.submitter.handle ? `, @${submission.submitter.handle}` : ''}) ·{' '}
-                  {submission.createdAt.slice(0, 10)} ·{' '}
-                  <a href={submission.workUrl}>Watch the screener</a>
-                </p>
-                <blockquote>{submission.synopsis}</blockquote>
-                <SubmissionDecision
-                  onDecide={(accept, note) => decideSubmission(submission, accept, note)}
-                />
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
 
       <section aria-labelledby="admin-scout-apps">
@@ -326,38 +293,6 @@ function AdminDashboard() {
           Run HLS cleanup
         </button>
       </section>
-    </div>
-  );
-}
-
-function SubmissionDecision({
-  onDecide,
-}: {
-  onDecide: (accept: boolean, note: string) => Promise<void>;
-}) {
-  const [note, setNote] = useState('');
-  const noteId = useMemo(() => `subnote-${Math.random().toString(36).slice(2, 8)}`, []);
-
-  return (
-    <div>
-      <div className="field">
-        <label htmlFor={noteId}>Reviewer note (shared with the submitter)</label>
-        <input
-          id={noteId}
-          type="text"
-          maxLength={1000}
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-        />
-      </div>
-      <div className="episode-actions">
-        <button type="button" className="button" onClick={() => onDecide(true, note)}>
-          Accept
-        </button>
-        <button type="button" className="button button-danger" onClick={() => onDecide(false, note)}>
-          Decline
-        </button>
-      </div>
     </div>
   );
 }

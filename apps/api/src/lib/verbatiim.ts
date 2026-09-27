@@ -169,7 +169,7 @@ export function mapJob(row: VerbatiimJobRow): VerbatiimJob {
 const MAX_IMPORT_BYTES = 4.5 * 1024 * 1024 * 1024;
 
 /** Stream a Verbatiim deliverable straight into R2 without buffering it in the Worker. */
-async function copyToR2(env: Env, remoteId: string, name: string, key: string, contentType: string): Promise<void> {
+export async function copyToR2(env: Env, remoteId: string, name: string, key: string, contentType: string): Promise<void> {
   const res = await fetch(`${base(env)}/v1/jobs/${encodeURIComponent(remoteId)}/files/${encodeURIComponent(name)}`, {
     headers: auth(env),
   });

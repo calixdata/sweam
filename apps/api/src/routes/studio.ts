@@ -39,9 +39,9 @@ import { enqueueTranscode } from './transcode';
 export const studioRoutes = new Hono<AppEnv>();
 
 /** Uploads are capped well below R2's single-PUT limit; enough for a 1080p short. */
-const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 
-const UPLOAD_CONTENT_TYPES = new Set([
+export const UPLOAD_CONTENT_TYPES = new Set([
   'video/mp4',
   'video/webm',
   'text/vtt',
@@ -687,7 +687,7 @@ function mediaKeyFor(userId: string, filename: string): string {
 
 /** R2 requires equal part sizes (except the last) with a 5 MiB minimum. */
 export const MULTIPART_PART_SIZE = 8 * 1024 * 1024;
-const MAX_PART_BYTES = 64 * 1024 * 1024;
+export const MAX_PART_BYTES = 64 * 1024 * 1024;
 
 /** A multipart key must belong to the signed-in creator; a miss is a 404. */
 function assertOwnKey(c: Context<AppEnv>, key: string): void {

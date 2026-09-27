@@ -50,6 +50,13 @@ export function Layout() {
     trackPageView(location.pathname);
   }, [location.pathname]);
 
+  // admin.sweam.co is a dedicated entrance: land its root on the admin area.
+  useEffect(() => {
+    if (window.location.hostname === 'admin.sweam.co' && location.pathname === '/') {
+      navigate('/admin', { replace: true });
+    }
+  }, [location.pathname, navigate]);
+
   function handleSearch(event: FormEvent) {
     event.preventDefault();
     const trimmed = searchTerm.trim();

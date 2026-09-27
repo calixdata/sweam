@@ -1214,6 +1214,328 @@ input[type='checkbox'] {
   color: var(--muted);
 }
 
+/* ------------------------------------------------------- submission intake */
+
+.field-label {
+  display: block;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+}
+
+.status-ok {
+  color: #86e6c0;
+}
+
+.intake-sources {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.25rem 1.35rem;
+  margin: 0.5rem 0 0;
+}
+
+.intake-sources legend {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  padding: 0 0.5rem;
+}
+
+.upload-field {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-control);
+  padding: 1rem;
+  margin: 0.9rem 0;
+  background: #0d1626;
+}
+
+.upload-input {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.upload-input::file-selector-button {
+  font: inherit;
+  color: #061827;
+  background: var(--cyan);
+  border: 0;
+  border-radius: var(--radius-control);
+  padding: 0.4rem 0.9rem;
+  margin-right: 0.75rem;
+  cursor: pointer;
+}
+
+.upload-progress {
+  margin-top: 0.6rem;
+}
+
+.upload-progress progress {
+  width: 100%;
+  height: 10px;
+}
+
+.intake-verbatiim {
+  margin: 0.9rem 0;
+}
+
+.field-inline {
+  display: flex;
+  gap: 0.6rem;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.field-inline input {
+  flex: 1 1 260px;
+}
+
+.intake-link {
+  margin-top: 0.9rem;
+}
+
+.intake-link summary {
+  cursor: pointer;
+  color: var(--link);
+}
+
+.submission-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.submission-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.25rem;
+  background: var(--surface);
+}
+
+.submission-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.submission-card-head h3 {
+  margin: 0;
+}
+
+.submission-meta {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.95rem;
+}
+
+.submission-detail {
+  color: var(--muted);
+  margin: 0.35rem 0 0;
+  font-size: 0.92rem;
+}
+
+.submission-terminal {
+  display: inline-block;
+  margin: 0.6rem 0 0;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.submission-terminal-declined {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.submission-terminal-withdrawn {
+  background: #26313f;
+  color: var(--muted);
+}
+
+.status-steps {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.status-step {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.status-step-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1px solid var(--muted);
+}
+
+.status-step-done {
+  color: var(--text);
+  border-color: #2f5f52;
+}
+
+.status-step-done .status-step-dot {
+  background: #86e6c0;
+  border-color: #86e6c0;
+}
+
+.status-step-current {
+  color: #061827;
+  background: var(--cyan);
+  border-color: var(--cyan);
+  font-weight: 650;
+}
+
+.status-step-current .status-step-dot {
+  background: #061827;
+  border-color: #061827;
+}
+
+/* --------------------------------------------------------------- admin CRM */
+
+.crm-tabs {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 1.25rem;
+}
+
+.crm-tab {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+
+.crm-tab-active {
+  background: var(--cyan);
+  color: #061827;
+  border-color: var(--cyan);
+  font-weight: 650;
+}
+
+.crm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.crm-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.4rem;
+  background: var(--surface);
+}
+
+.crm-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.crm-card-head h2 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.crm-status {
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.crm-status-pending,
+.crm-status-under_review {
+  color: var(--amber);
+  border-color: #6a5220;
+}
+
+.crm-status-accepted {
+  color: #86e6c0;
+  border-color: #2f5f52;
+}
+
+.crm-status-declined {
+  color: var(--danger);
+  border-color: #6a3040;
+}
+
+.crm-ai {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 0.9rem 1.1rem;
+  margin: 1rem 0;
+  background: #0d1626;
+}
+
+.crm-ai-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.crm-ai-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.crm-ai-body p {
+  margin: 0.5rem 0 0;
+}
+
+.crm-ai-note {
+  color: var(--muted);
+}
+
+.ai-rec {
+  font-weight: 650;
+}
+
+.ai-rec-accept {
+  color: #86e6c0;
+}
+
+.ai-rec-decline {
+  color: var(--danger);
+}
+
+.ai-rec-needs_review {
+  color: var(--amber);
+}
+
+.ai-flags {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--danger);
+}
+
+.crm-actions {
+  margin-top: 1rem;
+}
+
 /* ------------------------------------------------------------------ footer */
 
 .site-footer {

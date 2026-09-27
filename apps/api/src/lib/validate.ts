@@ -240,30 +240,58 @@ export const payoutDecideSchema = z.object({
 // Submissions
 // ---------------------------------------------------------------------------
 
-export const submissionCreateSchema = z.object({
-  titleName: z.string().trim().min(1, 'The work needs a name.').max(120),
-  kind,
-  genre,
-  synopsis: z
+export const submissionCreateSchema = z
+  .object({
+    titleName: z.string().trim().min(1, 'The work needs a name.').max(120),
+    kind,
+    genre,
+    synopsis: z
+      .string()
+      .trim()
+      .min(20, 'Tell us about the work in at least a couple of sentences.')
+      .max(2000),
+    /** The primary path: the work uploaded to Sweam, or imported from Verbatiim. */
+    sourceUrl: mediaUrl.nullable().default(null),
+    captionsUrl: mediaUrl.nullable().default(null),
+    /** The Verbatiim project the upload was imported from, if any. */
+    verbatiimProjectId: z.string().trim().min(1).max(200).nullable().default(null),
+    /** Optional external screener fallback: https only. */
+    workUrl: z
+      .string()
+      .trim()
+      .url('Enter a valid https link, or upload the file instead.')
+      .max(2048)
+      .refine((value) => value.startsWith('https://'), 'The screener link must be https.')
+      .nullable()
+      .default(null),
+    rightsConfirmed: z.literal(true, {
+      errorMap: () => ({ message: 'You must confirm you hold the rights to this work.' }),
+    }),
+  })
+  .refine((value) => Boolean(value.sourceUrl || value.workUrl || value.verbatiimProjectId), {
+    message: 'Add your work: upload a file, import from Verbatiim, or paste a screener link.',
+    path: ['sourceUrl'],
+  });
+
+/** Import a finished film from a Verbatiim project id or share link. */
+export const verbatiimImportSchema = z.object({
+  projectId: z
     .string()
     .trim()
-    .min(20, 'Tell us about the work in at least a couple of sentences.')
-    .max(2000),
-  /** A screener or portfolio link reviewers can watch: https only. */
-  workUrl: z
-    .string()
-    .trim()
-    .url('Link a screener reviewers can watch (https URL).')
-    .max(2048)
-    .refine((value) => value.startsWith('https://'), 'The screener link must be https.'),
-  rightsConfirmed: z.literal(true, {
-    errorMap: () => ({ message: 'You must confirm you hold the rights to this work.' }),
-  }),
+    .min(1, 'Paste a Verbatiim project id or link.')
+    .max(400)
+    .transform((value) => value.split(/[/?#]/).filter(Boolean).pop() ?? value)
+    .refine((value) => value.length >= 1 && value.length <= 200, 'That is not a Verbatiim project id.'),
 });
 
 export const submissionDecideSchema = z.object({
   accept: z.boolean(),
   note: z.string().trim().max(1000).default(''),
+});
+
+/** Triage move between the two open states (Received <-> Under review). */
+export const submissionStatusSchema = z.object({
+  status: z.enum(['pending', 'under_review']),
 });
 
 // ---------------------------------------------------------------------------

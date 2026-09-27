@@ -7,11 +7,16 @@ import { ApiError, apiSend, apiUpload } from './api';
  * state (upload id and etags) is persisted to localStorage keyed by the
  * file's fingerprint, so an interrupted upload of the same file resumes from
  * the next part instead of starting over, even after a page reload.
+ *
+ * The uploader base path is configurable so the same pipeline serves the
+ * Studio (`/api/studio/upload`) and the submission intake
+ * (`/api/submissions/upload`).
  */
 
 const MULTIPART_THRESHOLD = 32 * 1024 * 1024;
 const PART_RETRIES = 3;
 const RESUME_PREFIX = 'sweam-upload:';
+const DEFAULT_BASE = '/api/studio/upload';
 
 export interface UploadProgress {
   message: string;
@@ -26,30 +31,30 @@ interface ResumeState {
   etags: Record<number, string>;
 }
 
-function fingerprintOf(file: File): string {
-  return `${RESUME_PREFIX}${file.name}:${file.size}:${file.lastModified}`;
+function fingerprintOf(file: File, base: string): string {
+  return `${RESUME_PREFIX}${base}:${file.name}:${file.size}:${file.lastModified}`;
 }
 
-function loadResumeState(file: File): ResumeState | null {
+function loadResumeState(file: File, base: string): ResumeState | null {
   try {
-    const raw = localStorage.getItem(fingerprintOf(file));
+    const raw = localStorage.getItem(fingerprintOf(file, base));
     return raw ? (JSON.parse(raw) as ResumeState) : null;
   } catch {
     return null;
   }
 }
 
-function saveResumeState(file: File, state: ResumeState): void {
+function saveResumeState(file: File, base: string, state: ResumeState): void {
   try {
-    localStorage.setItem(fingerprintOf(file), JSON.stringify(state));
+    localStorage.setItem(fingerprintOf(file, base), JSON.stringify(state));
   } catch {
     // Private browsing or full storage: uploads still work, just not resumable.
   }
 }
 
-function clearResumeState(file: File): void {
+function clearResumeState(file: File, base: string): void {
   try {
-    localStorage.removeItem(fingerprintOf(file));
+    localStorage.removeItem(fingerprintOf(file, base));
   } catch {
     // Same as above.
   }
@@ -58,31 +63,33 @@ function clearResumeState(file: File): void {
 export async function uploadMedia(
   file: File,
   onProgress: (progress: UploadProgress) => void,
+  base: string = DEFAULT_BASE,
 ): Promise<{ url: string }> {
   if (file.size <= MULTIPART_THRESHOLD) {
     onProgress({ message: `Uploading ${file.name}…`, partsDone: 0, partsTotal: 1 });
-    const result = await apiUpload(file);
+    const result = await apiUpload(file, base);
     onProgress({ message: `Uploaded ${file.name}.`, partsDone: 1, partsTotal: 1 });
     return result;
   }
-  return uploadMultipart(file, onProgress, true);
+  return uploadMultipart(file, onProgress, true, base);
 }
 
 async function uploadMultipart(
   file: File,
   onProgress: (progress: UploadProgress) => void,
   allowResume: boolean,
+  base: string,
 ): Promise<{ url: string }> {
-  let state = allowResume ? loadResumeState(file) : null;
+  let state = allowResume ? loadResumeState(file, base) : null;
   const resuming = state !== null;
 
   if (!state) {
-    const init = await apiSend<MultipartInit>('POST', '/api/studio/upload/multipart', {
+    const init = await apiSend<MultipartInit>('POST', `${base}/multipart`, {
       filename: file.name,
       contentType: file.type,
     });
     state = { key: init.key, uploadId: init.uploadId, partSize: init.partSize, etags: {} };
-    saveResumeState(file, state);
+    saveResumeState(file, base, state);
   }
 
   const partsTotal = Math.ceil(file.size / state.partSize);
@@ -92,9 +99,9 @@ async function uploadMultipart(
       if (state.etags[partNumber]) continue;
       const start = (partNumber - 1) * state.partSize;
       const chunk = file.slice(start, Math.min(start + state.partSize, file.size));
-      const part = await uploadPartWithRetry(state, partNumber, chunk);
+      const part = await uploadPartWithRetry(state, partNumber, chunk, base);
       state.etags[part.partNumber] = part.etag;
-      saveResumeState(file, state);
+      saveResumeState(file, base, state);
       onProgress({
         message: `Uploading ${file.name}: part ${partNumber} of ${partsTotal} done.`,
         partsDone: partNumber,
@@ -106,24 +113,24 @@ async function uploadMultipart(
     const parts: MultipartPart[] = Object.entries(state.etags)
       .map(([partNumber, etag]) => ({ partNumber: Number(partNumber), etag }))
       .sort((a, b) => a.partNumber - b.partNumber);
-    const result = await apiSend<{ url: string }>('POST', '/api/studio/upload/multipart/complete', {
+    const result = await apiSend<{ url: string }>('POST', `${base}/multipart/complete`, {
       key: state.key,
       uploadId: state.uploadId,
       parts,
     });
-    clearResumeState(file);
+    clearResumeState(file, base);
     onProgress({ message: `Uploaded ${file.name}.`, partsDone: partsTotal, partsTotal });
     return result;
   } catch (err) {
     // A resumed upload can reference a multipart session the server no longer
     // has; discard the stale state and run once more from scratch.
     if (resuming && err instanceof ApiError && err.code === 'upload_gone') {
-      clearResumeState(file);
-      await apiSend('POST', '/api/studio/upload/multipart/abort', {
+      clearResumeState(file, base);
+      await apiSend('POST', `${base}/multipart/abort`, {
         key: state.key,
         uploadId: state.uploadId,
       }).catch(() => undefined);
-      return uploadMultipart(file, onProgress, false);
+      return uploadMultipart(file, onProgress, false, base);
     }
     throw err;
   }
@@ -133,12 +140,13 @@ async function uploadPartWithRetry(
   state: ResumeState,
   partNumber: number,
   chunk: Blob,
+  base: string,
 ): Promise<MultipartPart> {
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= PART_RETRIES; attempt++) {
     try {
       const query = `key=${encodeURIComponent(state.key)}&uploadId=${encodeURIComponent(state.uploadId)}&partNumber=${partNumber}`;
-      const res = await fetch(`/api/studio/upload/multipart/part?${query}`, {
+      const res = await fetch(`${base}/multipart/part?${query}`, {
         method: 'PUT',
         credentials: 'same-origin',
         body: chunk,

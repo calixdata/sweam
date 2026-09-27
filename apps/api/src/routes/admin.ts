@@ -11,6 +11,7 @@ import type {
   AdminSubmission,
   AdminTakedown,
   AdminTranscodeJob,
+  AiSubmissionReview,
   CommentReportReason,
   ReportReason,
   TakedownKind,
@@ -30,8 +31,10 @@ import {
   reportResolveSchema,
   scoutDecideSchema,
   submissionDecideSchema,
+  submissionStatusSchema,
   takedownCreateSchema,
 } from '../lib/validate';
+import { AiReviewError, aiReviewConfigured, reviewSubmission } from '../lib/aiReview';
 import { mapSubmission } from './submissions';
 
 /**
@@ -107,17 +110,29 @@ adminRoutes.get('/overview', async (c) => {
 // Submissions review
 // ---------------------------------------------------------------------------
 
+const SUBMISSION_STATUSES = ['pending', 'under_review', 'accepted', 'declined', 'withdrawn'] as const;
+
 adminRoutes.get('/submissions', async (c) => {
+  const requested = c.req.query('status');
+  // No filter defaults to the open queue; ?status=all shows every state; a
+  // valid status shows just that column.
+  let filter = "WHERE s.status IN ('pending', 'under_review')";
+  if (requested === 'all') filter = '';
+  else if ((SUBMISSION_STATUSES as readonly string[]).includes(requested ?? '')) {
+    filter = `WHERE s.status = '${requested}'`;
+  }
   const { results } = await c.env.DB.prepare(
-    `SELECT s.id, s.title_name, s.kind, s.genre, s.synopsis, s.work_url, s.status, s.note,
-       s.created_at, s.decided_at,
+    `SELECT s.id, s.title_name, s.kind, s.genre, s.synopsis, s.work_url, s.source_url,
+       s.captions_url, s.verbatiim_project_id, s.status, s.note, s.created_at, s.updated_at,
+       s.decided_at, s.ai_review,
        u.display_name, u.email, cp.handle
      FROM submissions s
      JOIN users u ON u.id = s.user_id
      LEFT JOIN creator_profiles cp ON cp.user_id = s.user_id
-     WHERE s.status = 'pending'
-     ORDER BY s.created_at
-     LIMIT 100`,
+     ${filter}
+     ORDER BY CASE s.status WHEN 'pending' THEN 0 WHEN 'under_review' THEN 1 ELSE 2 END,
+       s.created_at DESC
+     LIMIT 200`,
   ).all<{
     id: string;
     title_name: string;
@@ -125,10 +140,15 @@ adminRoutes.get('/submissions', async (c) => {
     genre: AdminSubmission['genre'];
     synopsis: string;
     work_url: string;
+    source_url: string | null;
+    captions_url: string | null;
+    verbatiim_project_id: string | null;
     status: AdminSubmission['status'];
     note: string;
     created_at: string;
+    updated_at: string | null;
     decided_at: string | null;
+    ai_review: string | null;
     display_name: string;
     email: string;
     handle: string | null;
@@ -137,19 +157,33 @@ adminRoutes.get('/submissions', async (c) => {
   const submissions: AdminSubmission[] = results.map((row) => ({
     ...mapSubmission(row),
     submitter: { displayName: row.display_name, email: row.email, handle: row.handle },
+    aiReview: row.ai_review ? (JSON.parse(row.ai_review) as AiSubmissionReview) : null,
   }));
   return c.json({ submissions });
+});
+
+/** Triage a submission between Received and Under review without deciding it. */
+adminRoutes.post('/submissions/:submissionId/status', async (c) => {
+  const body = await parseBody(c, submissionStatusSchema);
+  const result = await c.env.DB.prepare(
+    `UPDATE submissions SET status = ?, reviewer_id = ?, updated_at = ?
+     WHERE id = ? AND status IN ('pending', 'under_review')`,
+  )
+    .bind(body.status, currentUser(c).id, nowIso(), c.req.param('submissionId'))
+    .run();
+  if (result.meta.changes === 0) fail(404, 'submission_not_found', 'No open submission with that id.');
+  return c.json({ status: body.status });
 });
 
 adminRoutes.post('/submissions/:submissionId/decide', async (c) => {
   const admin = currentUser(c);
   const body = await parseBody(c, submissionDecideSchema);
   const submission = await c.env.DB.prepare(
-    "SELECT id, user_id, title_name FROM submissions WHERE id = ? AND status = 'pending'",
+    "SELECT id, user_id, title_name FROM submissions WHERE id = ? AND status IN ('pending', 'under_review')",
   )
     .bind(c.req.param('submissionId'))
     .first<{ id: string; user_id: string; title_name: string }>();
-  if (!submission) fail(404, 'submission_not_found', 'No pending submission with that id.');
+  if (!submission) fail(404, 'submission_not_found', 'No open submission with that id.');
 
   await c.env.DB.prepare(
     'UPDATE submissions SET status = ?, note = ?, decided_at = ?, decided_by = ? WHERE id = ?',
@@ -166,6 +200,52 @@ adminRoutes.post('/submissions/:submissionId/decide', async (c) => {
     body.accept ? '/studio' : '/submit',
   );
   return c.json({ status: body.accept ? 'accepted' : 'declined' });
+});
+
+/** AI-assisted triage: Claude assesses the described work against the guidelines. */
+adminRoutes.post('/submissions/:submissionId/ai-review', async (c) => {
+  if (!aiReviewConfigured(c.env)) {
+    fail(503, 'ai_off', 'AI review is not configured. Set the ANTHROPIC_API_KEY secret to enable it.');
+  }
+  const row = await c.env.DB.prepare(
+    'SELECT id, title_name, kind, genre, synopsis, source_url, verbatiim_project_id FROM submissions WHERE id = ?',
+  )
+    .bind(c.req.param('submissionId'))
+    .first<{
+      id: string;
+      title_name: string;
+      kind: string;
+      genre: string;
+      synopsis: string;
+      source_url: string | null;
+      verbatiim_project_id: string | null;
+    }>();
+  if (!row) fail(404, 'submission_not_found', 'No submission with that id.');
+
+  const hosting = row.verbatiim_project_id
+    ? 'Imported from Verbatiim, hosted on Sweam'
+    : row.source_url
+      ? 'Uploaded to Sweam'
+      : 'External screener link';
+  let review: AiSubmissionReview;
+  try {
+    review = await reviewSubmission(c.env, {
+      titleName: row.title_name,
+      kind: row.kind,
+      genre: row.genre,
+      synopsis: row.synopsis,
+      hosting,
+    });
+  } catch (err) {
+    if (err instanceof AiReviewError) fail(502, 'ai_failed', err.message);
+    throw err;
+  }
+  await c.env.DB.prepare(
+    'UPDATE submissions SET ai_review = ?, ai_reviewed_at = ?, updated_at = ? WHERE id = ?',
+  )
+    .bind(JSON.stringify(review), review.reviewedAt, nowIso(), row.id)
+    .run();
+  return c.json({ review });
 });
 
 // ---------------------------------------------------------------------------

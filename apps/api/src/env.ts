@@ -16,6 +16,13 @@ export interface Env {
   VERBATIIM_API_URL?: string;
   VERBATIIM_API_KEY?: string;
   VERBATIIM_WEBHOOK_SECRET?: string;
+  /**
+   * Claude (Anthropic API) key for AI-assisted submission review. A secret; set
+   * with `wrangler secret put ANTHROPIC_API_KEY`. The admin AI review is
+   * unavailable until it exists. AI_REVIEW_MODEL overrides the default model.
+   */
+  ANTHROPIC_API_KEY?: string;
+  AI_REVIEW_MODEL?: string;
 }
 
 /** Hono generic: bindings plus the per-request variables middleware attaches. */
