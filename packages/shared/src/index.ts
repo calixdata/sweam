@@ -225,6 +225,26 @@ export interface TitleDetail extends TitleSummary {
   subgenres: string[];
 }
 
+/**
+ * One playable entry in the mobile vertical feed: a title's first episode with
+ * everything needed to autoplay it and show engagement, in one payload.
+ */
+export interface FeedItem {
+  titleId: string;
+  slug: string;
+  name: string;
+  kind: ContentKind;
+  synopsis: string;
+  creator: CreatorRef;
+  episodeId: string;
+  videoUrl: string;
+  posterUrl: string | null;
+  views: number;
+  likes: number;
+  commentCount: number;
+  likedByMe: boolean;
+}
+
 /** One entry in the Discover feed, with the human-readable reason it ranked where it did. */
 export interface DiscoverItem {
   title: TitleSummary;

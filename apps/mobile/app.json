@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Sweam",
+    "slug": "sweam",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "sweam",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#080e19",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "co.sweam.app"
+    },
+    "android": {
+      "package": "co.sweam.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#080e19",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-video",
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#080e19",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 96
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}

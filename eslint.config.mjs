@@ -11,6 +11,9 @@ export default tseslint.config(
       '**/coverage/**',
       'SWEAM WEBSITE UI/**',
       'Sweam Temp/**',
+      // The mobile app has its own Expo lint toolchain (npm run lint in apps/mobile).
+      'apps/mobile/**',
+      '**/.expo/**',
     ],
   },
   eslint.configs.recommended,

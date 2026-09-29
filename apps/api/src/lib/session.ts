@@ -74,9 +74,18 @@ export async function destroySession(db: D1Database, token: string): Promise<voi
   await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(await sha256Hex(token)).run();
 }
 
-/** Resolves the session cookie (if any) into `c.get('user')` for every route. */
+/** The bearer token from an Authorization header, for native clients. */
+export function bearerToken(c: Context<AppEnv>): string | null {
+  const header = c.req.header('authorization');
+  return header && header.startsWith('Bearer ') ? header.slice(7).trim() || null : null;
+}
+
+/**
+ * Resolves the session into `c.get('user')` for every route. The web sends an
+ * HttpOnly cookie; native clients (the mobile app) send `Authorization: Bearer`.
+ */
 export const withUser = createMiddleware<AppEnv>(async (c, next) => {
-  const token = getCookie(c, SESSION_COOKIE);
+  const token = getCookie(c, SESSION_COOKIE) ?? bearerToken(c);
   c.set('user', token ? await resolveSession(c.env.DB, token) : null);
   await next();
 });
@@ -107,8 +116,8 @@ export const requireContentAccess = createMiddleware<AppEnv>(async (c, next) => 
     await next();
     return;
   }
-  // Video and captions require a signed-in account.
-  const token = getCookie(c, SESSION_COOKIE);
+  // Video and captions require a signed-in account (cookie or bearer token).
+  const token = getCookie(c, SESSION_COOKIE) ?? bearerToken(c);
   if (!token) fail(401, 'auth_required', 'Create a free account to watch on Sweam.');
   const row = await c.env.DB.prepare('SELECT expires_at FROM sessions WHERE token_hash = ?')
     .bind(await sha256Hex(token))

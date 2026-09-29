@@ -27,6 +27,15 @@ const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
  */
 const DUMMY_HASH_PROMISE: { current: Promise<string> | null } = { current: null };
 
+/**
+ * Native clients can't use the HttpOnly cookie, so they ask for the raw session
+ * token (stored in the device keystore, sent as a Bearer). The web never sets
+ * this header, so its responses never expose the token to page JS.
+ */
+function wantsToken(c: Context<AppEnv>): boolean {
+  return c.req.header('x-sweam-client') === 'mobile';
+}
+
 function setSessionCookie(c: Context<AppEnv>, token: string): void {
   setCookie(c, SESSION_COOKIE, token, {
     httpOnly: true,
@@ -139,7 +148,7 @@ authRoutes.post('/verify', async (c) => {
     scout: null,
     isAdmin: false,
   };
-  return c.json({ user });
+  return c.json({ user, ...(wantsToken(c) ? { token: session.token } : {}) });
 });
 
 /** Send a fresh verification email. Always returns ok, to not leak account state. */
@@ -216,7 +225,7 @@ authRoutes.post('/signin', async (c) => {
       row.scout_status && row.scout_org ? { status: row.scout_status, orgName: row.scout_org } : null,
     isAdmin: row.is_admin === 1,
   };
-  return c.json({ user });
+  return c.json({ user, ...(wantsToken(c) ? { token: session.token } : {}) });
 });
 
 authRoutes.post('/signout', async (c) => {
