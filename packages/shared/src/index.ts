@@ -21,14 +21,31 @@ export const CONTENT_KIND_LABELS: Record<ContentKind, string> = {
 };
 
 export const GENRES = [
-  'Animation',
-  'Comedy',
-  'Drama',
-  'Documentary',
-  'Sci-Fi',
-  'Horror',
   'Action',
+  'Adventure',
+  'Animation',
+  'Anime',
+  'Biography',
+  'Comedy',
+  'Crime',
+  'Documentary',
+  'Drama',
+  'Experimental',
+  'Family',
+  'Fantasy',
+  'History',
+  'Horror',
   'Music',
+  'Musical',
+  'Mystery',
+  'Reality',
+  'Romance',
+  'Sci-Fi',
+  'Sport',
+  'Superhero',
+  'Thriller',
+  'War',
+  'Western',
 ] as const;
 
 export type Genre = (typeof GENRES)[number];
@@ -37,6 +54,24 @@ export type Genre = (typeof GENRES)[number];
 export const ADVISORIES = ['TV-G', 'TV-PG', 'TV-14', 'TV-MA'] as const;
 
 export type Advisory = (typeof ADVISORIES)[number];
+
+/**
+ * Viewer ratings collected on every submission. Explicit or pornographic
+ * material is forbidden regardless of rating (see the Community Guidelines);
+ * this rating only communicates maturity within what is allowed.
+ */
+export const RATINGS = ['G', 'PG', 'PG-13', 'R', 'NC-17'] as const;
+
+export type Rating = (typeof RATINGS)[number];
+
+/** Maps a submission rating to the catalog advisory used on live titles. */
+export const RATING_TO_ADVISORY: Record<Rating, Advisory> = {
+  G: 'TV-G',
+  PG: 'TV-PG',
+  'PG-13': 'TV-14',
+  R: 'TV-MA',
+  'NC-17': 'TV-MA',
+};
 
 export type ScoutStatus = 'pending' | 'approved' | 'rejected';
 
@@ -200,6 +235,10 @@ export interface StudioTitleDetail extends StudioTitleSummary {
   posterUrl: string | null;
   /** Creator opt-in: whether this title is visible in the scout portal. */
   scoutable: boolean;
+  /** Sweam-published on approval: the creator can request removal, not unpublish. */
+  adminLocked: boolean;
+  /** True while a removal request for this title is open. */
+  removalRequested: boolean;
   episodes: StudioEpisode[];
 }
 
@@ -355,6 +394,15 @@ export interface AdminOverview {
   pendingPayouts: number;
   revenueMillicents: number;
   pendingSubmissions: number;
+}
+
+/** A creator's request for Sweam to remove one of their admin-locked titles. */
+export interface AdminRemovalRequest {
+  id: string;
+  reason: string;
+  createdAt: string;
+  title: { id: string; name: string; slug: string };
+  creator: { displayName: string; handle: string | null };
 }
 
 export interface AdminScoutApplication {
@@ -527,12 +575,25 @@ export interface SubmissionItem {
   captionsUrl: string | null;
   /** The Verbatiim project this was imported from, if any. */
   verbatiimProjectId: string | null;
+  /** Required viewer rating (MPAA-style). */
+  rating: Rating | null;
+  /** Required cover art (a /media/... image the creator uploaded). */
+  posterUrl: string | null;
+  /** The series this part belongs to, when the kind is a series. */
+  seriesId: string | null;
+  seriesName: string | null;
   status: SubmissionStatus;
   /** Reviewer note, shared with the submitter on decision. */
   note: string;
   createdAt: string;
   updatedAt: string | null;
   decidedAt: string | null;
+}
+
+/** A creator's named series, reused across submissions to add new parts. */
+export interface SeriesSummary {
+  id: string;
+  name: string;
 }
 
 export interface AdminSubmission extends SubmissionItem {

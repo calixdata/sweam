@@ -5,6 +5,7 @@ import type {
   AdminMonetization,
   AdminOverview,
   AdminPayout,
+  AdminRemovalRequest,
   AdminReport,
   AdminScoutApplication,
   AdminStrike,
@@ -28,6 +29,7 @@ import {
   adUpdateSchema,
   commentReportResolveSchema,
   payoutDecideSchema,
+  removalDecideSchema,
   reportResolveSchema,
   scoutDecideSchema,
   submissionDecideSchema,
@@ -35,7 +37,8 @@ import {
   takedownCreateSchema,
 } from '../lib/validate';
 import { AiReviewError, aiReviewConfigured, reviewSubmission } from '../lib/aiReview';
-import { mapSubmission } from './submissions';
+import { PublishError, publishSubmission, type PublishableSubmission } from '../lib/publish';
+import { SUBMISSION_SELECT, mapSubmission, type SubmissionRow } from './submissions';
 
 /**
  * The admin console API. Admins are provisioned in the `admins` table by
@@ -122,37 +125,23 @@ adminRoutes.get('/submissions', async (c) => {
     filter = `WHERE s.status = '${requested}'`;
   }
   const { results } = await c.env.DB.prepare(
-    `SELECT s.id, s.title_name, s.kind, s.genre, s.synopsis, s.work_url, s.source_url,
-       s.captions_url, s.verbatiim_project_id, s.status, s.note, s.created_at, s.updated_at,
-       s.decided_at, s.ai_review,
-       u.display_name, u.email, cp.handle
+    `SELECT ${SUBMISSION_SELECT}, s.ai_review, u.display_name, u.email, cp.handle
      FROM submissions s
      JOIN users u ON u.id = s.user_id
      LEFT JOIN creator_profiles cp ON cp.user_id = s.user_id
+     LEFT JOIN series se ON se.id = s.series_id
      ${filter}
      ORDER BY CASE s.status WHEN 'pending' THEN 0 WHEN 'under_review' THEN 1 ELSE 2 END,
        s.created_at DESC
      LIMIT 200`,
-  ).all<{
-    id: string;
-    title_name: string;
-    kind: AdminSubmission['kind'];
-    genre: AdminSubmission['genre'];
-    synopsis: string;
-    work_url: string;
-    source_url: string | null;
-    captions_url: string | null;
-    verbatiim_project_id: string | null;
-    status: AdminSubmission['status'];
-    note: string;
-    created_at: string;
-    updated_at: string | null;
-    decided_at: string | null;
-    ai_review: string | null;
-    display_name: string;
-    email: string;
-    handle: string | null;
-  }>();
+  ).all<
+    SubmissionRow & {
+      ai_review: string | null;
+      display_name: string;
+      email: string;
+      handle: string | null;
+    }
+  >();
 
   const submissions: AdminSubmission[] = results.map((row) => ({
     ...mapSubmission(row),
@@ -179,27 +168,133 @@ adminRoutes.post('/submissions/:submissionId/decide', async (c) => {
   const admin = currentUser(c);
   const body = await parseBody(c, submissionDecideSchema);
   const submission = await c.env.DB.prepare(
-    "SELECT id, user_id, title_name FROM submissions WHERE id = ? AND status IN ('pending', 'under_review')",
+    `SELECT s.id, s.user_id, s.title_name, s.kind, s.genre, s.rating, s.synopsis, s.source_url,
+       s.captions_url, s.series_id, s.poster_url, u.display_name
+     FROM submissions s JOIN users u ON u.id = s.user_id
+     WHERE s.id = ? AND s.status IN ('pending', 'under_review')`,
   )
     .bind(c.req.param('submissionId'))
-    .first<{ id: string; user_id: string; title_name: string }>();
+    .first<PublishableSubmission & { display_name: string }>();
   if (!submission) fail(404, 'submission_not_found', 'No open submission with that id.');
 
+  const now = nowIso();
+  if (body.accept) {
+    let published;
+    try {
+      published = await publishSubmission(c.env, submission, submission.display_name);
+    } catch (err) {
+      if (err instanceof PublishError) fail(422, 'cannot_publish', err.message);
+      throw err;
+    }
+    await c.env.DB.prepare(
+      'UPDATE submissions SET status = ?, note = ?, decided_at = ?, decided_by = ?, updated_at = ? WHERE id = ?',
+    )
+      .bind('accepted', body.note, now, admin.id, now, submission.id)
+      .run();
+    await notify(
+      c.env.DB,
+      submission.user_id,
+      'submission',
+      `Your submission "${submission.title_name}" was accepted and is now live on Sweam.${body.note ? ` Reviewer note: ${body.note}` : ''}`,
+      `/t/${published.slug}`,
+    );
+    return c.json({ status: 'accepted', slug: published.slug });
+  }
+
   await c.env.DB.prepare(
-    'UPDATE submissions SET status = ?, note = ?, decided_at = ?, decided_by = ? WHERE id = ?',
+    'UPDATE submissions SET status = ?, note = ?, decided_at = ?, decided_by = ?, updated_at = ? WHERE id = ?',
   )
-    .bind(body.accept ? 'accepted' : 'declined', body.note, nowIso(), admin.id, submission.id)
+    .bind('declined', body.note, now, admin.id, now, submission.id)
     .run();
   await notify(
     c.env.DB,
     submission.user_id,
     'submission',
-    body.accept
-      ? `Your submission "${submission.title_name}" was accepted. Set up your creator profile in the Studio and publish it when ready.${body.note ? ` Reviewer note: ${body.note}` : ''}`
-      : `Your submission "${submission.title_name}" was not selected this time.${body.note ? ` Reviewer note: ${body.note}` : ''}`,
-    body.accept ? '/studio' : '/submit',
+    `Your submission "${submission.title_name}" was not selected this time.${body.note ? ` Reviewer note: ${body.note}` : ''}`,
+    '/submit',
   );
-  return c.json({ status: body.accept ? 'accepted' : 'declined' });
+  return c.json({ status: 'declined' });
+});
+
+// ---------------------------------------------------------------------------
+// Removal requests (creators can ask Sweam to take a live title down)
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/removal-requests', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT r.id, r.reason, r.created_at,
+       t.id AS title_id, t.name AS title_name, t.slug,
+       u.display_name, cp.handle
+     FROM removal_requests r
+     JOIN titles t ON t.id = r.title_id
+     JOIN users u ON u.id = r.user_id
+     LEFT JOIN creator_profiles cp ON cp.user_id = r.user_id
+     WHERE r.status = 'open'
+     ORDER BY r.created_at
+     LIMIT 100`,
+  ).all<{
+    id: string;
+    reason: string;
+    created_at: string;
+    title_id: string;
+    title_name: string;
+    slug: string;
+    display_name: string;
+    handle: string | null;
+  }>();
+
+  const requests: AdminRemovalRequest[] = results.map((row) => ({
+    id: row.id,
+    reason: row.reason,
+    createdAt: row.created_at,
+    title: { id: row.title_id, name: row.title_name, slug: row.slug },
+    creator: { displayName: row.display_name, handle: row.handle },
+  }));
+  return c.json({ requests });
+});
+
+adminRoutes.post('/removal-requests/:requestId/decide', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, removalDecideSchema);
+  const request = await c.env.DB.prepare(
+    `SELECT r.id, r.title_id, r.user_id, t.name AS title_name
+     FROM removal_requests r JOIN titles t ON t.id = r.title_id
+     WHERE r.id = ? AND r.status = 'open'`,
+  )
+    .bind(c.req.param('requestId'))
+    .first<{ id: string; title_id: string; user_id: string; title_name: string }>();
+  if (!request) fail(404, 'request_not_found', 'No open removal request with that id.');
+
+  const now = nowIso();
+  if (body.remove) {
+    // Only Sweam can remove: delete the title (episodes cascade) and settle the request.
+    await c.env.DB.batch([
+      c.env.DB.prepare('DELETE FROM titles WHERE id = ?').bind(request.title_id),
+      c.env.DB.prepare(
+        "UPDATE removal_requests SET status = 'removed', decided_at = ?, decided_by = ? WHERE id = ?",
+      ).bind(now, admin.id, request.id),
+    ]);
+    await notify(
+      c.env.DB,
+      request.user_id,
+      'takedown',
+      `Your removal request for "${request.title_name}" was completed; it is no longer on Sweam.${body.note ? ` Note: ${body.note}` : ''}`,
+    );
+    return c.json({ status: 'removed' });
+  }
+
+  await c.env.DB.prepare(
+    "UPDATE removal_requests SET status = 'declined', decided_at = ?, decided_by = ? WHERE id = ?",
+  )
+    .bind(now, admin.id, request.id)
+    .run();
+  await notify(
+    c.env.DB,
+    request.user_id,
+    'takedown_released',
+    `Your removal request for "${request.title_name}" was reviewed and the title will stay on Sweam.${body.note ? ` Note: ${body.note}` : ''}`,
+  );
+  return c.json({ status: 'declined' });
 });
 
 /** AI-assisted triage: Claude assesses the described work against the guidelines. */

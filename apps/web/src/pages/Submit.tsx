@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { SubmissionItem, SubmissionStatus } from '@sweam/shared';
+import type { SeriesSummary, SubmissionItem, SubmissionStatus } from '@sweam/shared';
 import {
   CONTENT_KINDS,
   CONTENT_KIND_LABELS,
@@ -9,6 +9,7 @@ import {
   GENRES,
   MIN_PAYOUT_MILLICENTS,
   MONETIZATION_THRESHOLDS,
+  RATINGS,
   SUBMISSION_STATUS_LABELS,
   SUBMISSION_STATUS_STEPS,
   formatMillicents,
@@ -60,7 +61,7 @@ export function Submit() {
             standing.
           </li>
           <li>
-            The full policy lives in the public{' '}
+            Approved work goes live on Sweam. The full policy lives in the public{' '}
             <a href="https://github.com/calixdata/sweam/blob/main/docs/CREATOR-PROGRAM.md">
               Creator Program document
             </a>
@@ -74,7 +75,7 @@ export function Submit() {
         <ul>
           <li>You hold the rights to the work (confirmed with your submission).</li>
           <li>The work is original and finished: no reposts, no rips.</li>
-          <li>It fits a catalog category with honest metadata.</li>
+          <li>It fits a catalog category with an honest rating and metadata.</li>
           <li>
             Not considered: follower counts elsewhere, agents, or distributors. Discovery here is
             equal-visibility by design.
@@ -103,6 +104,7 @@ export function Submit() {
 function SubmissionArea() {
   const [mine, setMine] = useState<SubmissionItem[] | null>(null);
   const [verbatiimConnected, setVerbatiimConnected] = useState(false);
+  const [series, setSeries] = useState<SeriesSummary[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -113,16 +115,33 @@ function SubmissionArea() {
     }
   }, []);
 
+  const loadSeries = useCallback(async () => {
+    try {
+      const data = await apiGet<{ series: SeriesSummary[] }>('/api/submissions/series');
+      setSeries(data.series);
+    } catch {
+      setSeries([]);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
+    void loadSeries();
     apiGet<{ connected: boolean }>('/api/submissions/verbatiim/status')
       .then((data) => setVerbatiimConnected(data.connected))
       .catch(() => setVerbatiimConnected(false));
-  }, [load]);
+  }, [load, loadSeries]);
 
   return (
     <>
-      <SubmissionForm verbatiimConnected={verbatiimConnected} onSubmitted={load} />
+      <SubmissionForm
+        verbatiimConnected={verbatiimConnected}
+        series={series}
+        onSubmitted={async () => {
+          await load();
+          await loadSeries();
+        }}
+      />
       <section aria-labelledby="my-submissions">
         <h2 id="my-submissions">Your submissions</h2>
         {!mine || mine.length === 0 ? (
@@ -207,7 +226,9 @@ function SubmissionCard({
         <h3>
           {submission.titleName}{' '}
           <span className="submission-meta">
-            ({CONTENT_KIND_LABELS[submission.kind]} · {submission.genre})
+            ({CONTENT_KIND_LABELS[submission.kind]} · {submission.genre}
+            {submission.rating ? ` · ${submission.rating}` : ''}
+            {submission.seriesName ? ` · series: ${submission.seriesName}` : ''})
           </span>
         </h3>
         {canWithdraw && (
@@ -325,15 +346,25 @@ function UploadField({
 
 function SubmissionForm({
   verbatiimConnected,
+  series,
   onSubmitted,
 }: {
   verbatiimConnected: boolean;
+  series: SeriesSummary[];
   onSubmitted: () => Promise<void>;
 }) {
   const [titleName, setTitleName] = useState('');
   const [kind, setKind] = useState<string>('film');
   const [genre, setGenre] = useState<string>(GENRES[0]);
+  const [rating, setRating] = useState<string>('');
   const [synopsis, setSynopsis] = useState('');
+
+  const [posterUrl, setPosterUrl] = useState('');
+  const [posterName, setPosterName] = useState<string | null>(null);
+
+  const [seriesMode, setSeriesMode] = useState<'existing' | 'new'>('new');
+  const [seriesId, setSeriesId] = useState('');
+  const [seriesName, setSeriesName] = useState('');
 
   const [sourceUrl, setSourceUrl] = useState('');
   const [sourceName, setSourceName] = useState<string | null>(null);
@@ -352,10 +383,18 @@ function SubmissionForm({
   const [submitting, setSubmitting] = useState(false);
 
   const hasWork = Boolean(sourceUrl || workUrl.trim() || verbatiimProjectId);
+  const isSeries = kind === 'series';
+  const seriesOk = !isSeries || (seriesMode === 'existing' ? Boolean(seriesId) : Boolean(seriesName.trim()));
+  const canSubmit = Boolean(rightsConfirmed && rating && posterUrl && seriesOk);
 
   function resetForm() {
     setTitleName('');
+    setRating('');
     setSynopsis('');
+    setPosterUrl('');
+    setPosterName(null);
+    setSeriesId('');
+    setSeriesName('');
     setSourceUrl('');
     setSourceName(null);
     setCaptionsUrl('');
@@ -404,10 +443,14 @@ function SubmissionForm({
         titleName,
         kind,
         genre,
+        rating,
         synopsis,
+        posterUrl,
         sourceUrl: sourceUrl || null,
         captionsUrl: captionsUrl || null,
         verbatiimProjectId,
+        seriesId: isSeries && seriesMode === 'existing' ? seriesId : null,
+        seriesName: isSeries && seriesMode === 'new' ? seriesName.trim() : null,
         workUrl: workUrl.trim() || null,
         rightsConfirmed,
       });
@@ -463,8 +506,33 @@ function SubmissionForm({
             </select>
           </div>
         </div>
+
         <div className="field">
-          <label htmlFor="sub-synopsis">About the work</label>
+          <label htmlFor="sub-rating">Viewer rating (required)</label>
+          <select
+            id="sub-rating"
+            required
+            value={rating}
+            aria-describedby="sub-rating-reminder"
+            onChange={(event) => setRating(event.target.value)}
+          >
+            <option value="" disabled>
+              Choose a rating…
+            </option>
+            {RATINGS.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <aside id="sub-rating-reminder" className="notice notice-warn" role="note">
+            <strong>Explicit or pornographic content is forbidden.</strong> Rate honestly. Submitting
+            or uploading forbidden content results in a permanent account ban.
+          </aside>
+        </div>
+
+        <div className="field">
+          <label htmlFor="sub-synopsis">Synopsis (required)</label>
           <textarea
             id="sub-synopsis"
             rows={4}
@@ -479,6 +547,77 @@ function SubmissionForm({
             sentences.
           </p>
         </div>
+
+        <UploadField
+          id="sub-poster"
+          label="Cover art (required)"
+          accept="image/jpeg,image/png,image/webp"
+          hint="A JPEG, PNG, or WebP poster image. This is the artwork viewers see."
+          currentName={posterName}
+          onUploaded={(url, name) => {
+            setPosterUrl(url ?? '');
+            setPosterName(name);
+          }}
+        />
+
+        {isSeries && (
+          <fieldset className="intake-sources">
+            <legend>Series</legend>
+            <p className="field-hint">
+              Group this part under a series so you can add more episodes later; the series is saved
+              to your account.
+            </p>
+            {series.length > 0 && (
+              <div className="field field-checkbox">
+                <input
+                  id="series-existing"
+                  type="radio"
+                  name="series-mode"
+                  checked={seriesMode === 'existing'}
+                  onChange={() => setSeriesMode('existing')}
+                />
+                <label htmlFor="series-existing">Add to an existing series</label>
+              </div>
+            )}
+            {series.length > 0 && seriesMode === 'existing' && (
+              <div className="field">
+                <label htmlFor="sub-series">Series</label>
+                <select id="sub-series" value={seriesId} onChange={(event) => setSeriesId(event.target.value)}>
+                  <option value="" disabled>
+                    Choose a series…
+                  </option>
+                  {series.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="field field-checkbox">
+              <input
+                id="series-new"
+                type="radio"
+                name="series-mode"
+                checked={seriesMode === 'new'}
+                onChange={() => setSeriesMode('new')}
+              />
+              <label htmlFor="series-new">Start a new series</label>
+            </div>
+            {seriesMode === 'new' && (
+              <div className="field">
+                <label htmlFor="sub-series-name">Series name</label>
+                <input
+                  id="sub-series-name"
+                  type="text"
+                  maxLength={120}
+                  value={seriesName}
+                  onChange={(event) => setSeriesName(event.target.value)}
+                />
+              </div>
+            )}
+          </fieldset>
+        )}
 
         <fieldset className="intake-sources">
           <legend>Your film</legend>
@@ -587,7 +726,8 @@ function SubmissionForm({
             onChange={(event) => setRightsConfirmed(event.target.checked)}
           />
           <label htmlFor="sub-rights">
-            I confirm I hold the rights to this work and the authority to license it for streaming.
+            I confirm I hold the rights to this work, it contains no forbidden content, and I accept
+            that submitting forbidden content results in a permanent account ban.
           </label>
         </div>
         {error && (
@@ -595,7 +735,7 @@ function SubmissionForm({
             {error}
           </p>
         )}
-        <button type="submit" className="button" disabled={submitting || !rightsConfirmed}>
+        <button type="submit" className="button" disabled={submitting || !canSubmit}>
           {submitting ? 'Sending…' : 'Submit for review'}
         </button>
       </form>

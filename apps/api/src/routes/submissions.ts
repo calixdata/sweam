@@ -31,16 +31,20 @@ export const submissionRoutes = new Hono<AppEnv>();
 
 submissionRoutes.use('*', requireUser);
 
-interface SubmissionRow {
+export interface SubmissionRow {
   id: string;
   title_name: string;
   kind: SubmissionItem['kind'];
   genre: SubmissionItem['genre'];
+  rating: SubmissionItem['rating'];
   synopsis: string;
   work_url: string;
   source_url: string | null;
   captions_url: string | null;
   verbatiim_project_id: string | null;
+  poster_url: string | null;
+  series_id: string | null;
+  series_name: string | null;
   status: SubmissionItem['status'];
   note: string;
   created_at: string;
@@ -54,11 +58,15 @@ export function mapSubmission(row: SubmissionRow): SubmissionItem {
     titleName: row.title_name,
     kind: row.kind,
     genre: row.genre,
+    rating: row.rating,
     synopsis: row.synopsis,
     workUrl: row.work_url,
     sourceUrl: row.source_url,
     captionsUrl: row.captions_url,
     verbatiimProjectId: row.verbatiim_project_id,
+    posterUrl: row.poster_url,
+    seriesId: row.series_id,
+    seriesName: row.series_name,
     status: row.status,
     note: row.note,
     createdAt: row.created_at,
@@ -67,8 +75,10 @@ export function mapSubmission(row: SubmissionRow): SubmissionItem {
   };
 }
 
-const SUBMISSION_COLUMNS = `id, title_name, kind, genre, synopsis, work_url, source_url,
-  captions_url, verbatiim_project_id, status, note, created_at, updated_at, decided_at`;
+/** The submission columns plus the joined series name, for reads. */
+export const SUBMISSION_SELECT = `s.id, s.title_name, s.kind, s.genre, s.rating, s.synopsis,
+  s.work_url, s.source_url, s.captions_url, s.verbatiim_project_id, s.poster_url, s.series_id,
+  se.name AS series_name, s.status, s.note, s.created_at, s.updated_at, s.decided_at`;
 
 // ---------------------------------------------------------------------------
 // Create, list, withdraw
@@ -79,13 +89,31 @@ submissionRoutes.post('/', async (c) => {
   await enforceRateLimit(c.env.DB, RATE_LIMITS.submission, user.id);
   const body = await parseBody(c, submissionCreateSchema);
 
+  // Resolve the series for a series submission: an existing one the creator
+  // owns, or a new one created from the given name (so future parts reuse it).
+  let seriesId: string | null = null;
+  if (body.kind === 'series') {
+    if (body.seriesId) {
+      const owned = await c.env.DB.prepare('SELECT id FROM series WHERE id = ? AND user_id = ?')
+        .bind(body.seriesId, user.id)
+        .first<{ id: string }>();
+      if (!owned) fail(404, 'series_not_found', 'That series is not one of yours.');
+      seriesId = body.seriesId;
+    } else if (body.seriesName) {
+      seriesId = crypto.randomUUID();
+      await c.env.DB.prepare('INSERT INTO series (id, user_id, name, created_at) VALUES (?, ?, ?, ?)')
+        .bind(seriesId, user.id, body.seriesName, nowIso())
+        .run();
+    }
+  }
+
   const id = crypto.randomUUID();
   const now = nowIso();
   await c.env.DB.prepare(
     `INSERT INTO submissions
-       (id, user_id, title_name, kind, genre, synopsis, work_url, source_url, captions_url,
-        verbatiim_project_id, rights_confirmed, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`,
+       (id, user_id, title_name, kind, genre, rating, synopsis, work_url, source_url, captions_url,
+        verbatiim_project_id, poster_url, series_id, rights_confirmed, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`,
   )
     .bind(
       id,
@@ -93,11 +121,14 @@ submissionRoutes.post('/', async (c) => {
       body.titleName,
       body.kind,
       body.genre,
+      body.rating,
       body.synopsis,
       body.workUrl ?? '',
       body.sourceUrl ?? null,
       body.captionsUrl ?? null,
       body.verbatiimProjectId ?? null,
+      body.posterUrl,
+      seriesId,
       now,
       now,
     )
@@ -108,12 +139,23 @@ submissionRoutes.post('/', async (c) => {
 submissionRoutes.get('/mine', async (c) => {
   const user = currentUser(c);
   const { results } = await c.env.DB.prepare(
-    `SELECT ${SUBMISSION_COLUMNS} FROM submissions WHERE user_id = ?
-     ORDER BY created_at DESC LIMIT 30`,
+    `SELECT ${SUBMISSION_SELECT} FROM submissions s
+     LEFT JOIN series se ON se.id = s.series_id
+     WHERE s.user_id = ? ORDER BY s.created_at DESC LIMIT 30`,
   )
     .bind(user.id)
     .all<SubmissionRow>();
   return c.json({ submissions: results.map(mapSubmission) });
+});
+
+/** The creator's named series, for attaching a new part to an existing one. */
+submissionRoutes.get('/series', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    'SELECT id, name FROM series WHERE user_id = ? ORDER BY name',
+  )
+    .bind(currentUser(c).id)
+    .all<{ id: string; name: string }>();
+  return c.json({ series: results });
 });
 
 /** Withdraw a submission that has not been decided yet. */

@@ -6,15 +6,27 @@ import { CONTENT_KIND_LABELS } from '@sweam/shared';
  * Deterministic hue per genre for poster placeholders: enough variety that a
  * rail reads as a shelf of distinct works, muted enough to sit behind text.
  */
-const GENRE_HUES: Record<Genre, number> = {
-  Animation: 210,
-  Comedy: 45,
-  Drama: 280,
-  Documentary: 160,
-  'Sci-Fi': 190,
-  Horror: 350,
+const GENRE_HUES: Partial<Record<Genre, number>> = {
   Action: 20,
+  Adventure: 30,
+  Animation: 210,
+  Anime: 260,
+  Comedy: 45,
+  Crime: 5,
+  Documentary: 160,
+  Drama: 280,
+  Fantasy: 265,
+  Horror: 350,
   Music: 315,
+  Musical: 300,
+  Mystery: 240,
+  Romance: 330,
+  'Sci-Fi': 190,
+  Sport: 130,
+  Superhero: 225,
+  Thriller: 355,
+  War: 15,
+  Western: 35,
 };
 
 /**

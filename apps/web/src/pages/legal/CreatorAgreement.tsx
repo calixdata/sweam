@@ -44,7 +44,8 @@ const sections: LegalSection[] = [
       <ul>
         <li>You hold, or have cleared, all rights needed to stream the work, including music and any third-party material.</li>
         <li>The work is yours and finished: no reposts, no rips, no misrepresented metadata.</li>
-        <li>You rate and describe it accurately and follow the <Link to="/legal/community-guidelines">Community Guidelines</Link> and <Link to="/legal/ai">AI Disclosure</Link>.</li>
+        <li>You give an honest viewer rating and describe it accurately, and follow the <Link to="/legal/community-guidelines">Community Guidelines</Link> and <Link to="/legal/ai">AI Disclosure</Link>.</li>
+        <li>The work contains no forbidden content. You accept that submitting or uploading explicit, pornographic, or otherwise forbidden content results in a <strong>permanent account ban</strong>.</li>
         <li>You will not manipulate views, finish rates, followers, or earnings.</li>
       </ul>
     ),

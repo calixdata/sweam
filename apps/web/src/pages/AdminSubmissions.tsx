@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { AdminSubmission, SubmissionStatus } from '@sweam/shared';
+import type { AdminRemovalRequest, AdminSubmission, SubmissionStatus } from '@sweam/shared';
 import {
   AI_RECOMMENDATION_LABELS,
   CONTENT_KIND_LABELS,
@@ -39,6 +39,7 @@ const TABS: { key: string; label: string; query: string }[] = [
 function SubmissionsCrm() {
   const [tab, setTab] = useState('open');
   const [submissions, setSubmissions] = useState<AdminSubmission[] | null>(null);
+  const [removals, setRemovals] = useState<AdminRemovalRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
 
@@ -53,10 +54,36 @@ function SubmissionsCrm() {
     }
   }, []);
 
+  const loadRemovals = useCallback(async () => {
+    try {
+      const data = await apiGet<{ requests: AdminRemovalRequest[] }>('/api/admin/removal-requests');
+      setRemovals(data.requests);
+    } catch {
+      setRemovals([]);
+    }
+  }, []);
+
   useEffect(() => {
     setSubmissions(null);
     void load(tab);
   }, [tab, load]);
+
+  useEffect(() => {
+    void loadRemovals();
+  }, [loadRemovals]);
+
+  async function decideRemoval(request: AdminRemovalRequest, remove: boolean) {
+    try {
+      await apiSend('POST', `/api/admin/removal-requests/${request.id}/decide`, { remove });
+      setNotice(
+        remove ? `Removed "${request.title.name}".` : `Kept "${request.title.name}" live.`,
+      );
+      await loadRemovals();
+      await load(tab);
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Could not decide the request.');
+    }
+  }
 
   async function runAiReview(submission: AdminSubmission) {
     setNotice(`Asking Claude to review "${submission.titleName}"…`);
@@ -98,6 +125,48 @@ function SubmissionsCrm() {
         The review pipeline for content pitched to Sweam. Back to the{' '}
         <Link to="/admin">admin dashboard</Link>.
       </p>
+
+      {removals.length > 0 && (
+        <section aria-labelledby="removals-heading" className="crm-removals">
+          <h2 id="removals-heading">Removal requests ({removals.length})</h2>
+          <ul className="crm-list">
+            {removals.map((request) => (
+              <li key={request.id} className="crm-card">
+                <div className="crm-card-head">
+                  <h3>
+                    {request.title.name}{' '}
+                    <span className="submission-meta">
+                      by {request.creator.displayName}
+                      {request.creator.handle ? ` (@${request.creator.handle})` : ''}
+                    </span>
+                  </h3>
+                  <a href={`/t/${request.title.slug}`} target="_blank" rel="noreferrer">
+                    View
+                  </a>
+                </div>
+                <blockquote>{request.reason}</blockquote>
+                <p className="submission-detail">Requested {request.createdAt.slice(0, 10)}</p>
+                <div className="episode-actions">
+                  <button
+                    type="button"
+                    className="button button-danger"
+                    onClick={() => decideRemoval(request, true)}
+                  >
+                    Remove from Sweam
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-quiet"
+                    onClick={() => decideRemoval(request, false)}
+                  >
+                    Keep live
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="crm-tabs" role="tablist" aria-label="Submission status">
         {TABS.map((entry) => (

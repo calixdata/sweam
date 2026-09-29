@@ -26,7 +26,10 @@ const sections: LegalSection[] = [
             child sexual abuse material or any content that sexualizes minors. We remove it, preserve
             what the law requires, report it to the authorities, and ban the account;
           </li>
-          <li>non-consensual intimate imagery, or pornographic or sexually explicit content;</li>
+          <li>
+            pornographic, sexually explicit, or non-consensual intimate content of any kind (see
+            the permanent-ban note under enforcement);
+          </li>
           <li>
             hate speech that attacks people based on protected characteristics, or content that
             promotes or celebrates violence against them;
@@ -51,8 +54,10 @@ const sections: LegalSection[] = [
     body: (
       <p>
         {SERVICE} is an adult (18+) service and mature storytelling is welcome within the rules
-        above. Rate your work honestly using the content advisories (TV-G, TV-PG, TV-14, TV-MA) and
-        describe it accurately. Mislabeling mature content is a violation.
+        above. Every submission requires an honest viewer rating (G, PG, PG-13, R, NC-17), which
+        maps to the catalog advisory. Rate accurately: mislabeling is a violation. The rating is a
+        maturity signal only, not a licence for anything above these rules.{' '}
+        <strong>Explicit or pornographic content is forbidden at every rating.</strong>
       </p>
     ),
   },
@@ -87,6 +92,13 @@ const sections: LegalSection[] = [
           When content is reported or detected, we review it and may remove it, issue a strike, or,
           for serious or repeated violations, suspend or terminate the account. Copyright is handled
           through the takedown process in the <Link to="/legal/terms">Terms</Link>.
+        </p>
+        <p>
+          <strong>
+            Submitting or uploading forbidden content — sexual content involving minors,
+            pornographic or explicit material, or non-consensual intimate imagery — results in
+            immediate removal and a permanent account ban, not a strike.
+          </strong>
         </p>
         <p>
           Strikes are cumulative: <strong>three active strikes suspend a creator's publishing and

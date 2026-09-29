@@ -83,21 +83,113 @@ export function StudioTitle() {
       )}
 
       <div className="title-actions">
-        <button type="button" className="button" onClick={togglePublish}>
-          {title.published ? 'Unpublish' : 'Publish'}
-        </button>
+        {!title.adminLocked && (
+          <button type="button" className="button" onClick={togglePublish}>
+            {title.published ? 'Unpublish' : 'Publish'}
+          </button>
+        )}
         <Link className="button button-quiet" to={`/studio/t/${title.id}/analytics`}>
           Analytics and scout activity
         </Link>
-        <button type="button" className="button button-danger" onClick={deleteTitle}>
-          Delete title
-        </button>
+        {!title.adminLocked && (
+          <button type="button" className="button button-danger" onClick={deleteTitle}>
+            Delete title
+          </button>
+        )}
       </div>
+
+      {title.adminLocked && (
+        <RemovalRequestPanel title={title} onRequested={load} setNotice={setNotice} />
+      )}
 
       <TitleEditForm title={title} onSaved={load} />
       <EpisodesSection title={title} onChanged={load} />
       <VerbatiimPanel title={title} onChanged={load} />
     </div>
+  );
+}
+
+/** For Sweam-published (admin-locked) titles: request removal instead of unpublishing. */
+function RemovalRequestPanel({
+  title,
+  onRequested,
+  setNotice,
+}: {
+  title: StudioTitleDetail;
+  onRequested: () => Promise<void>;
+  setNotice: (message: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (title.removalRequested) {
+    return (
+      <aside className="notice" role="note">
+        Sweam published this title, so only Sweam can remove it. Your removal request is open and
+        under review.
+      </aside>
+    );
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await apiSend('POST', `/api/studio/titles/${title.id}/removal-request`, { reason });
+      setNotice('Removal request sent. Sweam will review it.');
+      setOpen(false);
+      setReason('');
+      await onRequested();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not send the request.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <aside className="notice" role="note">
+      <p>
+        <strong>Sweam published this title, so only Sweam can remove it.</strong> To take it down,
+        send a removal request with a reason.
+      </p>
+      {open ? (
+        <form onSubmit={submit} className="studio-form">
+          <div className="field">
+            <label htmlFor="removal-reason">Reason for removal</label>
+            <textarea
+              id="removal-reason"
+              rows={3}
+              required
+              minLength={10}
+              maxLength={1000}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </div>
+          {error && (
+            <p className="status status-error" role="alert">
+              {error}
+            </p>
+          )}
+          <div className="title-actions">
+            <button type="submit" className="button" disabled={busy || reason.trim().length < 10}>
+              {busy ? 'Sending…' : 'Send request'}
+            </button>
+            <button type="button" className="button button-quiet" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button type="button" className="button button-quiet" onClick={() => setOpen(true)}>
+          Request removal
+        </button>
+      )}
+    </aside>
   );
 }
 

@@ -4,6 +4,7 @@ import {
   COMMENT_REPORT_REASONS,
   CONTENT_KINDS,
   GENRES,
+  RATINGS,
   REPORT_REASONS,
   VERBATIIM_MAX_TEXT,
 } from '@sweam/shared';
@@ -251,16 +252,22 @@ export const submissionCreateSchema = z
     titleName: z.string().trim().min(1, 'The work needs a name.').max(120),
     kind,
     genre,
+    rating: z.enum(RATINGS),
     synopsis: z
       .string()
       .trim()
-      .min(20, 'Tell us about the work in at least a couple of sentences.')
+      .min(20, 'A synopsis is required: tell us about the work in at least a couple of sentences.')
       .max(2000),
+    /** Cover art is required (an uploaded /media image or an https image URL). */
+    posterUrl: mediaUrl,
     /** The primary path: the work uploaded to Sweam, or imported from Verbatiim. */
     sourceUrl: mediaUrl.nullable().default(null),
     captionsUrl: mediaUrl.nullable().default(null),
     /** The Verbatiim project the upload was imported from, if any. */
     verbatiimProjectId: z.string().trim().min(1).max(200).nullable().default(null),
+    /** Series linkage: an existing series id, or a new series name to create. */
+    seriesId: z.string().trim().min(1).max(64).nullable().default(null),
+    seriesName: z.string().trim().min(1).max(120).nullable().default(null),
     /** Optional external screener fallback: https only. */
     workUrl: z
       .string()
@@ -277,7 +284,27 @@ export const submissionCreateSchema = z
   .refine((value) => Boolean(value.sourceUrl || value.workUrl || value.verbatiimProjectId), {
     message: 'Add your work: upload a file, import from Verbatiim, or paste a screener link.',
     path: ['sourceUrl'],
+  })
+  .refine((value) => value.kind !== 'series' || Boolean(value.seriesId || value.seriesName), {
+    message: 'For a series, choose an existing series or name a new one.',
+    path: ['seriesName'],
   });
+
+/** Name a new series to group future parts under. */
+export const seriesCreateSchema = z.object({
+  name: z.string().trim().min(1, 'Name the series.').max(120),
+});
+
+/** A creator's request for Sweam to remove one of their live titles. */
+export const removalRequestSchema = z.object({
+  reason: z.string().trim().min(10, 'Give a brief reason for the removal request.').max(1000),
+});
+
+/** An admin's decision on a removal request. */
+export const removalDecideSchema = z.object({
+  remove: z.boolean(),
+  note: z.string().trim().max(1000).default(''),
+});
 
 /** Import a finished film from a Verbatiim project id or share link. */
 export const verbatiimImportSchema = z.object({

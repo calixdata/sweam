@@ -147,7 +147,9 @@ describe('submissionCreateSchema', () => {
     titleName: 'Midnight Frequencies',
     kind: 'documentary',
     genre: 'Documentary',
+    rating: 'PG-13',
     synopsis: 'A 40-minute documentary about pirate radio operators broadcasting after dark.',
+    posterUrl: 'https://example.com/poster/midnight.jpg',
     workUrl: 'https://example.com/screener/midnight',
     rightsConfirmed: true,
   };
@@ -155,6 +157,16 @@ describe('submissionCreateSchema', () => {
   it('accepts a complete submission', async () => {
     const { submissionCreateSchema } = await import('../src/lib/validate');
     expect(submissionCreateSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it('requires a rating and cover art', async () => {
+    const { submissionCreateSchema } = await import('../src/lib/validate');
+    const noRating: Record<string, unknown> = { ...valid };
+    delete noRating.rating;
+    const noPoster: Record<string, unknown> = { ...valid };
+    delete noPoster.posterUrl;
+    expect(submissionCreateSchema.safeParse(noRating).success).toBe(false);
+    expect(submissionCreateSchema.safeParse(noPoster).success).toBe(false);
   });
 
   it('requires the rights confirmation to be literally true', async () => {

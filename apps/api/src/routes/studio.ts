@@ -31,6 +31,7 @@ import {
   multipartCompleteSchema,
   multipartInitSchema,
   publishSchema,
+  removalRequestSchema,
   titleCreateSchema,
   titleUpdateSchema,
 } from '../lib/validate';
@@ -61,6 +62,7 @@ interface StudioTitleRow {
   poster_url: string | null;
   published: number;
   scoutable: number;
+  admin_locked: number;
   episode_count: number;
   impressions: number;
   plays: number;
@@ -87,7 +89,7 @@ function mapStudioSummary(row: StudioTitleRow): StudioTitleSummary {
 }
 
 const STUDIO_TITLE_QUERY = `
-  SELECT t.id, t.slug, t.name, t.kind, t.genre, t.synopsis, t.advisory, t.poster_url, t.published, t.scoutable,
+  SELECT t.id, t.slug, t.name, t.kind, t.genre, t.synopsis, t.advisory, t.poster_url, t.published, t.scoutable, t.admin_locked,
     (SELECT COUNT(*) FROM episodes e WHERE e.title_id = t.id) AS episode_count,
     COALESCE(s.impressions, 0) AS impressions,
     COALESCE(s.plays, 0) AS plays,
@@ -210,12 +212,19 @@ studioRoutes.post('/titles', requireCreator, async (c) => {
 
 studioRoutes.get('/titles/:titleId', requireCreator, async (c) => {
   const row = await ownedTitle(c, c.req.param('titleId'));
+  const openRemoval = await c.env.DB.prepare(
+    "SELECT 1 AS x FROM removal_requests WHERE title_id = ? AND status = 'open'",
+  )
+    .bind(row.id)
+    .first();
   const payload: StudioTitleDetail = {
     ...mapStudioSummary(row),
     synopsis: row.synopsis,
     advisory: row.advisory,
     posterUrl: row.poster_url,
     scoutable: row.scoutable === 1,
+    adminLocked: row.admin_locked === 1,
+    removalRequested: Boolean(openRemoval),
     episodes: await titleEpisodes(c, row.id),
   };
   return c.json(payload);
@@ -250,14 +259,39 @@ studioRoutes.patch('/titles/:titleId', requireCreator, async (c) => {
 
 studioRoutes.delete('/titles/:titleId', requireCreator, async (c) => {
   const row = await ownedTitle(c, c.req.param('titleId'));
+  if (row.admin_locked === 1) {
+    fail(403, 'admin_locked', 'Sweam published this title; you cannot delete it. Request removal instead.');
+  }
   await c.env.DB.prepare('DELETE FROM titles WHERE id = ?').bind(row.id).run();
   return c.json({ ok: true });
+});
+
+/** A creator asks Sweam to remove a live title. Only Sweam can act on it. */
+studioRoutes.post('/titles/:titleId/removal-request', requireCreator, async (c) => {
+  const row = await ownedTitle(c, c.req.param('titleId'));
+  const body = await parseBody(c, removalRequestSchema);
+  const existing = await c.env.DB.prepare(
+    "SELECT 1 AS x FROM removal_requests WHERE title_id = ? AND status = 'open'",
+  )
+    .bind(row.id)
+    .first();
+  if (existing) fail(409, 'already_requested', 'A removal request for this title is already open.');
+  await c.env.DB.prepare(
+    `INSERT INTO removal_requests (id, title_id, user_id, reason, status, created_at)
+     VALUES (?, ?, ?, ?, 'open', ?)`,
+  )
+    .bind(crypto.randomUUID(), row.id, currentUser(c).id, body.reason, nowIso())
+    .run();
+  return c.json({ requested: true }, 201);
 });
 
 studioRoutes.post('/titles/:titleId/publish', requireCreator, async (c) => {
   const row = await ownedTitle(c, c.req.param('titleId'));
   const body = await parseBody(c, publishSchema);
 
+  if (row.admin_locked === 1 && !body.published) {
+    fail(403, 'admin_locked', 'Sweam published this title; you cannot unpublish it. Request removal instead.');
+  }
   if (body.published && row.episode_count === 0) {
     fail(400, 'no_episodes', 'Add at least one episode before publishing.');
   }

@@ -1751,6 +1751,15 @@ input[type='checkbox'] {
   color: var(--amber);
 }
 
+.notice-warn {
+  border-color: #6a3040;
+  background: var(--danger-bg);
+}
+
+.notice-warn strong {
+  color: var(--danger);
+}
+
 .legal-toc {
   border: 1px solid var(--line);
   border-radius: var(--radius);
