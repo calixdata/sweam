@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ApiError, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { usePageTitle } from '../hooks';
+import { ResendVerification } from './SignUp';
 
 export function SignIn() {
   usePageTitle('Sign in');
@@ -15,18 +16,25 @@ export function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setUnverifiedEmail(null);
     setSubmitting(true);
     try {
       await apiSend('POST', '/api/auth/signin', { email, password });
       await refresh();
       navigate(from, { replace: true });
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Sign-in failed. Try again.');
+      if (err instanceof ApiError && err.code === 'email_unverified') {
+        setError(err.message);
+        setUnverifiedEmail(email);
+      } else {
+        setError(err instanceof ApiError ? err.message : 'Sign-in failed. Try again.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -63,6 +71,7 @@ export function SignIn() {
             {error}
           </p>
         )}
+        {unverifiedEmail && <ResendVerification email={unverifiedEmail} />}
         <button type="submit" className="button" disabled={submitting}>
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>

@@ -29,6 +29,14 @@ export interface Env {
    * workspace-scoped key. Set with `wrangler secret put ANTHROPIC_WORKSPACE_ID`.
    */
   ANTHROPIC_WORKSPACE_ID?: string;
+  /**
+   * Resend API key for sign-up email verification. A secret; set with
+   * `wrangler secret put RESEND_API_KEY`. Sign-ups are disabled until it is set.
+   * MAIL_FROM overrides the from address (default: Sweam <no-reply@sweam.co>),
+   * which must be on a verified sending domain in Resend.
+   */
+  RESEND_API_KEY?: string;
+  MAIL_FROM?: string;
 }
 
 /** Hono generic: bindings plus the per-request variables middleware attaches. */

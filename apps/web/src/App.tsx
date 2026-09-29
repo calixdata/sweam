@@ -26,6 +26,7 @@ import { ScoutOneSheet } from './pages/ScoutOneSheet';
 import { Search } from './pages/Search';
 import { SignIn } from './pages/SignIn';
 import { SignUp } from './pages/SignUp';
+import { Verify } from './pages/Verify';
 import { Studio } from './pages/Studio';
 import { StudioAnalytics } from './pages/StudioAnalytics';
 import { StudioEarnings } from './pages/StudioEarnings';
@@ -112,6 +113,7 @@ export function App() {
         <Route path="/admin/monetization" element={<AdminMonetization />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
+        <Route path="/verify" element={<Verify />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/faq" element={<Faq />} />
         <Route path="/legal/terms" element={<Terms />} />

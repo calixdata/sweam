@@ -24,6 +24,12 @@ export const signUpSchema = z.object({ email, displayName, password });
 
 export const signInSchema = z.object({ email, password: z.string().min(1).max(128) });
 
+/** Confirm a sign-up: the token from the verification email link. */
+export const verifyTokenSchema = z.object({ token: z.string().trim().min(1).max(256) });
+
+/** Ask for a fresh verification email. */
+export const resendVerificationSchema = z.object({ email });
+
 export const creatorProfileSchema = z.object({
   handle: z
     .string()
