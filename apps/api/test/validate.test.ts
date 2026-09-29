@@ -17,17 +17,26 @@ describe('signUpSchema', () => {
       email: '  Casey@Example.COM ',
       displayName: 'Casey',
       password: 'longenough',
+      username: 'CaseyP',
+      ageConfirmed: true,
     });
     expect(parsed.email).toBe('casey@example.com');
+    expect(parsed.username).toBe('caseyp');
   });
 
   it('rejects short passwords and empty names', () => {
+    const base = { email: 'a@b.co', username: 'validname', ageConfirmed: true as const };
+    expect(signUpSchema.safeParse({ ...base, displayName: 'A', password: 'short' }).success).toBe(false);
     expect(
-      signUpSchema.safeParse({ email: 'a@b.co', displayName: 'A', password: 'short' }).success,
+      signUpSchema.safeParse({ ...base, displayName: '   ', password: 'longenough' }).success,
     ).toBe(false);
-    expect(
-      signUpSchema.safeParse({ email: 'a@b.co', displayName: '   ', password: 'longenough' }).success,
-    ).toBe(false);
+  });
+
+  it('requires a valid username and age confirmation', () => {
+    const base = { email: 'a@b.co', displayName: 'A', password: 'longenough' };
+    expect(signUpSchema.safeParse({ ...base, username: 'no', ageConfirmed: true }).success).toBe(false);
+    expect(signUpSchema.safeParse({ ...base, username: 'valid_name', ageConfirmed: false }).success).toBe(false);
+    expect(signUpSchema.safeParse({ ...base, username: 'valid_name', ageConfirmed: true }).success).toBe(true);
   });
 });
 
@@ -146,7 +155,9 @@ describe('submissionCreateSchema', () => {
   const valid = {
     titleName: 'Midnight Frequencies',
     kind: 'documentary',
-    genre: 'Documentary',
+    audiences: ['Adult'],
+    genres: ['Documentary'],
+    subgenres: [],
     rating: 'PG-13',
     synopsis: 'A 40-minute documentary about pirate radio operators broadcasting after dark.',
     posterUrl: 'https://example.com/poster/midnight.jpg',
@@ -178,6 +189,32 @@ describe('submissionCreateSchema', () => {
     const { submissionCreateSchema } = await import('../src/lib/validate');
     expect(submissionCreateSchema.safeParse({ ...valid, workUrl: 'http://example.com/x' }).success).toBe(false);
     expect(submissionCreateSchema.safeParse({ ...valid, synopsis: 'Short.' }).success).toBe(false);
+  });
+
+  it('requires at least one audience and genre', async () => {
+    const { submissionCreateSchema } = await import('../src/lib/validate');
+    expect(submissionCreateSchema.safeParse({ ...valid, audiences: [] }).success).toBe(false);
+    expect(submissionCreateSchema.safeParse({ ...valid, genres: [] }).success).toBe(false);
+  });
+
+  it('requires proof, id, and attestation when adapting a published work', async () => {
+    const { submissionCreateSchema } = await import('../src/lib/validate');
+    const adaptation = {
+      ...valid,
+      isAdaptation: true,
+      adaptationSource: 'The Great Novel',
+    };
+    // Missing proof/id/attestation must fail.
+    expect(submissionCreateSchema.safeParse(adaptation).success).toBe(false);
+    // Complete adaptation passes.
+    expect(
+      submissionCreateSchema.safeParse({
+        ...adaptation,
+        rightsProofUrl: 'https://example.com/rights.pdf',
+        idProofUrl: 'https://example.com/id.jpg',
+        adaptationAttested: true,
+      }).success,
+    ).toBe(true);
   });
 });
 

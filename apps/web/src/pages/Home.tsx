@@ -39,7 +39,7 @@ export function Home() {
   return (
     <>
       <section className="hero" aria-labelledby="hero-heading">
-        <img className="hero-image" src="/img/hero.webp" alt="" />
+        <img className="hero-image" src={feature?.heroUrl ?? '/img/hero.webp'} alt="" />
         <div className="hero-copy">
           <p className="eyebrow">{feature ? 'Featured on Sweam' : 'Sweam'}</p>
           {feature ? (
@@ -47,6 +47,12 @@ export function Home() {
               <h1 id="hero-heading">{feature.name}</h1>
               <div className="hero-meta">
                 <span>{CONTENT_KIND_LABELS[feature.kind]}</span>
+                {feature.audiences[0] && (
+                  <>
+                    <span aria-hidden="true">·</span>
+                    <span>{feature.audiences[0]}</span>
+                  </>
+                )}
                 <span aria-hidden="true">·</span>
                 <span>{feature.genre}</span>
                 <span aria-hidden="true">·</span>
@@ -69,7 +75,7 @@ export function Home() {
               <h1 id="hero-heading">Free streaming for independent creators</h1>
               <p>
                 Films, series, and documentaries judged on whether viewers finish them, not on
-                follower counts. Free to watch, no account needed.
+                follower counts. Free with an account.
               </p>
               <div className="title-actions">
                 <Link className="button" to="/browse">

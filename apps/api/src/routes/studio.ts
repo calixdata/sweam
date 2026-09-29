@@ -49,6 +49,8 @@ export const UPLOAD_CONTENT_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
+  // Rights/identification proof documents for adaptations.
+  'application/pdf',
 ]);
 
 interface StudioTitleRow {
@@ -156,17 +158,24 @@ studioRoutes.post('/profile', requireUser, async (c) => {
   if (user.handle) fail(409, 'already_creator', 'You already have a creator profile.');
   const body = await parseBody(c, creatorProfileSchema);
 
+  // The creator handle is the account's @username, which is already unique and
+  // chosen at sign-up; any submitted handle is ignored so the two never diverge.
+  const account = await c.env.DB.prepare('SELECT username FROM users WHERE id = ?')
+    .bind(user.id)
+    .first<{ username: string | null }>();
+  const handle = account?.username ?? body.handle;
+
   const taken = await c.env.DB.prepare('SELECT 1 AS x FROM creator_profiles WHERE handle = ?')
-    .bind(body.handle)
+    .bind(handle)
     .first();
   if (taken) fail(409, 'handle_taken', 'That handle is already in use.');
 
   await c.env.DB.prepare(
     'INSERT INTO creator_profiles (user_id, handle, bio, verified, created_at) VALUES (?, ?, ?, 0, ?)',
   )
-    .bind(user.id, body.handle, body.bio, nowIso())
+    .bind(user.id, handle, body.bio, nowIso())
     .run();
-  return c.json({ handle: body.handle }, 201);
+  return c.json({ handle }, 201);
 });
 
 // ---------------------------------------------------------------------------

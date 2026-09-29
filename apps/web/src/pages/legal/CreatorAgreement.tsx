@@ -51,8 +51,32 @@ const sections: LegalSection[] = [
     ),
   },
   {
+    id: 'adaptations',
+    heading: '4. Adapting a published work',
+    body: (
+      <>
+        <p>
+          If your work adapts a third-party published work (a book, script, article, song, or other
+          copyrighted material you did not create), you must say so when you submit and provide, for{' '}
+          {OPERATOR}&rsquo;s review, proof that you hold or have licensed the rights to adapt it,
+          together with identification.
+        </p>
+        <p>
+          By submitting an adaptation you attest that the information and documents you provide are
+          true and that you hold all rights necessary to adapt and stream the work. You agree to{' '}
+          <strong>
+            indemnify and hold {OPERATOR} and {SERVICE} harmless
+          </strong>{' '}
+          from any claim, loss, or liability arising from the work or your rights to it. Submitting
+          an adaptation you are not authorized to use is grounds for removal and a permanent account
+          ban.
+        </p>
+      </>
+    ),
+  },
+  {
     id: 'revenue-share',
-    heading: '4. The revenue share',
+    heading: '5. The revenue share',
     body: (
       <p>
         {SERVICE} is free to viewers and supported by advertising. You earn a{' '}
@@ -64,7 +88,7 @@ const sections: LegalSection[] = [
   },
   {
     id: 'eligibility',
-    heading: '5. When earnings start',
+    heading: '6. When earnings start',
     body: (
       <>
         <p>Your {SHARE_PERCENT}% share begins to accrue once your account meets every one of these, and while it stays in good standing:</p>
@@ -92,7 +116,7 @@ const sections: LegalSection[] = [
   },
   {
     id: 'payouts',
-    heading: '6. Payouts',
+    heading: '7. Payouts',
     body: (
       <p>
         You can request a payout once your available balance reaches <strong>{MIN_PAYOUT}</strong>,
@@ -105,7 +129,7 @@ const sections: LegalSection[] = [
   },
   {
     id: 'scouts',
-    heading: '7. Scouts and outside deals',
+    heading: '8. Scouts and outside deals',
     body: (
       <p>
         You can opt a title into the scout portal, where approved networks and buyers see its
@@ -118,7 +142,7 @@ const sections: LegalSection[] = [
   },
   {
     id: 'removal',
-    heading: '8. Removal, takedowns, and strikes',
+    heading: '9. Removal, takedowns, and strikes',
     body: (
       <p>
         Work that violates the <Link to="/legal/terms">Terms</Link>, the{' '}
@@ -131,7 +155,7 @@ const sections: LegalSection[] = [
   },
   {
     id: 'relationship',
-    heading: '9. Our relationship',
+    heading: '10. Our relationship',
     body: (
       <p>
         You are an independent creator, not an employee or agent of {OPERATOR}, and this agreement
@@ -142,7 +166,7 @@ const sections: LegalSection[] = [
   },
   {
     id: 'changes',
-    heading: '10. Changes to the program',
+    heading: '11. Changes to the program',
     body: (
       <p>
         We may adjust the program, including thresholds or the split, as {SERVICE} grows. Material

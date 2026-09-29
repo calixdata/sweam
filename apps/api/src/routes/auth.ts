@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Context } from 'hono';
 import type { SessionUser } from '@sweam/shared';
+import { USERNAME_RE } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { generateToken, hashPassword, sha256Hex, verifyPassword } from '../lib/auth';
 import { EmailError, emailConfigured, sendEmail, verificationEmail } from '../lib/email';
@@ -64,15 +65,22 @@ authRoutes.post('/signup', async (c) => {
     fail(409, 'email_taken', 'An account with that email already exists. If it is unverified, use "Resend" on the sign-in page.');
   }
 
+  const usernameTaken = await c.env.DB.prepare('SELECT 1 AS x FROM users WHERE username = ? COLLATE NOCASE')
+    .bind(body.username)
+    .first();
+  if (usernameTaken) {
+    fail(409, 'username_taken', 'That username is taken. Please choose another.');
+  }
+
   const id = crypto.randomUUID();
   const token = generateToken();
   const expiresAt = new Date(Date.now() + VERIFY_TTL_MS).toISOString();
   await c.env.DB.prepare(
     `INSERT INTO users
-       (id, email, display_name, password_hash, email_verified, verify_token_hash, verify_expires_at, created_at)
-     VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+       (id, email, display_name, username, age_confirmed, password_hash, email_verified, verify_token_hash, verify_expires_at, created_at)
+     VALUES (?, ?, ?, ?, 1, ?, 0, ?, ?, ?)`,
   )
-    .bind(id, body.email, body.displayName, await hashPassword(body.password), await sha256Hex(token), expiresAt, nowIso())
+    .bind(id, body.email, body.displayName, body.username, await hashPassword(body.password), await sha256Hex(token), expiresAt, nowIso())
     .run();
 
   try {
@@ -89,15 +97,27 @@ authRoutes.post('/signup', async (c) => {
   return c.json({ pending: true, email: body.email }, 201);
 });
 
+/** Public: is this @username free and valid? Powers the sign-up picker. */
+authRoutes.get('/username-available', async (c) => {
+  const raw = (c.req.query('u') ?? '').trim().toLowerCase();
+  if (!USERNAME_RE.test(raw)) {
+    return c.json({ available: false, valid: false, username: raw });
+  }
+  const taken = await c.env.DB.prepare('SELECT 1 AS x FROM users WHERE username = ? COLLATE NOCASE')
+    .bind(raw)
+    .first();
+  return c.json({ available: !taken, valid: true, username: raw });
+});
+
 /** Confirm a sign-up from the emailed link, then sign the new account in. */
 authRoutes.post('/verify', async (c) => {
   const body = await parseBody(c, verifyTokenSchema);
   const tokenHash = await sha256Hex(body.token);
   const row = await c.env.DB.prepare(
-    'SELECT id, email, display_name, verify_expires_at FROM users WHERE verify_token_hash = ? AND email_verified = 0',
+    'SELECT id, email, display_name, username, verify_expires_at FROM users WHERE verify_token_hash = ? AND email_verified = 0',
   )
     .bind(tokenHash)
-    .first<{ id: string; email: string; display_name: string; verify_expires_at: string | null }>();
+    .first<{ id: string; email: string; display_name: string; username: string | null; verify_expires_at: string | null }>();
   if (!row || !row.verify_expires_at || row.verify_expires_at < nowIso()) {
     fail(400, 'invalid_token', 'This verification link is invalid or has expired. Request a new one from the sign-in page.');
   }
@@ -114,6 +134,7 @@ authRoutes.post('/verify', async (c) => {
     id: row.id,
     email: row.email,
     displayName: row.display_name,
+    username: row.username,
     handle: null,
     scout: null,
     isAdmin: false,
@@ -147,7 +168,7 @@ authRoutes.post('/signin', async (c) => {
   await enforceRateLimit(c.env.DB, RATE_LIMITS.signinEmail, body.email);
 
   const row = await c.env.DB.prepare(
-    `SELECT u.id, u.email, u.display_name, u.password_hash, u.email_verified, cp.handle,
+    `SELECT u.id, u.email, u.display_name, u.username, u.password_hash, u.email_verified, cp.handle,
        sp.status AS scout_status, sp.org_name AS scout_org,
        (a.user_id IS NOT NULL) AS is_admin
      FROM users u
@@ -161,6 +182,7 @@ authRoutes.post('/signin', async (c) => {
       id: string;
       email: string;
       display_name: string;
+      username: string | null;
       password_hash: string;
       email_verified: number;
       handle: string | null;
@@ -188,6 +210,7 @@ authRoutes.post('/signin', async (c) => {
     id: row.id,
     email: row.email,
     displayName: row.display_name,
+    username: row.username,
     handle: row.handle,
     scout:
       row.scout_status && row.scout_org ? { status: row.scout_status, orgName: row.scout_org } : null,

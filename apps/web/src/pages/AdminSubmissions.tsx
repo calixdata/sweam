@@ -262,6 +262,32 @@ function SubmissionCrmCard({
         {submission.createdAt.slice(0, 10)} · {hostingLabel(submission)}
       </p>
       <blockquote>{submission.synopsis}</blockquote>
+      <p className="submission-detail">
+        {submission.rating ? `Rated ${submission.rating} · ` : ''}
+        {[...submission.audiences, ...submission.genres, ...submission.subgenres].join(', ') ||
+          submission.genre}
+      </p>
+      {submission.isAdaptation && (
+        <div className="notice notice-warn" role="note">
+          <strong>Adaptation of a published work:</strong>{' '}
+          {submission.adaptationSource || '(unnamed source)'}.{' '}
+          {submission.rightsProofUrl && (
+            <a href={submission.rightsProofUrl} target="_blank" rel="noreferrer">
+              Rights proof
+            </a>
+          )}
+          {submission.rightsProofUrl && submission.idProofUrl ? ' · ' : ''}
+          {submission.idProofUrl && (
+            <a href={submission.idProofUrl} target="_blank" rel="noreferrer">
+              Identification
+            </a>
+          )}
+          {' · '}
+          {submission.adaptationAttested
+            ? 'Attested; hold-harmless agreed.'
+            : 'NOT attested.'}
+        </div>
+      )}
       {watchUrl && (
         <p className="submission-detail">
           <a href={watchUrl} target="_blank" rel="noreferrer">

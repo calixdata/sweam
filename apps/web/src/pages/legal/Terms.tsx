@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { CREATOR_REVENUE_SHARE } from '@sweam/shared';
+import { CREATOR_REVENUE_SHARE, MIN_AGE } from '@sweam/shared';
 import { CONTACT, GOVERNING_STATE, LegalDoc, MailLink, OPERATOR, SERVICE } from './LegalDoc';
 import type { LegalSection } from './LegalDoc';
 
@@ -29,10 +29,10 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          {SERVICE} is intended for adults. You must be <strong>18 or older</strong> to create an
-          account or use the service. By using {SERVICE} you represent that you are 18 or older and
-          that you are able to enter into this agreement. The catalog includes mature titles, and
-          not all content is suitable for every viewer.
+          You must be <strong>{MIN_AGE} or older</strong> to create an account or use the service.
+          By using {SERVICE} you represent that you are {MIN_AGE} or older and that you are able to
+          enter into this agreement. The catalog includes mature titles, and not all content is
+          suitable for every viewer.
         </p>
         <p>
           You are responsible for activity under your account and for keeping your credentials

@@ -80,6 +80,18 @@ INSERT INTO creator_profiles (user_id, handle, bio, verified, created_at) VALUES
   ('usr_nova', 'novareyes', 'Shorts, sketches, and the occasional accidental masterpiece.',  0, '2026-07-21T09:35:00.000Z'),
   ('usr_mira', 'miradocs',  'Curating open cinema and documenting how it gets made.',        0, '2026-08-01T18:50:00.000Z');
 
+-- Every account has a unique @username (creators' equals their handle) and the
+-- 16+ age attestation; the columns were added by migration 0016.
+UPDATE users SET age_confirmed = 1;
+UPDATE users
+  SET username = (SELECT cp.handle FROM creator_profiles cp WHERE cp.user_id = users.id)
+  WHERE username IS NULL AND EXISTS (SELECT 1 FROM creator_profiles cp WHERE cp.user_id = users.id);
+UPDATE users SET username = 'sampark'     WHERE id = 'usr_sam'    AND username IS NULL;
+UPDATE users SET username = 'rileygrant'  WHERE id = 'usr_scout'  AND username IS NULL;
+UPDATE users SET username = 'jordanwells' WHERE id = 'usr_scout2' AND username IS NULL;
+UPDATE users SET username = 'alexondo'    WHERE id = 'usr_admin'  AND username IS NULL;
+UPDATE users SET username = 'u_' || lower(hex(randomblob(6))) WHERE username IS NULL;
+
 -- One approved demo scout, plus a pending application so the admin console
 -- has something to decide on first run. Approvals now happen in /admin.
 INSERT INTO scout_profiles (user_id, org_name, org_url, contact_email, status, created_at, decided_at) VALUES
@@ -365,3 +377,9 @@ INSERT INTO submissions (id, user_id, title_name, kind, genre, synopsis, work_ur
    'A 40-minute documentary about pirate radio operators broadcasting after dark from rooftops across three cities. Finished, color-graded, with licensed music.',
    'https://example.com/screeners/midnight-frequencies', 1, 'pending',
    strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days'));
+
+-- Backfill the audience/genre taxonomy for seeded rows (migration 0016 columns).
+UPDATE titles SET genres = json_array(genre) WHERE genres = '[]';
+UPDATE titles SET audiences = '["Adult"]' WHERE audiences = '[]';
+UPDATE submissions SET genres = json_array(genre) WHERE genres = '[]';
+UPDATE submissions SET audiences = '["Adult"]' WHERE audiences = '[]';

@@ -21,7 +21,9 @@ import { CreatorAgreement } from './pages/legal/CreatorAgreement';
 import { Privacy } from './pages/legal/Privacy';
 import { Terms } from './pages/legal/Terms';
 import { Notifications } from './pages/Notifications';
+import { Record } from './pages/Record';
 import { Scout } from './pages/Scout';
+import { Settings } from './pages/Settings';
 import { ScoutOneSheet } from './pages/ScoutOneSheet';
 import { Search } from './pages/Search';
 import { SignIn } from './pages/SignIn';
@@ -36,12 +38,12 @@ import { TitlePage } from './pages/TitlePage';
 import { Watch } from './pages/Watch';
 import { Watchlist } from './pages/Watchlist';
 
-/** Redirects signed-out visitors to sign-in, remembering where they were headed. */
-function RequireAuth({ children }: { children: ReactNode }) {
+/** Redirects signed-out visitors (to sign-in by default), remembering where they were headed. */
+function RequireAuth({ children, to = '/signin' }: { children: ReactNode; to?: string }) {
   const { user, loading } = useAuth();
   const location = useLocation();
   if (loading) return <Loading />;
-  if (!user) return <Navigate to="/signin" state={{ from: location.pathname }} replace />;
+  if (!user) return <Navigate to={to} state={{ from: location.pathname }} replace />;
   return <>{children}</>;
 }
 
@@ -53,10 +55,20 @@ export function App() {
         <Route path="/discover" element={<Discover />} />
         <Route path="/browse" element={<Browse />} />
         <Route path="/submit" element={<Submit />} />
+        <Route path="/create" element={<Record />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="/search" element={<Search />} />
         <Route path="/t/:slug" element={<TitlePage />} />
         <Route path="/c/:handle" element={<CreatorPage />} />
-        <Route path="/watch/:episodeId" element={<Watch />} />
+        {/* Browsing is open; watching requires a free account. */}
+        <Route
+          path="/watch/:episodeId"
+          element={
+            <RequireAuth to="/signup">
+              <Watch />
+            </RequireAuth>
+          }
+        />
         <Route
           path="/watchlist"
           element={

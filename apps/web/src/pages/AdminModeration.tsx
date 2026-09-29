@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { AdminCommentReport, AdminReport, AdminStrike, AdminTakedown } from '@sweam/shared';
-import { REPORT_REASON_LABELS } from '@sweam/shared';
+import type {
+  AdminCommentReport,
+  AdminReport,
+  AdminStrike,
+  AdminTakedown,
+  ClipReviewItem,
+} from '@sweam/shared';
+import { AI_RECOMMENDATION_LABELS, REPORT_REASON_LABELS } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote, Loading } from '../components/Status';
@@ -25,6 +31,7 @@ export function AdminModeration() {
 }
 
 function ModerationQueue() {
+  const [clips, setClips] = useState<ClipReviewItem[] | null>(null);
   const [reports, setReports] = useState<AdminReport[] | null>(null);
   const [commentReports, setCommentReports] = useState<AdminCommentReport[] | null>(null);
   const [takedowns, setTakedowns] = useState<AdminTakedown[] | null>(null);
@@ -34,12 +41,14 @@ function ModerationQueue() {
 
   const load = useCallback(async () => {
     try {
-      const [reportData, commentReportData, takedownData, strikeData] = await Promise.all([
+      const [clipData, reportData, commentReportData, takedownData, strikeData] = await Promise.all([
+        apiGet<{ clips: ClipReviewItem[] }>('/api/admin/clip-reviews'),
         apiGet<{ reports: AdminReport[] }>('/api/admin/reports'),
         apiGet<{ reports: AdminCommentReport[] }>('/api/admin/comment-reports'),
         apiGet<{ takedowns: AdminTakedown[] }>('/api/admin/takedowns'),
         apiGet<{ strikes: AdminStrike[] }>('/api/admin/strikes'),
       ]);
+      setClips(clipData.clips);
       setReports(reportData.reports);
       setCommentReports(commentReportData.reports);
       setTakedowns(takedownData.takedowns);
@@ -54,8 +63,16 @@ function ModerationQueue() {
   }, [load]);
 
   if (error) return <ErrorNote message={error} />;
-  if (!reports || !commentReports || !takedowns || !strikes) {
+  if (!clips || !reports || !commentReports || !takedowns || !strikes) {
     return <Loading label="Loading the moderation queue" />;
+  }
+
+  async function decideClip(clip: ClipReviewItem, action: 'clear' | 'remove') {
+    await apiSend('POST', `/api/admin/clip-reviews/${clip.id}/decide`, { action });
+    setNotice(
+      action === 'remove' ? `Removed the clip "${clip.title.name}".` : `Cleared "${clip.title.name}".`,
+    );
+    await load();
   }
 
   async function resolveCommentReport(report: AdminCommentReport, action: 'dismiss' | 'remove') {
@@ -80,6 +97,63 @@ function ModerationQueue() {
           {notice}
         </p>
       )}
+
+      <section aria-labelledby="mod-clips">
+        <h2 id="mod-clips">Clip review queue</h2>
+        <p className="field-hint">
+          Instant clips are live the moment they are posted. Claude reads the caption and metadata
+          only, so this is a triage aid, not the decision: watch anything uncertain before you clear
+          or remove it. Flagged clips are already hidden.
+        </p>
+        {clips.length === 0 ? (
+          <p>No clips awaiting review.</p>
+        ) : (
+          <ul className="interest-list">
+            {clips.map((clip) => (
+              <li key={clip.id}>
+                <h3>
+                  <Link to={`/watch/${clip.episodeId}`}>{clip.title.name}</Link>
+                  {clip.state === 'flagged' && ' — flagged, hidden'}
+                </h3>
+                <p>
+                  By {clip.creator.displayName}
+                  {clip.creator.handle ? ` (@${clip.creator.handle})` : ''} · posted{' '}
+                  {clip.createdAt.slice(0, 10)} ·{' '}
+                  {clip.title.published ? 'currently live' : 'currently hidden'}
+                </p>
+                {clip.caption && <blockquote>{clip.caption}</blockquote>}
+                {clip.ai ? (
+                  <p className="status">
+                    AI: {AI_RECOMMENDATION_LABELS[clip.ai.recommendation]} (confidence{' '}
+                    {Math.round(clip.ai.confidence * 100)}%). {clip.ai.summary}
+                    {clip.ai.riskFlags.length > 0 && ` Flags: ${clip.ai.riskFlags.join(', ')}.`}
+                  </p>
+                ) : clip.aiError ? (
+                  <p className="status status-error">AI review unavailable: {clip.aiError}</p>
+                ) : (
+                  <p className="status">AI review pending…</p>
+                )}
+                <div className="episode-actions">
+                  <button
+                    type="button"
+                    className="button button-danger"
+                    onClick={() => decideClip(clip, 'remove')}
+                  >
+                    Remove clip
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-quiet"
+                    onClick={() => decideClip(clip, 'clear')}
+                  >
+                    Clear (keep live)
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section aria-labelledby="mod-reports">
         <h2 id="mod-reports">Open reports</h2>

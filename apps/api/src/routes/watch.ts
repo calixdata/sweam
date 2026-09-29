@@ -10,6 +10,9 @@ import { progressSchema, viewBeaconSchema } from '../lib/validate';
 
 export const watchRoutes = new Hono<AppEnv>();
 
+// Watching requires a signed-in account.
+watchRoutes.use('*', requireUser);
+
 const COMPLETION_THRESHOLD = 0.9;
 /** Ignore absurd per-beacon watch-time deltas (clock skew, seeking abuse). */
 const MAX_WATCH_DELTA_S = 3_600;

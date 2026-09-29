@@ -1,11 +1,17 @@
 import { z } from 'zod';
 import {
   ADVISORIES,
+  AUDIENCES,
+  CLIP_SPEC,
   COMMENT_REPORT_REASONS,
   CONTENT_KINDS,
   GENRES,
+  MIN_AGE,
   RATINGS,
   REPORT_REASONS,
+  SUBGENRES,
+  USERNAME_HINT,
+  USERNAME_RE,
   VERBATIIM_MAX_TEXT,
 } from '@sweam/shared';
 
@@ -20,8 +26,24 @@ const password = z
   .min(8, 'Password must be at least 8 characters.')
   .max(128, 'Password must be at most 128 characters.');
 const displayName = z.string().trim().min(1, 'Display name is required.').max(60);
+const username = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(USERNAME_RE, `Username must be ${USERNAME_HINT}`);
 
-export const signUpSchema = z.object({ email, displayName, password });
+export const signUpSchema = z.object({
+  email,
+  displayName,
+  password,
+  username,
+  ageConfirmed: z.literal(true, {
+    errorMap: () => ({ message: `You must confirm you are at least ${MIN_AGE} to join.` }),
+  }),
+});
+
+/** Choosing or changing the account @username. */
+export const usernameSchema = z.object({ username });
 
 export const signInSchema = z.object({ email, password: z.string().min(1).max(128) });
 
@@ -42,6 +64,8 @@ export const creatorProfileSchema = z.object({
 
 const kind = z.enum(CONTENT_KINDS as [string, ...string[]] as ['film', 'series', 'short', 'documentary']);
 const genre = z.enum(GENRES);
+const audience = z.enum(AUDIENCES);
+const subgenre = z.enum(SUBGENRES);
 const advisory = z.enum(ADVISORIES);
 
 /** Absolute http(s) URL, or an app-relative /media/... key from our own uploader. */
@@ -251,7 +275,12 @@ export const submissionCreateSchema = z
   .object({
     titleName: z.string().trim().min(1, 'The work needs a name.').max(120),
     kind,
-    genre,
+    /** Audience tier(s): who it is for (no under-13 kids' content). */
+    audiences: z.array(audience).min(1, 'Choose at least one audience.').max(AUDIENCES.length),
+    /** One or more genres; the first is the primary genre. */
+    genres: z.array(genre).min(1, 'Choose at least one genre.').max(6),
+    /** Optional sub-genre refinements. */
+    subgenres: z.array(subgenre).max(8).default([]),
     rating: z.enum(RATINGS),
     synopsis: z
       .string()
@@ -277,6 +306,14 @@ export const submissionCreateSchema = z
       .refine((value) => value.startsWith('https://'), 'The screener link must be https.')
       .nullable()
       .default(null),
+    /** Adaptation of a third-party published work? */
+    isAdaptation: z.boolean().default(false),
+    adaptationSource: z.string().trim().max(200).default(''),
+    /** Proof of rights/licence and identification (uploaded files), when adapting. */
+    rightsProofUrl: mediaUrl.nullable().default(null),
+    idProofUrl: mediaUrl.nullable().default(null),
+    /** Attestation of ownership + agreement to hold Sweam harmless, when adapting. */
+    adaptationAttested: z.boolean().default(false),
     rightsConfirmed: z.literal(true, {
       errorMap: () => ({ message: 'You must confirm you hold the rights to this work.' }),
     }),
@@ -288,6 +325,22 @@ export const submissionCreateSchema = z
   .refine((value) => value.kind !== 'series' || Boolean(value.seriesId || value.seriesName), {
     message: 'For a series, choose an existing series or name a new one.',
     path: ['seriesName'],
+  })
+  .refine((value) => !value.isAdaptation || value.adaptationSource.length > 0, {
+    message: 'Name the published work you are adapting.',
+    path: ['adaptationSource'],
+  })
+  .refine((value) => !value.isAdaptation || Boolean(value.rightsProofUrl), {
+    message: 'Upload proof that you hold the rights to adapt this work.',
+    path: ['rightsProofUrl'],
+  })
+  .refine((value) => !value.isAdaptation || Boolean(value.idProofUrl), {
+    message: 'Upload identification to accompany the rights proof.',
+    path: ['idProofUrl'],
+  })
+  .refine((value) => !value.isAdaptation || value.adaptationAttested, {
+    message: 'You must attest to ownership and agree to hold Sweam harmless.',
+    path: ['adaptationAttested'],
   });
 
 /** Name a new series to group future parts under. */
@@ -325,6 +378,33 @@ export const submissionDecideSchema = z.object({
 /** Triage move between the two open states (Received <-> Under review). */
 export const submissionStatusSchema = z.object({
   status: z.enum(['pending', 'under_review']),
+});
+
+// ---------------------------------------------------------------------------
+// Instant clips
+// ---------------------------------------------------------------------------
+
+/**
+ * Posting a clip recorded in Sweam. The video must already be uploaded to our
+ * own intake bucket (a /media/sub/... key); the route checks it belongs to the
+ * caller. The clip goes live immediately and into the AI review queue.
+ */
+export const clipCreateSchema = z.object({
+  caption: z.string().trim().min(1, 'Add a short caption.').max(CLIP_SPEC.captionMax),
+  rating: z.enum(RATINGS),
+  genre,
+  audiences: z.array(audience).max(AUDIENCES.length).default([]),
+  sourceUrl: mediaUrl.refine(
+    (value) => value.startsWith('/media/sub/'),
+    'Record and upload the clip to Sweam first.',
+  ),
+  captionsUrl: mediaUrl.nullable().default(null),
+});
+
+/** An admin's decision on a clip in the review queue. */
+export const clipDecideSchema = z.object({
+  action: z.enum(['clear', 'remove']),
+  note: z.string().trim().max(1000).default(''),
 });
 
 // ---------------------------------------------------------------------------

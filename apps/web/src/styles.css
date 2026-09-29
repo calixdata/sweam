@@ -1226,6 +1226,233 @@ input[type='checkbox'] {
   color: #86e6c0;
 }
 
+.intake-specs {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 0.9rem 1.25rem 1rem;
+  margin: 0.75rem 0 1.25rem;
+  background: var(--surface-2);
+}
+
+.intake-specs h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.intake-specs ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.intake-specs strong {
+  color: var(--text);
+}
+
+.record-stage {
+  margin: 1rem 0 1.5rem;
+}
+
+.record-stage .player {
+  width: 100%;
+  background: #000;
+  border-radius: var(--radius);
+}
+
+.record-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0.75rem 0;
+}
+
+.record-fallback {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line);
+}
+
+.record-details {
+  margin-top: 0.5rem;
+}
+
+.username-input {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.username-at {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+.username-input input {
+  flex: 1;
+}
+
+.check-group {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem 1rem;
+  margin: 0.75rem 0;
+}
+
+.check-group legend {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  padding: 0 0.4rem;
+}
+
+.check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+}
+
+.check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.15rem 0.75rem;
+}
+
+.check-group .field-checkbox {
+  margin: 0;
+}
+
+.title-tags {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0;
+  margin: 0.4rem 0 0;
+}
+
+.title-tags .tag {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.title-stats {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* Double-tap / double-click to like: heart burst + like controls. */
+.player-wrap {
+  position: relative;
+}
+
+.comment-body-wrap {
+  position: relative;
+}
+
+.like-burst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #ff5c8a;
+  pointer-events: none;
+  font-size: 2.5rem;
+  animation: like-pop 0.6s ease-out forwards;
+}
+
+.like-burst-video {
+  font-size: 6rem;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.5);
+  animation-duration: 0.7s;
+}
+
+@keyframes like-pop {
+  0% {
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0;
+  }
+  30% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.6);
+    opacity: 0;
+  }
+}
+
+.comment-like {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font: inherit;
+  padding: 0 0.35rem 0 0;
+}
+
+.comment-like.is-liked {
+  color: #ff5c8a;
+}
+
+.comment-like:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.button.is-liked {
+  color: #ff5c8a;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .like-burst {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+.report-control {
+  position: relative;
+  display: inline-block;
+}
+
+.report-control-trigger {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  padding: 0.3rem 0.4rem;
+}
+
+.report-control-trigger:hover {
+  color: var(--text);
+}
+
+.report-control-panel {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  width: min(320px, 88vw);
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+  text-align: left;
+}
+
+.report-control-panel .field {
+  margin-bottom: 0.6rem;
+}
+
 .intake-sources {
   border: 1px solid var(--line);
   border-radius: var(--radius);

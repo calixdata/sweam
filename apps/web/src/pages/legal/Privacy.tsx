@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { MIN_AGE } from '@sweam/shared';
 import { CONTACT, LegalDoc, MailLink, OPERATOR, SERVICE } from './LegalDoc';
 import type { LegalSection } from './LegalDoc';
 
@@ -192,9 +193,10 @@ const sections: LegalSection[] = [
     heading: '10. Children',
     body: (
       <p>
-        {SERVICE} is for adults 18 and older. It is not directed to children, and we do not
-        knowingly collect personal data from anyone under 18. If you believe a minor has given us
-        data, contact <MailLink address={CONTACT.privacy} /> and we will delete it.
+        {SERVICE} is for people aged {MIN_AGE} and older. It is not directed to children, we do not
+        accept content made for children under 13, and we do not knowingly collect personal data
+        from anyone under {MIN_AGE}. If you believe someone under {MIN_AGE} has given us data,
+        contact <MailLink address={CONTACT.privacy} /> and we will delete it.
       </p>
     ),
   },

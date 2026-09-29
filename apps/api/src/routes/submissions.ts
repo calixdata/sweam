@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { MultipartInit, SubmissionItem } from '@sweam/shared';
+import { GENRES, UPLOAD_SPECS } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
+import { parseJsonArray } from '../lib/mappers';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
 import {
@@ -36,6 +38,9 @@ export interface SubmissionRow {
   title_name: string;
   kind: SubmissionItem['kind'];
   genre: SubmissionItem['genre'];
+  audiences: string;
+  genres: string;
+  subgenres: string;
   rating: SubmissionItem['rating'];
   synopsis: string;
   work_url: string;
@@ -45,6 +50,11 @@ export interface SubmissionRow {
   poster_url: string | null;
   series_id: string | null;
   series_name: string | null;
+  is_adaptation: number;
+  adaptation_source: string;
+  rights_proof_url: string | null;
+  id_proof_url: string | null;
+  adaptation_attested: number;
   status: SubmissionItem['status'];
   note: string;
   created_at: string;
@@ -58,6 +68,9 @@ export function mapSubmission(row: SubmissionRow): SubmissionItem {
     titleName: row.title_name,
     kind: row.kind,
     genre: row.genre,
+    audiences: parseJsonArray(row.audiences),
+    genres: parseJsonArray(row.genres) as SubmissionItem['genres'],
+    subgenres: parseJsonArray(row.subgenres),
     rating: row.rating,
     synopsis: row.synopsis,
     workUrl: row.work_url,
@@ -67,6 +80,11 @@ export function mapSubmission(row: SubmissionRow): SubmissionItem {
     posterUrl: row.poster_url,
     seriesId: row.series_id,
     seriesName: row.series_name,
+    isAdaptation: row.is_adaptation === 1,
+    adaptationSource: row.adaptation_source,
+    rightsProofUrl: row.rights_proof_url,
+    idProofUrl: row.id_proof_url,
+    adaptationAttested: row.adaptation_attested === 1,
     status: row.status,
     note: row.note,
     createdAt: row.created_at,
@@ -76,9 +94,11 @@ export function mapSubmission(row: SubmissionRow): SubmissionItem {
 }
 
 /** The submission columns plus the joined series name, for reads. */
-export const SUBMISSION_SELECT = `s.id, s.title_name, s.kind, s.genre, s.rating, s.synopsis,
-  s.work_url, s.source_url, s.captions_url, s.verbatiim_project_id, s.poster_url, s.series_id,
-  se.name AS series_name, s.status, s.note, s.created_at, s.updated_at, s.decided_at`;
+export const SUBMISSION_SELECT = `s.id, s.title_name, s.kind, s.genre, s.audiences, s.genres,
+  s.subgenres, s.rating, s.synopsis, s.work_url, s.source_url, s.captions_url,
+  s.verbatiim_project_id, s.poster_url, s.series_id, se.name AS series_name,
+  s.is_adaptation, s.adaptation_source, s.rights_proof_url, s.id_proof_url, s.adaptation_attested,
+  s.status, s.note, s.created_at, s.updated_at, s.decided_at`;
 
 // ---------------------------------------------------------------------------
 // Create, list, withdraw
@@ -107,20 +127,26 @@ submissionRoutes.post('/', async (c) => {
     }
   }
 
+  const primaryGenre = body.genres[0] ?? GENRES[0];
   const id = crypto.randomUUID();
   const now = nowIso();
   await c.env.DB.prepare(
     `INSERT INTO submissions
-       (id, user_id, title_name, kind, genre, rating, synopsis, work_url, source_url, captions_url,
-        verbatiim_project_id, poster_url, series_id, rights_confirmed, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`,
+       (id, user_id, title_name, kind, genre, audiences, genres, subgenres, rating, synopsis,
+        work_url, source_url, captions_url, verbatiim_project_id, poster_url, series_id,
+        is_adaptation, adaptation_source, rights_proof_url, id_proof_url, adaptation_attested,
+        rights_confirmed, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`,
   )
     .bind(
       id,
       user.id,
       body.titleName,
       body.kind,
-      body.genre,
+      primaryGenre,
+      JSON.stringify(body.audiences),
+      JSON.stringify(body.genres),
+      JSON.stringify(body.subgenres),
       body.rating,
       body.synopsis,
       body.workUrl ?? '',
@@ -129,6 +155,11 @@ submissionRoutes.post('/', async (c) => {
       body.verbatiimProjectId ?? null,
       body.posterUrl,
       seriesId,
+      body.isAdaptation ? 1 : 0,
+      body.adaptationSource,
+      body.isAdaptation ? body.rightsProofUrl : null,
+      body.isAdaptation ? body.idProofUrl : null,
+      body.isAdaptation && body.adaptationAttested ? 1 : 0,
       now,
       now,
     )
@@ -204,7 +235,10 @@ submissionRoutes.put('/upload/:filename', async (c) => {
     fail(411, 'length_required', 'Uploads must include a Content-Length header.');
   }
   if (contentLength > MAX_UPLOAD_BYTES) {
-    fail(413, 'too_large', 'Uploads are limited to 512 MB in this release.');
+    fail(413, 'too_large', `Video uploads are limited to ${UPLOAD_SPECS.video.maxLabel}.`);
+  }
+  if (contentType.startsWith('image/') && contentLength > UPLOAD_SPECS.poster.maxBytes) {
+    fail(413, 'image_too_large', `Cover art must be ${UPLOAD_SPECS.poster.maxLabel} or smaller.`);
   }
   if (!c.req.raw.body) fail(400, 'empty_body', 'Upload body is empty.');
 

@@ -13,6 +13,7 @@ import type {
   AdminTakedown,
   AdminTranscodeJob,
   AiSubmissionReview,
+  ClipReviewItem,
   CommentReportReason,
   ReportReason,
   TakedownKind,
@@ -27,6 +28,7 @@ import { SUSPENSION_STRIKES, strikeCutoffIso } from '../lib/standing';
 import {
   adCreateSchema,
   adUpdateSchema,
+  clipDecideSchema,
   commentReportResolveSchema,
   payoutDecideSchema,
   removalDecideSchema,
@@ -76,6 +78,7 @@ adminRoutes.get('/overview', async (c) => {
     c.env.DB.prepare("SELECT COUNT(*) AS n FROM payout_requests WHERE status = 'pending'"),
     c.env.DB.prepare('SELECT COALESCE(SUM(revenue_millicents), 0) AS n FROM ad_impressions'),
     c.env.DB.prepare("SELECT COUNT(*) AS n FROM submissions WHERE status = 'pending'"),
+    c.env.DB.prepare("SELECT COUNT(*) AS n FROM clip_reviews WHERE state IN ('pending', 'flagged')"),
   ]);
 
   const count = (index: number) => (results[index]?.results?.[0] as { n: number } | undefined)?.n ?? 0;
@@ -105,6 +108,7 @@ adminRoutes.get('/overview', async (c) => {
     pendingPayouts: count(10),
     revenueMillicents: count(11),
     pendingSubmissions: count(12),
+    pendingClips: count(13),
   };
   return c.json(payload);
 });
@@ -168,8 +172,8 @@ adminRoutes.post('/submissions/:submissionId/decide', async (c) => {
   const admin = currentUser(c);
   const body = await parseBody(c, submissionDecideSchema);
   const submission = await c.env.DB.prepare(
-    `SELECT s.id, s.user_id, s.title_name, s.kind, s.genre, s.rating, s.synopsis, s.source_url,
-       s.captions_url, s.series_id, s.poster_url, u.display_name
+    `SELECT s.id, s.user_id, s.title_name, s.kind, s.genre, s.audiences, s.genres, s.subgenres,
+       s.rating, s.synopsis, s.source_url, s.captions_url, s.series_id, s.poster_url, u.display_name
      FROM submissions s JOIN users u ON u.id = s.user_id
      WHERE s.id = ? AND s.status IN ('pending', 'under_review')`,
   )
@@ -295,6 +299,114 @@ adminRoutes.post('/removal-requests/:requestId/decide', async (c) => {
     `Your removal request for "${request.title_name}" was reviewed and the title will stay on Sweam.${body.note ? ` Note: ${body.note}` : ''}`,
   );
   return c.json({ status: 'declined' });
+});
+
+// ---------------------------------------------------------------------------
+// Instant clip review queue (posted live, reviewed after)
+// ---------------------------------------------------------------------------
+
+interface ClipReviewRow {
+  id: string;
+  state: ClipReviewItem['state'];
+  caption: string;
+  created_at: string;
+  ai_review: string | null;
+  ai_error: string | null;
+  decided_at: string | null;
+  title_id: string;
+  title_name: string;
+  slug: string;
+  published: number;
+  episode_id: string;
+  display_name: string;
+  handle: string | null;
+}
+
+function mapClipReview(row: ClipReviewRow): ClipReviewItem {
+  let ai: AiSubmissionReview | null = null;
+  if (row.ai_review) {
+    try {
+      ai = JSON.parse(row.ai_review) as AiSubmissionReview;
+    } catch {
+      ai = null;
+    }
+  }
+  return {
+    id: row.id,
+    state: row.state,
+    caption: row.caption,
+    createdAt: row.created_at,
+    title: { id: row.title_id, name: row.title_name, slug: row.slug, published: row.published === 1 },
+    episodeId: row.episode_id,
+    creator: { displayName: row.display_name, handle: row.handle },
+    ai,
+    aiError: row.ai_error,
+    decidedAt: row.decided_at,
+  };
+}
+
+/** The open clip queue: flagged (hidden, needs a call) first, then pending. */
+adminRoutes.get('/clip-reviews', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT cr.id, cr.state, cr.caption, cr.created_at, cr.ai_review, cr.ai_error, cr.decided_at,
+       cr.episode_id, t.id AS title_id, t.name AS title_name, t.slug, t.published,
+       u.display_name, cp.handle
+     FROM clip_reviews cr
+     JOIN titles t ON t.id = cr.title_id
+     JOIN users u ON u.id = cr.creator_id
+     LEFT JOIN creator_profiles cp ON cp.user_id = cr.creator_id
+     WHERE cr.state IN ('pending', 'flagged')
+     ORDER BY (cr.state = 'flagged') DESC, cr.created_at
+     LIMIT 100`,
+  ).all<ClipReviewRow>();
+  return c.json({ clips: results.map(mapClipReview) });
+});
+
+/** Clear a clip (keep it live) or remove it (hide it). Only Sweam decides. */
+adminRoutes.post('/clip-reviews/:reviewId/decide', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, clipDecideSchema);
+  const review = await c.env.DB.prepare(
+    `SELECT cr.id, cr.title_id, cr.creator_id, t.name AS title_name, t.slug
+     FROM clip_reviews cr JOIN titles t ON t.id = cr.title_id
+     WHERE cr.id = ? AND cr.state IN ('pending', 'flagged')`,
+  )
+    .bind(c.req.param('reviewId'))
+    .first<{ id: string; title_id: string; creator_id: string; title_name: string; slug: string }>();
+  if (!review) fail(404, 'clip_not_found', 'No open clip review with that id.');
+
+  const now = nowIso();
+  if (body.action === 'remove') {
+    await c.env.DB.batch([
+      c.env.DB
+        .prepare("UPDATE titles SET published = 0, review_state = 'removed' WHERE id = ?")
+        .bind(review.title_id),
+      c.env.DB
+        .prepare(
+          "UPDATE clip_reviews SET state = 'removed', decided_by = ?, decided_at = ? WHERE id = ?",
+        )
+        .bind(admin.id, now, review.id),
+    ]);
+    await notify(
+      c.env.DB,
+      review.creator_id,
+      'takedown',
+      `Your clip "${review.title_name}" was removed by Sweam for a Community Guidelines issue.${body.note ? ` Note: ${body.note}` : ''} Posting prohibited content can cost you your account.`,
+    );
+    return c.json({ status: 'removed' });
+  }
+
+  await c.env.DB.batch([
+    c.env.DB
+      .prepare("UPDATE titles SET published = 1, review_state = 'cleared' WHERE id = ?")
+      .bind(review.title_id),
+    c.env.DB
+      .prepare(
+        "UPDATE clip_reviews SET state = 'cleared', decided_by = ?, decided_at = ? WHERE id = ?",
+      )
+      .bind(admin.id, now, review.id),
+  ]);
+  return c.json({ status: 'cleared' });
 });
 
 /** AI-assisted triage: Claude assesses the described work against the guidelines. */

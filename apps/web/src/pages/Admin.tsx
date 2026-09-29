@@ -145,7 +145,8 @@ function AdminDashboard() {
               <tr>
                 <th scope="row">Moderation</th>
                 <td>
-                  {overview.openReports} open reports, {overview.activeTakedowns} active takedowns
+                  {overview.openReports} open reports, {overview.activeTakedowns} active takedowns,{' '}
+                  {overview.pendingClips} clip{overview.pendingClips === 1 ? '' : 's'} awaiting review
                 </td>
               </tr>
               <tr>

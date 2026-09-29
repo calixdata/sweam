@@ -1,25 +1,70 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { ApiError, apiSend } from '../api';
+import { MIN_AGE, USERNAME_HINT, USERNAME_RE } from '@sweam/shared';
+import { ApiError, apiGet, apiSend } from '../api';
 import { usePageTitle } from '../hooks';
+
+type UsernameStatus = 'idle' | 'invalid' | 'checking' | 'available' | 'taken';
 
 export function SignUp() {
   usePageTitle('Join Sweam');
 
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
   const [password, setPassword] = useState('');
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
+
+  const normalizedUsername = username.trim().toLowerCase();
+
+  // Debounced availability check against the public endpoint.
+  useEffect(() => {
+    if (normalizedUsername === '') {
+      setUsernameStatus('idle');
+      return;
+    }
+    if (!USERNAME_RE.test(normalizedUsername)) {
+      setUsernameStatus('invalid');
+      return;
+    }
+    setUsernameStatus('checking');
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiGet<{ available: boolean; valid: boolean }>(
+          `/api/auth/username-available?u=${encodeURIComponent(normalizedUsername)}`,
+        );
+        if (cancelled) return;
+        setUsernameStatus(res.valid ? (res.available ? 'available' : 'taken') : 'invalid');
+      } catch {
+        if (!cancelled) setUsernameStatus('idle');
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [normalizedUsername]);
+
+  const canSubmit = ageConfirmed && usernameStatus === 'available' && !submitting;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      await apiSend('POST', '/api/auth/signup', { email, displayName, password });
+      await apiSend('POST', '/api/auth/signup', {
+        email,
+        displayName,
+        username: normalizedUsername,
+        password,
+        ageConfirmed,
+      });
       setSentTo(email);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Sign-up failed. Try again.');
@@ -64,6 +109,34 @@ export function SignUp() {
           />
         </div>
         <div className="field">
+          <label htmlFor="signup-username">Username</label>
+          <div className="username-input">
+            <span aria-hidden="true" className="username-at">
+              @
+            </span>
+            <input
+              id="signup-username"
+              type="text"
+              autoComplete="username"
+              required
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              aria-describedby="signup-username-hint"
+            />
+          </div>
+          <p className="field-hint" id="signup-username-hint" role="status" aria-live="polite">
+            {usernameStatus === 'invalid'
+              ? USERNAME_HINT
+              : usernameStatus === 'checking'
+                ? 'Checking availability…'
+                : usernameStatus === 'available'
+                  ? `@${normalizedUsername} is available.`
+                  : usernameStatus === 'taken'
+                    ? `@${normalizedUsername} is taken. Try another.`
+                    : `Your public @handle. ${USERNAME_HINT}`}
+          </p>
+        </div>
+        <div className="field">
           <label htmlFor="signup-email">Email</label>
           <input
             id="signup-email"
@@ -90,12 +163,25 @@ export function SignUp() {
             At least 8 characters.
           </p>
         </div>
+        <div className="field field-checkbox">
+          <input
+            id="signup-age"
+            type="checkbox"
+            checked={ageConfirmed}
+            onChange={(event) => setAgeConfirmed(event.target.checked)}
+          />
+          <label htmlFor="signup-age">
+            I confirm I am at least {MIN_AGE} years old and agree to the{' '}
+            <Link to="/legal/terms">Terms</Link> and{' '}
+            <Link to="/legal/community-guidelines">Community Guidelines</Link>.
+          </label>
+        </div>
         {error && (
           <p className="status status-error" role="alert">
             {error}
           </p>
         )}
-        <button type="submit" className="button" disabled={submitting}>
+        <button type="submit" className="button" disabled={!canSubmit}>
           {submitting ? 'Creating your account…' : 'Create account'}
         </button>
       </form>

@@ -73,6 +73,85 @@ export const RATING_TO_ADVISORY: Record<Rating, Advisory> = {
   'NC-17': 'TV-MA',
 };
 
+/** Minimum age to hold a Sweam account. Referenced in copy and enforced at sign-up. */
+export const MIN_AGE = 16;
+
+/**
+ * Audience tier is orthogonal to genre: who the work is for, not what it is.
+ * Sweam does not accept content made for children under 13, so there is no
+ * "Kids" tier. A title may carry more than one (e.g. Young Adult + Adult).
+ */
+export const AUDIENCES = ['Young Adult', 'Adult'] as const;
+
+export type Audience = (typeof AUDIENCES)[number];
+
+export const AUDIENCE_LABELS: Record<Audience, string> = {
+  'Young Adult': 'Young Adult (16+)',
+  Adult: 'Adult (18+)',
+};
+
+/**
+ * Sub-genres refine a genre and can be combined. This list is meant to grow:
+ * add entries here and they appear in the pickers with no other change. A title
+ * can carry several, across genres (e.g. "Romantic Suspense" + "Coming of Age").
+ */
+export const SUBGENRES = [
+  'Romantic Suspense',
+  'Romantic Comedy',
+  'Dark Comedy',
+  'Coming of Age',
+  'Psychological Thriller',
+  'Supernatural',
+  'Dystopian',
+  'Space Opera',
+  'Cyberpunk',
+  'Slasher',
+  'Mockumentary',
+  'Anthology',
+  'Period Piece',
+  'Legal Drama',
+  'Crime Procedural',
+  'Sports Drama',
+  'Musical Drama',
+  'Satire',
+  'Noir',
+  'Whodunit',
+] as const;
+
+export type SubGenre = (typeof SUBGENRES)[number];
+
+/** Public @username rules, shared so the client and server never disagree. */
+export const USERNAME_RE = /^[a-z0-9_]{3,24}$/;
+export const USERNAME_HINT = '3–24 characters: lowercase letters, numbers, and underscores.';
+
+/**
+ * File requirements, stated plainly on the upload forms and enforced on upload.
+ * One source of truth so the copy and the checks never disagree.
+ */
+export const UPLOAD_SPECS = {
+  video: {
+    formats: 'MP4 or WebM',
+    accept: 'video/mp4,video/webm',
+    maxBytes: 512 * 1024 * 1024,
+    maxLabel: '512 MB',
+  },
+  poster: {
+    formats: 'JPEG, PNG, or WebP',
+    accept: 'image/jpeg,image/png,image/webp',
+    maxBytes: 10 * 1024 * 1024,
+    maxLabel: '10 MB',
+    minWidth: 1000,
+    minHeight: 1500,
+    aspect: '2:3 portrait (e.g. 1000 x 1500)',
+  },
+  captions: {
+    formats: 'WebVTT (.vtt)',
+    accept: 'text/vtt,.vtt',
+    maxBytes: 2 * 1024 * 1024,
+    maxLabel: '2 MB',
+  },
+} as const;
+
 export type ScoutStatus = 'pending' | 'approved' | 'rejected';
 
 /**
@@ -83,6 +162,9 @@ export interface SessionUser {
   id: string;
   email: string;
   displayName: string;
+  /** The account's unique public @username (chosen at sign-up). */
+  username: string | null;
+  /** The creator handle, present only for creators; equals the username. */
   handle: string | null;
   scout: { status: ScoutStatus; orgName: string } | null;
   isAdmin: boolean;
@@ -100,6 +182,10 @@ export interface TitleSummary {
   name: string;
   kind: ContentKind;
   genre: Genre;
+  /** Audience tiers this title targets (for the hero/meta line). */
+  audiences: string[];
+  /** Optional landscape hero image (the poster is 2:3 portrait). */
+  heroUrl: string | null;
   synopsis: string;
   advisory: Advisory;
   posterUrl: string | null;
@@ -124,9 +210,19 @@ export interface EpisodeSummary {
 /** Full title page payload. Viewer-specific fields are false for signed-out requests. */
 export interface TitleDetail extends TitleSummary {
   episodes: EpisodeSummary[];
+  /** Total plays across episodes (shown to viewers, TikTok-style). */
+  views: number;
   likes: number;
+  /** Count of visible comments. */
+  commentCount: number;
   likedByMe: boolean;
   inMyWatchlist: boolean;
+  /** Audience tiers this title targets (may be several). */
+  audiences: string[];
+  /** Every genre chosen (the card's `genre` is the primary one). */
+  genres: Genre[];
+  /** Sub-genre refinements chosen. */
+  subgenres: string[];
 }
 
 /** One entry in the Discover feed, with the human-readable reason it ranked where it did. */
@@ -334,13 +430,14 @@ export interface TitleAnalytics {
 // Trust, safety, and administration
 // ---------------------------------------------------------------------------
 
-export const REPORT_REASONS = ['spam', 'abuse', 'copyright', 'other'] as const;
+export const REPORT_REASONS = ['prohibited', 'abuse', 'spam', 'copyright', 'other'] as const;
 
 export type ReportReason = (typeof REPORT_REASONS)[number];
 
 export const REPORT_REASON_LABELS: Record<ReportReason, string> = {
-  spam: 'Spam or misleading',
+  prohibited: 'Prohibited content (nudity, explicit, illegal)',
   abuse: 'Abusive or harmful',
+  spam: 'Spam or misleading',
   copyright: 'Copyright infringement',
   other: 'Something else',
 };
@@ -394,6 +491,7 @@ export interface AdminOverview {
   pendingPayouts: number;
   revenueMillicents: number;
   pendingSubmissions: number;
+  pendingClips: number;
 }
 
 /** A creator's request for Sweam to remove one of their admin-locked titles. */
@@ -566,7 +664,14 @@ export interface SubmissionItem {
   id: string;
   titleName: string;
   kind: ContentKind;
+  /** Primary genre (kept for cards); the full set is in `genres`. */
   genre: Genre;
+  /** Audience tiers this work targets. */
+  audiences: string[];
+  /** All genres chosen (multi-select). */
+  genres: Genre[];
+  /** Sub-genre refinements chosen (multi-select). */
+  subgenres: string[];
   synopsis: string;
   /** External screener link (optional fallback); '' when the work was uploaded. */
   workUrl: string;
@@ -582,6 +687,16 @@ export interface SubmissionItem {
   /** The series this part belongs to, when the kind is a series. */
   seriesId: string | null;
   seriesName: string | null;
+  /** Whether this is an adaptation of a third-party published work. */
+  isAdaptation: boolean;
+  /** The source work being adapted, when isAdaptation. */
+  adaptationSource: string;
+  /** Uploaded proof of rights/licence (a /media/... file), when isAdaptation. */
+  rightsProofUrl: string | null;
+  /** Uploaded identification (a /media/... file), when isAdaptation. */
+  idProofUrl: string | null;
+  /** The submitter attested ownership and agreed to hold Sweam harmless. */
+  adaptationAttested: boolean;
   status: SubmissionStatus;
   /** Reviewer note, shared with the submitter on decision. */
   note: string;
@@ -600,6 +715,52 @@ export interface AdminSubmission extends SubmissionItem {
   submitter: { displayName: string; email: string; handle: string | null };
   /** The most recent AI review, or null if none has been run. */
   aiReview: AiSubmissionReview | null;
+}
+
+// ---------------------------------------------------------------------------
+// Instant clips (record-in-Sweam, publish now, review after)
+// ---------------------------------------------------------------------------
+
+/**
+ * A title's post-publish moderation state. Regular catalog titles are
+ * `cleared`. A clip recorded and posted instantly starts `pending`: it is live
+ * right away but sits in the admin review queue. The AI (or a viewer report)
+ * can push it to `flagged` (hidden pending a human), and an admin can `remove`
+ * it. Only Sweam moves a title out of `pending`/`flagged`.
+ */
+export const REVIEW_STATES = ['cleared', 'pending', 'flagged', 'removed'] as const;
+
+export type ReviewState = (typeof REVIEW_STATES)[number];
+
+export const REVIEW_STATE_LABELS: Record<ReviewState, string> = {
+  cleared: 'Cleared',
+  pending: 'Live, awaiting review',
+  flagged: 'Flagged, hidden',
+  removed: 'Removed',
+};
+
+/** Spec + limits for an instantly recorded clip. */
+export const CLIP_SPEC = {
+  maxSeconds: 180,
+  maxBytes: 200 * 1024 * 1024,
+  maxLabel: '200 MB',
+  captionMax: 200,
+} as const;
+
+/** One entry in the admin clip review queue. */
+export interface ClipReviewItem {
+  id: string;
+  state: ReviewState;
+  caption: string;
+  createdAt: string;
+  title: { id: string; name: string; slug: string; published: boolean };
+  episodeId: string;
+  creator: { displayName: string; handle: string | null };
+  /** The AI's advisory read of the caption/metadata, or null if not done yet. */
+  ai: AiSubmissionReview | null;
+  /** Set when the AI review could not be run. */
+  aiError: string | null;
+  decidedAt: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -627,6 +788,9 @@ export interface CommentItem {
   authorIsCreator: boolean;
   /** True when the signed-in viewer wrote it. */
   mine: boolean;
+  /** Like count and whether the signed-in viewer has liked it (double-tap to like). */
+  likes: number;
+  likedByMe: boolean;
   replies: CommentItem[];
 }
 

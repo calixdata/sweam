@@ -30,6 +30,7 @@ interface SessionRow {
   id: string;
   email: string;
   display_name: string;
+  username: string | null;
   handle: string | null;
   scout_status: 'pending' | 'approved' | 'rejected' | null;
   scout_org: string | null;
@@ -40,7 +41,7 @@ export async function resolveSession(db: D1Database, token: string): Promise<Ses
   const tokenHash = await sha256Hex(token);
   const row = await db
     .prepare(
-      `SELECT s.expires_at, s.token_hash, u.id, u.email, u.display_name, cp.handle,
+      `SELECT s.expires_at, s.token_hash, u.id, u.email, u.display_name, u.username, cp.handle,
         sp.status AS scout_status, sp.org_name AS scout_org,
         (a.user_id IS NOT NULL) AS is_admin
        FROM sessions s
@@ -61,6 +62,7 @@ export async function resolveSession(db: D1Database, token: string): Promise<Ses
     id: row.id,
     email: row.email,
     displayName: row.display_name,
+    username: row.username,
     handle: row.handle,
     scout:
       row.scout_status && row.scout_org ? { status: row.scout_status, orgName: row.scout_org } : null,
@@ -81,6 +83,39 @@ export const withUser = createMiddleware<AppEnv>(async (c, next) => {
 
 export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   if (!c.get('user')) fail(401, 'auth_required', 'Sign in to continue.');
+  await next();
+});
+
+/**
+ * The gate for /media. The catalog is browsable signed-out, so poster/cover/hero
+ * IMAGES are public; only video (source files, HLS playlists and segments) and
+ * captions require a signed-in account — watching is the gated action. The check
+ * is a single indexed session lookup (no full user JOIN — video pulls many
+ * segments). The transcoder service is allowed through with its Bearer token.
+ */
+const PUBLIC_MEDIA_RE = /\.(png|jpe?g|webp|gif|avif|svg)$/i;
+
+export const requireContentAccess = createMiddleware<AppEnv>(async (c, next) => {
+  // Images (posters, cover art, the hero) are public so browsing works signed-out.
+  if (PUBLIC_MEDIA_RE.test(c.req.path)) {
+    await next();
+    return;
+  }
+  // The transcoder service pulls source files for encoding with its token.
+  const auth = c.req.header('authorization');
+  if (auth && c.env.TRANSCODER_TOKEN && auth === `Bearer ${c.env.TRANSCODER_TOKEN}`) {
+    await next();
+    return;
+  }
+  // Video and captions require a signed-in account.
+  const token = getCookie(c, SESSION_COOKIE);
+  if (!token) fail(401, 'auth_required', 'Create a free account to watch on Sweam.');
+  const row = await c.env.DB.prepare('SELECT expires_at FROM sessions WHERE token_hash = ?')
+    .bind(await sha256Hex(token))
+    .first<{ expires_at: string }>();
+  if (!row || row.expires_at <= nowIso()) {
+    fail(401, 'auth_required', 'Create a free account to watch on Sweam.');
+  }
   await next();
 });
 

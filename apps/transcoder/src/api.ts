@@ -35,8 +35,11 @@ export class SweamApi {
 
   /** Download a job source; resolves /media/... paths against the API origin. */
   async fetchSource(sourceUrl: string): Promise<ArrayBuffer> {
-    const url = sourceUrl.startsWith('http') ? sourceUrl : `${this.baseUrl}${sourceUrl}`;
-    const res = await fetch(url);
+    const isOurMedia = !sourceUrl.startsWith('http');
+    const url = isOurMedia ? `${this.baseUrl}${sourceUrl}` : sourceUrl;
+    // /media is gated to signed-in accounts; the service token lets the
+    // transcoder pull source files. External http(s) sources get no token.
+    const res = await fetch(url, isOurMedia ? { headers: { authorization: `Bearer ${this.token}` } } : {});
     if (!res.ok) throw new Error(`Source download failed (${res.status}): ${url}`);
     return res.arrayBuffer();
   }

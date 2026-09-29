@@ -4,8 +4,9 @@ import type Hls from 'hls.js';
 import type { PrerollAd, WatchPayload } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { ReportControl } from '../components/ReportControl';
 import { ErrorNote, Loading } from '../components/Status';
-import { formatDuration, usePageTitle } from '../hooks';
+import { formatDuration, useDoubleTap, usePageTitle } from '../hooks';
 
 /** Send a resume beacon at most this often while playing. */
 const BEACON_INTERVAL_MS = 10_000;
@@ -51,6 +52,8 @@ export function Watch() {
   const [announcement, setAnnouncement] = useState('');
   const [preroll, setPreroll] = useState<PrerollAd | null>(null);
   const [adDone, setAdDone] = useState(false);
+  const [liked, setLiked] = useState(false);
+  const [heart, setHeart] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastBeaconAt = useRef(0);
   const resumeApplied = useRef(false);
@@ -205,6 +208,37 @@ export function Watch() {
     setAnnouncement(`${deltaS > 0 ? 'Forward' : 'Back'} to ${formatDuration(video.currentTime)}.`);
   }
 
+  // Like the video (double-tap gesture always likes; the button toggles).
+  const likeVideo = useCallback(async () => {
+    if (!titleId) return;
+    setHeart(true);
+    window.setTimeout(() => setHeart(false), 700);
+    setLiked(true);
+    setAnnouncement('Liked.');
+    try {
+      await apiSend('PUT', `/api/me/likes/${titleId}`);
+    } catch {
+      // Idempotent; a failed like is not worth interrupting playback.
+    }
+  }, [titleId]);
+
+  const toggleLike = useCallback(async () => {
+    if (!titleId) return;
+    const next = !liked;
+    setLiked(next);
+    if (next) {
+      setHeart(true);
+      window.setTimeout(() => setHeart(false), 700);
+    }
+    try {
+      await apiSend(next ? 'PUT' : 'DELETE', `/api/me/likes/${titleId}`);
+    } catch {
+      setLiked(!next);
+    }
+  }, [titleId, liked]);
+
+  const videoTap = useDoubleTap<HTMLDivElement>(likeVideo);
+
   if (error) return <ErrorNote message={error} />;
   if (!payload) return <Loading label="Loading episode" />;
 
@@ -241,32 +275,47 @@ export function Watch() {
       )}
 
       {/* Native controls carry the primary keyboard/SR experience. The
-          feature player mounts after the pre-roll slot resolves. */}
-      <video
-        ref={videoRef}
-        className="player"
-        controls
-        preload="metadata"
-        hidden={!adDone}
-        aria-label={`${title.name}: ${episode.name}`}
-        onLoadedMetadata={handleLoadedMetadata}
-        onPause={() => sendProgress(true)}
-        onEnded={() => sendProgress(true)}
-        onTimeUpdate={() => sendProgress(false)}
-      >
-        {episode.captionsUrl && (
-          <track
-            kind="captions"
-            src={episode.captionsUrl}
-            srcLang="en"
-            label="English captions"
-            default
-          />
+          feature player mounts after the pre-roll slot resolves. Double-tap the
+          video to like it (a bonus gesture over the accessible Like button). */}
+      <div className="player-wrap" hidden={!adDone} {...videoTap}>
+        <video
+          ref={videoRef}
+          className="player"
+          controls
+          preload="metadata"
+          aria-label={`${title.name}: ${episode.name}`}
+          onLoadedMetadata={handleLoadedMetadata}
+          onPause={() => sendProgress(true)}
+          onEnded={() => sendProgress(true)}
+          onTimeUpdate={() => sendProgress(false)}
+        >
+          {episode.captionsUrl && (
+            <track
+              kind="captions"
+              src={episode.captionsUrl}
+              srcLang="en"
+              label="English captions"
+              default
+            />
+          )}
+          Your browser does not support HTML video.
+        </video>
+        {heart && (
+          <span className="like-burst like-burst-video" aria-hidden="true">
+            ♥
+          </span>
         )}
-        Your browser does not support HTML video.
-      </video>
+      </div>
 
       <div className="player-extras">
+        <button
+          type="button"
+          className={`button button-quiet${liked ? ' is-liked' : ''}`}
+          aria-pressed={liked}
+          onClick={() => void toggleLike()}
+        >
+          {liked ? '♥ Liked' : '♡ Like'}
+        </button>
         <button type="button" className="button button-quiet" onClick={() => skip(-10)}>
           Back 10 seconds
         </button>
@@ -283,6 +332,7 @@ export function Watch() {
             Next: E{nextEpisode.episode} {nextEpisode.name}
           </Link>
         )}
+        <ReportControl titleId={title.id} titleSlug={title.slug} signedIn={user !== null} />
       </div>
 
       <p className="visually-hidden" role="status" aria-live="polite">

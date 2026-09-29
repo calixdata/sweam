@@ -5,7 +5,7 @@ import type { CommentRow } from '../lib/comments';
 import { buildCommentTree, countVisible } from '../lib/comments';
 import { fail, nowIso, parseBody } from '../lib/http';
 import type { EpisodeRow, TitleRow } from '../lib/mappers';
-import { TITLE_FROM, TITLE_SELECT, mapEpisode, mapTitle } from '../lib/mappers';
+import { TITLE_FROM, TITLE_SELECT, mapEpisode, mapTitle, parseJsonArray } from '../lib/mappers';
 import { notify } from '../lib/notify';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
@@ -17,13 +17,15 @@ export const titleRoutes = new Hono<AppEnv>();
 titleRoutes.get('/:slug', async (c) => {
   const slug = c.req.param('slug');
   const row = await c.env.DB.prepare(
-    `SELECT ${TITLE_SELECT}, COALESCE(s.likes, 0) AS likes
+    `SELECT ${TITLE_SELECT}, COALESCE(s.likes, 0) AS likes, COALESCE(s.plays, 0) AS plays,
+       t.genres AS genres, t.subgenres AS subgenres,
+       (SELECT COUNT(*) FROM comments co WHERE co.title_id = t.id AND co.status = 'visible') AS comment_count
      ${TITLE_FROM}
      LEFT JOIN title_stats s ON s.title_id = t.id
      WHERE t.slug = ? AND t.published = 1`,
   )
     .bind(slug)
-    .first<TitleRow & { likes: number }>();
+    .first<TitleRow & { likes: number; plays: number; genres: string; subgenres: string; comment_count: number }>();
   if (!row) fail(404, 'title_not_found', 'That title does not exist or is not published.');
 
   const { results: episodeRows } = await c.env.DB.prepare(
@@ -51,9 +53,13 @@ titleRoutes.get('/:slug', async (c) => {
   const payload: TitleDetail = {
     ...mapTitle(row),
     episodes: episodeRows.map(mapEpisode),
+    views: row.plays,
     likes: row.likes,
+    commentCount: row.comment_count,
     likedByMe,
     inMyWatchlist,
+    genres: parseJsonArray(row.genres) as TitleDetail['genres'],
+    subgenres: parseJsonArray(row.subgenres),
   };
   return c.json(payload);
 });
@@ -76,7 +82,9 @@ async function publishedTitleBySlug(
 
 const COMMENTS_QUERY = `
   SELECT co.id, co.parent_id, co.body, co.status, co.created_at,
-    u.id AS author_id, u.display_name AS author_name, cp.handle AS author_handle
+    u.id AS author_id, u.display_name AS author_name, cp.handle AS author_handle,
+    (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = co.id) AS likes,
+    (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = co.id AND cl.user_id = ?) AS liked_by_me
   FROM comments co
   JOIN users u ON u.id = co.author_id
   LEFT JOIN creator_profiles cp ON cp.user_id = co.author_id
@@ -87,10 +95,13 @@ const COMMENTS_QUERY = `
 
 titleRoutes.get('/:slug/comments', async (c) => {
   const title = await publishedTitleBySlug(c.env.DB, c.req.param('slug'));
-  const { results } = await c.env.DB.prepare(COMMENTS_QUERY).bind(title.id).all<CommentRow>();
+  const viewerId = c.get('user')?.id ?? null;
+  const { results } = await c.env.DB.prepare(COMMENTS_QUERY)
+    .bind(viewerId ?? '', title.id)
+    .all<CommentRow>();
   const comments = buildCommentTree(results, {
     titleCreatorId: title.creator_id,
-    viewerId: c.get('user')?.id ?? null,
+    viewerId,
   });
   return c.json({ comments, visibleCount: countVisible(comments) });
 });

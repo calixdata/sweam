@@ -14,6 +14,8 @@ function row(overrides: Partial<CommentRow> & { id: string }): CommentRow {
     author_id: 'usr_someone',
     author_name: 'Someone',
     author_handle: null,
+    likes: 0,
+    liked_by_me: 0,
     ...overrides,
   };
 }
@@ -32,6 +34,15 @@ describe('buildCommentTree', () => {
     expect(tree.map((c) => c.id)).toEqual(['c1', 'c2']);
     expect(tree[0]?.replies.map((r) => r.id)).toEqual(['r1', 'r2']);
     expect(countVisible(tree)).toBe(4);
+  });
+
+  it('carries like count and likedByMe through', () => {
+    const tree = buildCommentTree([row({ id: 'c1', likes: 3, liked_by_me: 1 })], {
+      titleCreatorId: CREATOR,
+      viewerId: VIEWER,
+    });
+    expect(tree[0]?.likes).toBe(3);
+    expect(tree[0]?.likedByMe).toBe(true);
   });
 
   it('keeps a removed parent as an empty-body placeholder when it has visible replies', () => {

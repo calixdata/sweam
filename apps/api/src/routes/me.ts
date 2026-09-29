@@ -6,12 +6,36 @@ import type { TitleRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
-import { reportCreateSchema } from '../lib/validate';
+import { reportCreateSchema, usernameSchema } from '../lib/validate';
 
 /** Signed-in viewer state: watchlist, likes, reports, and notifications. */
 export const meRoutes = new Hono<AppEnv>();
 
 meRoutes.use('*', requireUser);
+
+/** Change the account @username; keeps the creator handle in sync when present. */
+meRoutes.post('/username', async (c) => {
+  const user = currentUser(c);
+  const { username } = await parseBody(c, usernameSchema);
+  const taken = await c.env.DB.prepare(
+    'SELECT 1 AS x FROM users WHERE username = ? COLLATE NOCASE AND id <> ?',
+  )
+    .bind(username, user.id)
+    .first();
+  if (taken) fail(409, 'username_taken', 'That username is taken. Please choose another.');
+
+  const statements = [
+    c.env.DB.prepare('UPDATE users SET username = ? WHERE id = ?').bind(username, user.id),
+  ];
+  // Creators are shown by handle everywhere; keep it equal to the username.
+  if (user.handle) {
+    statements.push(
+      c.env.DB.prepare('UPDATE creator_profiles SET handle = ? WHERE user_id = ?').bind(username, user.id),
+    );
+  }
+  await c.env.DB.batch(statements);
+  return c.json({ username });
+});
 
 meRoutes.get('/watchlist', async (c) => {
   const user = currentUser(c);

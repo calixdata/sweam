@@ -6,7 +6,8 @@ import type { Advisory, ContentKind, EpisodeSummary, Genre, TitleSummary } from 
  */
 
 export const TITLE_SELECT = `
-  t.id, t.slug, t.name, t.kind, t.genre, t.synopsis, t.advisory, t.poster_url, t.published_at,
+  t.id, t.slug, t.name, t.kind, t.genre, t.audiences AS audiences, t.hero_url AS hero_url,
+  t.synopsis, t.advisory, t.poster_url, t.published_at,
   u.display_name AS creator_name, cp.handle AS creator_handle,
   (SELECT COUNT(*) FROM episodes e WHERE e.title_id = t.id) AS episode_count
 `;
@@ -23,6 +24,8 @@ export interface TitleRow {
   name: string;
   kind: ContentKind;
   genre: Genre;
+  audiences: string;
+  hero_url: string | null;
   synopsis: string;
   advisory: Advisory;
   poster_url: string | null;
@@ -46,6 +49,8 @@ export function mapTitle(row: TitleRow): TitleSummary {
     name: row.name,
     kind: row.kind,
     genre: row.genre,
+    audiences: parseJsonArray(row.audiences),
+    heroUrl: row.hero_url,
     synopsis: row.synopsis,
     advisory: row.advisory,
     posterUrl: row.poster_url,
@@ -85,4 +90,15 @@ export function mapEpisode(row: EpisodeRow): EpisodeSummary {
 /** Escape %, _ and \ so user input can be embedded in a LIKE pattern safely. */
 export function likeEscape(term: string): string {
   return term.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
+/** Parse a JSON text column into a string array, tolerating null/garbage. */
+export function parseJsonArray(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map((v) => String(v)) : [];
+  } catch {
+    return [];
+  }
 }

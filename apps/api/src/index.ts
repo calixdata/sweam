@@ -2,11 +2,12 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import type { ApiErrorBody } from '@sweam/shared';
 import type { AppEnv, Env } from './env';
-import { withUser } from './lib/session';
+import { requireContentAccess, withUser } from './lib/session';
 import { adminRoutes } from './routes/admin';
 import { adRoutes } from './routes/ads';
 import { authRoutes } from './routes/auth';
 import { catalogRoutes } from './routes/catalog';
+import { clipRoutes } from './routes/clips';
 import { commentRoutes } from './routes/comments';
 import { creatorRoutes } from './routes/creators';
 import { discoverRoutes } from './routes/discover';
@@ -44,6 +45,10 @@ app.route('/api/transcode', transcodeRoutes);
 app.route('/api/admin', adminRoutes);
 app.route('/api/ads', adRoutes);
 app.route('/api/submissions', submissionRoutes);
+app.route('/api/clips', clipRoutes);
+// Media (posters, video, HLS) is content: gated to signed-in accounts, with the
+// transcoder service allowed through by its Bearer token.
+app.use('/media/*', requireContentAccess);
 app.route('/media', mediaRoutes);
 
 app.notFound((c) => {

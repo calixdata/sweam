@@ -16,7 +16,7 @@ const DEFAULT_MODEL = 'claude-opus-5';
 
 const GUIDELINES = [
   'Not allowed: unlawful content or content the submitter lacks rights to; anything sexualizing minors (report and ban); non-consensual intimate imagery; pornographic or sexually explicit content; hate speech attacking protected groups or promoting violence against them; harassment, threats, or doxxing; gore glorifying violence or content encouraging self-harm; dangerous misinformation, scams, spam, or malware; impersonation; and undisclosed realistic synthetic media of real people.',
-  'Sweam is an adult (18+) service, so mature storytelling is welcome within those limits, and content advisories (TV-G, TV-PG, TV-14, TV-MA) must be accurate.',
+  'Sweam is a 16+ service, so mature storytelling is welcome within those limits, and content advisories (TV-G, TV-PG, TV-14, TV-MA) must be accurate. Content made for children under 13 is not accepted.',
   'Authenticity matters: original, finished work only, no reposts or rips, and no manipulation of metadata.',
 ].join(' ');
 
@@ -59,7 +59,7 @@ export async function reviewSubmission(
 ): Promise<AiSubmissionReview> {
   const model = env.AI_REVIEW_MODEL || DEFAULT_MODEL;
   const system =
-    'You are a trust-and-safety reviewer for Sweam, an adult (18+) free streaming service for ' +
+    'You are a trust-and-safety reviewer for Sweam, a 16+ free streaming service for ' +
     'independent creators. Assess the described submission against the Community Guidelines and ' +
     'recommend a disposition for a human reviewer. You are given the metadata and description ' +
     'only, not the video itself, so recommend "needs_review" whenever the work must be watched to ' +

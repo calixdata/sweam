@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { CREATOR_REVENUE_SHARE, MIN_PAYOUT_MILLICENTS, formatMillicents } from '@sweam/shared';
+import { CREATOR_REVENUE_SHARE, MIN_AGE, MIN_PAYOUT_MILLICENTS, formatMillicents } from '@sweam/shared';
 import { usePageTitle } from '../hooks';
 
 const SHARE_PERCENT = Math.round(CREATOR_REVENUE_SHARE * 100);
@@ -30,9 +30,9 @@ const groups: FaqGroup[] = [
         q: 'Do I need an account to watch?',
         a: (
           <>
-            No. Browsing and watching are open. An account (free) adds a watchlist, continue-watching
-            across devices, comments, following creators, and the tools for creators and scouts. You
-            must be 18 or older to create one.
+            You can browse Sweam freely, but watching requires a free account. Creating one also adds
+            a watchlist, continue-watching across devices, comments, following creators, and the tools
+            for creators and scouts. You must be {MIN_AGE} or older to create one.
           </>
         ),
       },

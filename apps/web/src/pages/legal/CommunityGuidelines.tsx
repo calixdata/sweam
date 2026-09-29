@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { MIN_AGE } from '@sweam/shared';
 import { CONTACT, LegalDoc, MailLink, SERVICE } from './LegalDoc';
 import type { LegalSection } from './LegalDoc';
 
@@ -53,11 +54,12 @@ const sections: LegalSection[] = [
     heading: '3. Mature content and accurate ratings',
     body: (
       <p>
-        {SERVICE} is an adult (18+) service and mature storytelling is welcome within the rules
+        {SERVICE} is a {MIN_AGE}+ service and mature storytelling is welcome within the rules
         above. Every submission requires an honest viewer rating (G, PG, PG-13, R, NC-17), which
         maps to the catalog advisory. Rate accurately: mislabeling is a violation. The rating is a
         maturity signal only, not a licence for anything above these rules.{' '}
-        <strong>Explicit or pornographic content is forbidden at every rating.</strong>
+        <strong>Explicit or pornographic content is forbidden at every rating.</strong>{' '}
+        {SERVICE} does not accept content made for children under 13.
       </p>
     ),
   },

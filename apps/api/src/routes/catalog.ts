@@ -10,10 +10,11 @@ import { searchQuerySchema } from '../lib/validate';
 
 export const catalogRoutes = new Hono<AppEnv>();
 
-type CatalogRow = TitleRow & TitleStatsRow;
+type CatalogRow = TitleRow & TitleStatsRow & { featured: number };
 
 const CATALOG_QUERY = `
   SELECT ${TITLE_SELECT},
+    t.featured AS featured,
     COALESCE(s.impressions, 0) AS impressions,
     COALESCE(s.plays, 0) AS plays,
     COALESCE(s.completes, 0) AS completes,
@@ -36,7 +37,7 @@ catalogRoutes.get('/home', async (c) => {
   const nowMs = Date.now();
   const catalogImpressions = results.reduce((sum, row) => sum + row.impressions, 0);
 
-  const spotlight = rankTitles(
+  const ranked = rankTitles(
     results,
     (row) => ({
       publishedAtMs: row.published_at ? Date.parse(row.published_at) : nowMs,
@@ -46,9 +47,13 @@ catalogRoutes.get('/home', async (c) => {
       likes: row.likes,
     }),
     { nowMs, catalogImpressions, weights: DEFAULT_WEIGHTS },
-  )
-    .slice(0, SPOTLIGHT_SIZE)
-    .map((entry) => mapTitle(entry.item));
+  ).map((entry) => mapTitle(entry.item));
+
+  // Editorially featured titles are pinned to the front of the spotlight so the
+  // home hero shows them; the rest follow in ranked order.
+  const featured = results.filter((row) => row.featured === 1).map(mapTitle);
+  const seen = new Set(featured.map((t) => t.id));
+  const spotlight = [...featured, ...ranked.filter((t) => !seen.has(t.id))].slice(0, SPOTLIGHT_SIZE);
 
   const weekAgoIso = new Date(nowMs - 7 * 86_400_000).toISOString();
   const newThisWeek = results

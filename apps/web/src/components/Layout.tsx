@@ -99,6 +99,11 @@ export function Layout() {
               </li>
               {user && (
                 <li>
+                  <NavLink to="/create">Create</NavLink>
+                </li>
+              )}
+              {user && (
+                <li>
                   <NavLink to="/watchlist">My list</NavLink>
                 </li>
               )}
@@ -127,6 +132,13 @@ export function Layout() {
               {user?.isAdmin && (
                 <li>
                   <NavLink to="/admin">Admin</NavLink>
+                </li>
+              )}
+              {user && (
+                <li>
+                  <NavLink to="/settings" aria-label={user.username ? `Settings, @${user.username}` : 'Settings'}>
+                    {user.username ? `@${user.username}` : 'Settings'}
+                  </NavLink>
                 </li>
               )}
             </ul>

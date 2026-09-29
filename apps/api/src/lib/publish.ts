@@ -19,6 +19,10 @@ export interface PublishableSubmission {
   title_name: string;
   kind: ContentKind;
   genre: string;
+  /** JSON text columns copied straight onto the title. */
+  audiences: string;
+  genres: string;
+  subgenres: string;
   rating: Rating | null;
   synopsis: string;
   source_url: string | null;
@@ -37,7 +41,11 @@ function handleFromName(name: string): string {
   return base.length >= 3 ? base : `creator_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/** Give the submitter a creator profile if they lack one, so they can own the title. */
+/**
+ * Give the submitter a creator profile if they lack one, so they can own the
+ * title. The handle equals the account's @username (already unique); only if a
+ * username is somehow missing do we fall back to deriving one from the name.
+ */
 async function ensureCreator(db: D1Database, userId: string, displayName: string): Promise<void> {
   const existing = await db
     .prepare('SELECT handle FROM creator_profiles WHERE user_id = ?')
@@ -45,11 +53,16 @@ async function ensureCreator(db: D1Database, userId: string, displayName: string
     .first<{ handle: string }>();
   if (existing) return;
 
-  let handle = handleFromName(displayName);
+  const account = await db
+    .prepare('SELECT username FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ username: string | null }>();
+
+  let handle = account?.username ?? handleFromName(displayName);
   for (let attempt = 2; attempt <= 20; attempt++) {
     const taken = await db.prepare('SELECT 1 AS x FROM creator_profiles WHERE handle = ?').bind(handle).first();
     if (!taken) break;
-    handle = `${handleFromName(displayName).slice(0, 20)}_${attempt}`;
+    handle = `${(account?.username ?? handleFromName(displayName)).slice(0, 20)}_${attempt}`;
   }
   await db
     .prepare('INSERT INTO creator_profiles (user_id, handle, bio, verified, created_at) VALUES (?, ?, ?, 0, ?)')
@@ -110,11 +123,11 @@ export async function publishSubmission(
         env.DB
           .prepare(
             `INSERT INTO titles
-               (id, creator_id, kind, name, slug, synopsis, genre, advisory, poster_url,
+               (id, creator_id, kind, name, slug, synopsis, genre, audiences, genres, subgenres, advisory, poster_url,
                 published, published_at, admin_locked, series_id, created_at)
-             VALUES (?, ?, 'series', ?, ?, ?, ?, ?, ?, 1, ?, 1, ?, ?)`,
+             VALUES (?, ?, 'series', ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 1, ?, ?)`,
           )
-          .bind(titleId, submission.user_id, seriesName, slug, submission.synopsis, submission.genre, advisory, submission.poster_url, now, submission.series_id, now),
+          .bind(titleId, submission.user_id, seriesName, slug, submission.synopsis, submission.genre, submission.audiences, submission.genres, submission.subgenres, advisory, submission.poster_url, now, submission.series_id, now),
         env.DB.prepare('INSERT INTO title_stats (title_id) VALUES (?)').bind(titleId),
       ]);
     }
@@ -125,11 +138,11 @@ export async function publishSubmission(
       env.DB
         .prepare(
           `INSERT INTO titles
-             (id, creator_id, kind, name, slug, synopsis, genre, advisory, poster_url,
+             (id, creator_id, kind, name, slug, synopsis, genre, audiences, genres, subgenres, advisory, poster_url,
               published, published_at, admin_locked, series_id, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 1, NULL, ?)`,
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 1, NULL, ?)`,
         )
-        .bind(titleId, submission.user_id, submission.kind, submission.title_name, slug, submission.synopsis, submission.genre, advisory, submission.poster_url, now, now),
+        .bind(titleId, submission.user_id, submission.kind, submission.title_name, slug, submission.synopsis, submission.genre, submission.audiences, submission.genres, submission.subgenres, advisory, submission.poster_url, now, now),
       env.DB.prepare('INSERT INTO title_stats (title_id) VALUES (?)').bind(titleId),
     ]);
   }
@@ -151,4 +164,63 @@ export async function publishSubmission(
   await enqueueTranscode(env.DB, episodeId, submission.source_url);
 
   return { titleId, slug, episode };
+}
+
+export interface ClipToPublish {
+  userId: string;
+  caption: string;
+  rating: Rating;
+  genre: string;
+  audiences: string[];
+  sourceUrl: string;
+  captionsUrl: string | null;
+}
+
+/** A clip's title name is its caption, trimmed to a display-friendly length. */
+function clipTitleName(caption: string): string {
+  const clean = caption.replace(/\s+/g, ' ').trim();
+  if (clean.length <= 70) return clean || 'Untitled clip';
+  return `${clean.slice(0, 67).trimEnd()}…`;
+}
+
+/**
+ * Publish a clip recorded in Sweam: it goes live immediately (published = 1)
+ * but starts in review_state = 'pending' so it sits in the admin AI review
+ * queue. Admin-locked like any published title. Returns the new title/episode.
+ */
+export async function publishClip(
+  env: Env,
+  clip: ClipToPublish,
+  displayName: string,
+): Promise<{ titleId: string; slug: string; episodeId: string; name: string }> {
+  await ensureCreator(env.DB, clip.userId, displayName);
+  const now = nowIso();
+  const advisory = RATING_TO_ADVISORY[clip.rating];
+  const name = clipTitleName(clip.caption);
+  const titleId = crypto.randomUUID();
+  const slug = await uniqueSlug(env.DB, name);
+
+  await env.DB.batch([
+    env.DB
+      .prepare(
+        `INSERT INTO titles
+           (id, creator_id, kind, name, slug, synopsis, genre, audiences, genres, subgenres, advisory, poster_url,
+            published, published_at, admin_locked, series_id, review_state, created_at)
+         VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, NULL, 1, ?, 1, NULL, 'pending', ?)`,
+      )
+      .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), JSON.stringify([clip.genre]), advisory, now, now),
+    env.DB.prepare('INSERT INTO title_stats (title_id) VALUES (?)').bind(titleId),
+  ]);
+
+  const episodeId = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO episodes
+       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at)
+     VALUES (?, ?, 1, 1, ?, ?, ?, ?, 0, ?, ?)`,
+  )
+    .bind(episodeId, titleId, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now)
+    .run();
+  await enqueueTranscode(env.DB, episodeId, clip.sourceUrl);
+
+  return { titleId, slug, episodeId, name };
 }

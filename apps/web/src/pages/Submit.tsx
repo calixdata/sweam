@@ -3,15 +3,19 @@ import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { SeriesSummary, SubmissionItem, SubmissionStatus } from '@sweam/shared';
 import {
+  AUDIENCES,
+  AUDIENCE_LABELS,
   CONTENT_KINDS,
   CONTENT_KIND_LABELS,
   CREATOR_REVENUE_SHARE,
   GENRES,
+  SUBGENRES,
   MIN_PAYOUT_MILLICENTS,
   MONETIZATION_THRESHOLDS,
   RATINGS,
   SUBMISSION_STATUS_LABELS,
   SUBMISSION_STATUS_STEPS,
+  UPLOAD_SPECS,
   formatMillicents,
 } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
@@ -260,11 +264,28 @@ function SubmissionCard({
 }
 
 /** One reusable upload control that streams to the intake uploader with progress. */
+async function imageDimensions(file: File): Promise<{ width: number; height: number }> {
+  const url = URL.createObjectURL(file);
+  try {
+    return await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      img.onerror = () => reject(new Error('That image could not be read.'));
+      img.src = url;
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 function UploadField({
   id,
   label,
   accept,
   hint,
+  maxBytes,
+  minWidth,
+  minHeight,
   currentName,
   onUploaded,
 }: {
@@ -272,6 +293,9 @@ function UploadField({
   label: string;
   accept: string;
   hint: string;
+  maxBytes?: number;
+  minWidth?: number;
+  minHeight?: number;
   currentName: string | null;
   onUploaded: (url: string | null, name: string | null) => void;
 }) {
@@ -283,8 +307,22 @@ function UploadField({
     async (file: File | undefined) => {
       if (!file) return;
       setError(null);
+      if (maxBytes && file.size > maxBytes) {
+        const mb = Math.round(maxBytes / (1024 * 1024));
+        setError(`That file is ${(file.size / (1024 * 1024)).toFixed(1)} MB. The limit is ${mb} MB.`);
+        onUploaded(null, null);
+        return;
+      }
       setBusy(true);
       try {
+        if (minWidth && minHeight && file.type.startsWith('image/')) {
+          const { width, height } = await imageDimensions(file);
+          if (width < minWidth || height < minHeight) {
+            setError(`Cover art must be at least ${minWidth} x ${minHeight}px. Yours is ${width} x ${height}px.`);
+            onUploaded(null, null);
+            return;
+          }
+        }
         const { url } = await uploadMedia(file, setProgress, INTAKE_UPLOAD_BASE);
         onUploaded(url, file.name);
       } catch (err) {
@@ -295,7 +333,7 @@ function UploadField({
         setProgress(null);
       }
     },
-    [onUploaded],
+    [onUploaded, maxBytes, minWidth, minHeight],
   );
 
   return (
@@ -344,6 +382,47 @@ function UploadField({
   );
 }
 
+/** A labelled multi-select rendered as an accessible checkbox group. */
+function CheckGroup({
+  legend,
+  name,
+  options,
+  selected,
+  onToggle,
+  labels,
+  grid,
+}: {
+  legend: string;
+  name: string;
+  options: readonly string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  labels?: Record<string, string>;
+  grid?: boolean;
+}) {
+  return (
+    <fieldset className="check-group">
+      <legend>{legend}</legend>
+      <div className={grid ? 'check-grid' : 'check-row'}>
+        {options.map((value) => {
+          const id = `${name}-${value.replace(/\s+/g, '-')}`;
+          return (
+            <div key={value} className="field-checkbox">
+              <input
+                id={id}
+                type="checkbox"
+                checked={selected.includes(value)}
+                onChange={() => onToggle(value)}
+              />
+              <label htmlFor={id}>{labels?.[value] ?? value}</label>
+            </div>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 function SubmissionForm({
   verbatiimConnected,
   series,
@@ -355,7 +434,9 @@ function SubmissionForm({
 }) {
   const [titleName, setTitleName] = useState('');
   const [kind, setKind] = useState<string>('film');
-  const [genre, setGenre] = useState<string>(GENRES[0]);
+  const [audiences, setAudiences] = useState<string[]>([]);
+  const [genres, setGenres] = useState<string[]>([]);
+  const [subgenres, setSubgenres] = useState<string[]>([]);
   const [rating, setRating] = useState<string>('');
   const [synopsis, setSynopsis] = useState('');
 
@@ -377,6 +458,14 @@ function SubmissionForm({
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
 
+  const [isAdaptation, setIsAdaptation] = useState(false);
+  const [adaptationSource, setAdaptationSource] = useState('');
+  const [rightsProofUrl, setRightsProofUrl] = useState('');
+  const [rightsProofName, setRightsProofName] = useState<string | null>(null);
+  const [idProofUrl, setIdProofUrl] = useState('');
+  const [idProofName, setIdProofName] = useState<string | null>(null);
+  const [adaptationAttested, setAdaptationAttested] = useState(false);
+
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -385,10 +474,27 @@ function SubmissionForm({
   const hasWork = Boolean(sourceUrl || workUrl.trim() || verbatiimProjectId);
   const isSeries = kind === 'series';
   const seriesOk = !isSeries || (seriesMode === 'existing' ? Boolean(seriesId) : Boolean(seriesName.trim()));
-  const canSubmit = Boolean(rightsConfirmed && rating && posterUrl && seriesOk);
+  const adaptationOk =
+    !isAdaptation ||
+    Boolean(adaptationSource.trim() && rightsProofUrl && idProofUrl && adaptationAttested);
+  const canSubmit = Boolean(
+    rightsConfirmed &&
+      rating &&
+      posterUrl &&
+      audiences.length > 0 &&
+      genres.length > 0 &&
+      seriesOk &&
+      adaptationOk,
+  );
+
+  const toggle = (list: string[], value: string): string[] =>
+    list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 
   function resetForm() {
     setTitleName('');
+    setAudiences([]);
+    setGenres([]);
+    setSubgenres([]);
     setRating('');
     setSynopsis('');
     setPosterUrl('');
@@ -402,6 +508,13 @@ function SubmissionForm({
     setVerbatiimProjectId(null);
     setWorkUrl('');
     setVerbatiimInput('');
+    setIsAdaptation(false);
+    setAdaptationSource('');
+    setRightsProofUrl('');
+    setRightsProofName(null);
+    setIdProofUrl('');
+    setIdProofName(null);
+    setAdaptationAttested(false);
     setRightsConfirmed(false);
   }
 
@@ -442,7 +555,9 @@ function SubmissionForm({
       await apiSend('POST', '/api/submissions', {
         titleName,
         kind,
-        genre,
+        audiences,
+        genres,
+        subgenres,
         rating,
         synopsis,
         posterUrl,
@@ -452,6 +567,11 @@ function SubmissionForm({
         seriesId: isSeries && seriesMode === 'existing' ? seriesId : null,
         seriesName: isSeries && seriesMode === 'new' ? seriesName.trim() : null,
         workUrl: workUrl.trim() || null,
+        isAdaptation,
+        adaptationSource: adaptationSource.trim(),
+        rightsProofUrl: rightsProofUrl || null,
+        idProofUrl: idProofUrl || null,
+        adaptationAttested,
         rightsConfirmed,
       });
       setSent(true);
@@ -467,6 +587,24 @@ function SubmissionForm({
   return (
     <section aria-labelledby="submission-form-heading">
       <h2 id="submission-form-heading">Submit a work</h2>
+      <aside className="intake-specs" aria-label="File requirements">
+        <h3>File requirements</h3>
+        <ul>
+          <li>
+            <strong>Cover art:</strong> {UPLOAD_SPECS.poster.formats}, up to{' '}
+            {UPLOAD_SPECS.poster.maxLabel}. {UPLOAD_SPECS.poster.aspect}, at least{' '}
+            {UPLOAD_SPECS.poster.minWidth} x {UPLOAD_SPECS.poster.minHeight}px.
+          </li>
+          <li>
+            <strong>Video:</strong> {UPLOAD_SPECS.video.formats}, up to {UPLOAD_SPECS.video.maxLabel}.
+            Larger files upload in resumable parts.
+          </li>
+          <li>
+            <strong>Captions (optional):</strong> {UPLOAD_SPECS.captions.formats}, up to{' '}
+            {UPLOAD_SPECS.captions.maxLabel}.
+          </li>
+        </ul>
+      </aside>
       {sent && (
         <p className="status status-ok" role="status">
           Submission received. A reviewer will look at it; you will get a notification either way.
@@ -484,28 +622,41 @@ function SubmissionForm({
             onChange={(event) => setTitleName(event.target.value)}
           />
         </div>
-        <div className="field-row">
-          <div className="field">
-            <label htmlFor="sub-kind">Kind</label>
-            <select id="sub-kind" value={kind} onChange={(event) => setKind(event.target.value)}>
-              {CONTENT_KINDS.map((value) => (
-                <option key={value} value={value}>
-                  {CONTENT_KIND_LABELS[value]}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="sub-genre">Genre</label>
-            <select id="sub-genre" value={genre} onChange={(event) => setGenre(event.target.value)}>
-              {GENRES.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="field">
+          <label htmlFor="sub-kind">Kind</label>
+          <select id="sub-kind" value={kind} onChange={(event) => setKind(event.target.value)}>
+            {CONTENT_KINDS.map((value) => (
+              <option key={value} value={value}>
+                {CONTENT_KIND_LABELS[value]}
+              </option>
+            ))}
+          </select>
         </div>
+
+        <CheckGroup
+          legend="Audience (choose at least one)"
+          name="audience"
+          options={AUDIENCES}
+          labels={AUDIENCE_LABELS}
+          selected={audiences}
+          onToggle={(value) => setAudiences((cur) => toggle(cur, value))}
+        />
+        <CheckGroup
+          legend="Genres (choose at least one)"
+          name="genre"
+          options={GENRES}
+          selected={genres}
+          onToggle={(value) => setGenres((cur) => toggle(cur, value))}
+          grid
+        />
+        <CheckGroup
+          legend="Sub-genres (optional, combine freely)"
+          name="subgenre"
+          options={SUBGENRES}
+          selected={subgenres}
+          onToggle={(value) => setSubgenres((cur) => toggle(cur, value))}
+          grid
+        />
 
         <div className="field">
           <label htmlFor="sub-rating">Viewer rating (required)</label>
@@ -551,8 +702,11 @@ function SubmissionForm({
         <UploadField
           id="sub-poster"
           label="Cover art (required)"
-          accept="image/jpeg,image/png,image/webp"
-          hint="A JPEG, PNG, or WebP poster image. This is the artwork viewers see."
+          accept={UPLOAD_SPECS.poster.accept}
+          hint={`${UPLOAD_SPECS.poster.formats}, up to ${UPLOAD_SPECS.poster.maxLabel}, ${UPLOAD_SPECS.poster.aspect}. This is the artwork viewers see.`}
+          maxBytes={UPLOAD_SPECS.poster.maxBytes}
+          minWidth={UPLOAD_SPECS.poster.minWidth}
+          minHeight={UPLOAD_SPECS.poster.minHeight}
           currentName={posterName}
           onUploaded={(url, name) => {
             setPosterUrl(url ?? '');
@@ -629,8 +783,9 @@ function SubmissionForm({
           <UploadField
             id="sub-video"
             label="Upload the film"
-            accept="video/mp4,video/webm"
-            hint="MP4 or WebM, up to 512 MB. Large files upload in resumable parts."
+            accept={UPLOAD_SPECS.video.accept}
+            hint={`${UPLOAD_SPECS.video.formats}, up to ${UPLOAD_SPECS.video.maxLabel}. Large files upload in resumable parts.`}
+            maxBytes={UPLOAD_SPECS.video.maxBytes}
             currentName={sourceName}
             onUploaded={(url, name) => {
               setSourceUrl(url ?? '');
@@ -642,8 +797,9 @@ function SubmissionForm({
           <UploadField
             id="sub-captions"
             label="Captions (optional)"
-            accept="text/vtt,.vtt"
-            hint="A WebVTT captions file makes your work accessible."
+            accept={UPLOAD_SPECS.captions.accept}
+            hint={`${UPLOAD_SPECS.captions.formats}, up to ${UPLOAD_SPECS.captions.maxLabel}. A captions file makes your work accessible.`}
+            maxBytes={UPLOAD_SPECS.captions.maxBytes}
             currentName={captionsName}
             onUploaded={(url, name) => {
               setCaptionsUrl(url ?? '');
@@ -716,6 +872,73 @@ function SubmissionForm({
               </p>
             </div>
           </details>
+        </fieldset>
+
+        <fieldset className="intake-sources">
+          <legend>Rights &amp; licensing</legend>
+          <div className="field field-checkbox">
+            <input
+              id="sub-adaptation"
+              type="checkbox"
+              checked={isAdaptation}
+              onChange={(event) => setIsAdaptation(event.target.checked)}
+            />
+            <label htmlFor="sub-adaptation">
+              This is an adaptation of a third-party published work (a book, script, article, song,
+              or other copyrighted material I did not create).
+            </label>
+          </div>
+          {isAdaptation && (
+            <>
+              <div className="field">
+                <label htmlFor="sub-adaptation-source">What published work are you adapting?</label>
+                <input
+                  id="sub-adaptation-source"
+                  type="text"
+                  maxLength={200}
+                  value={adaptationSource}
+                  onChange={(event) => setAdaptationSource(event.target.value)}
+                />
+              </div>
+              <UploadField
+                id="sub-rights-proof"
+                label="Proof of rights or licence (required)"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                hint="A licence, rights assignment, or written permission. PDF or image, up to 20 MB."
+                maxBytes={20 * 1024 * 1024}
+                currentName={rightsProofName}
+                onUploaded={(url, name) => {
+                  setRightsProofUrl(url ?? '');
+                  setRightsProofName(name);
+                }}
+              />
+              <UploadField
+                id="sub-id-proof"
+                label="Your identification (required)"
+                accept="application/pdf,image/jpeg,image/png,image/webp"
+                hint="Government or studio ID to accompany the rights proof. PDF or image, up to 20 MB."
+                maxBytes={20 * 1024 * 1024}
+                currentName={idProofName}
+                onUploaded={(url, name) => {
+                  setIdProofUrl(url ?? '');
+                  setIdProofName(name);
+                }}
+              />
+              <div className="field field-checkbox">
+                <input
+                  id="sub-adaptation-attest"
+                  type="checkbox"
+                  checked={adaptationAttested}
+                  onChange={(event) => setAdaptationAttested(event.target.checked)}
+                />
+                <label htmlFor="sub-adaptation-attest">
+                  I attest that I own or have licensed the rights to adapt this work, that the
+                  documents above are true, and I agree to hold Sweam and Falcyn harmless from any
+                  liability arising from it.
+                </label>
+              </div>
+            </>
+          )}
         </fieldset>
 
         <div className="field field-checkbox">

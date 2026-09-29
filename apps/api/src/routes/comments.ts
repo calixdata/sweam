@@ -72,6 +72,37 @@ commentRoutes.delete('/:commentId', async (c) => {
   return c.json({ removed: true });
 });
 
+async function countCommentLikes(db: D1Database, commentId: string): Promise<number> {
+  const row = await db
+    .prepare('SELECT COUNT(*) AS n FROM comment_likes WHERE comment_id = ?')
+    .bind(commentId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
+/** Like a comment (double-tap to like). Idempotent. */
+commentRoutes.put('/:commentId/like', async (c) => {
+  const user = currentUser(c);
+  const comment = await loadComment(c.env.DB, c.req.param('commentId'));
+  if (comment.status !== 'visible') fail(404, 'comment_not_found', 'No such comment.');
+  await c.env.DB.prepare(
+    'INSERT OR IGNORE INTO comment_likes (comment_id, user_id, created_at) VALUES (?, ?, ?)',
+  )
+    .bind(comment.id, user.id, nowIso())
+    .run();
+  return c.json({ likedByMe: true, likes: await countCommentLikes(c.env.DB, comment.id) });
+});
+
+/** Remove a like from a comment. */
+commentRoutes.delete('/:commentId/like', async (c) => {
+  const user = currentUser(c);
+  const comment = await loadComment(c.env.DB, c.req.param('commentId'));
+  await c.env.DB.prepare('DELETE FROM comment_likes WHERE comment_id = ? AND user_id = ?')
+    .bind(comment.id, user.id)
+    .run();
+  return c.json({ likedByMe: false, likes: await countCommentLikes(c.env.DB, comment.id) });
+});
+
 commentRoutes.post('/:commentId/report', async (c) => {
   const user = currentUser(c);
   await enforceRateLimit(c.env.DB, RATE_LIMITS.report, user.id);
