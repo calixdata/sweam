@@ -7,7 +7,13 @@ import type { AppEnv } from '../env';
 import { generateToken, hashPassword, sha256Hex, verifyPassword } from '../lib/auth';
 import { EmailError, emailConfigured, sendEmail, verificationEmail } from '../lib/email';
 import { fail, nowIso, parseBody } from '../lib/http';
-import { RATE_LIMITS, clientIp, enforceRateLimit } from '../lib/ratelimit';
+import {
+  RATE_LIMITS,
+  clientIp,
+  enforceGlobalLoginCap,
+  enforceRateLimit,
+  recordLoginFailure,
+} from '../lib/ratelimit';
 import { SESSION_COOKIE, createSession, destroySession } from '../lib/session';
 import {
   resendVerificationSchema,
@@ -120,6 +126,7 @@ authRoutes.get('/username-available', async (c) => {
 
 /** Confirm a sign-up from the emailed link, then sign the new account in. */
 authRoutes.post('/verify', async (c) => {
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.verifyIp, clientIp(c.req.raw));
   const body = await parseBody(c, verifyTokenSchema);
   const tokenHash = await sha256Hex(body.token);
   const row = await c.env.DB.prepare(
@@ -175,6 +182,9 @@ authRoutes.post('/signin', async (c) => {
   const body = await parseBody(c, signInSchema);
   await enforceRateLimit(c.env.DB, RATE_LIMITS.signinIp, clientIp(c.req.raw));
   await enforceRateLimit(c.env.DB, RATE_LIMITS.signinEmail, body.email);
+  // Distributed brute-force guard: reject before any password work if failed
+  // logins across all IPs have exceeded the global cap this window.
+  await enforceGlobalLoginCap(c.env.DB);
 
   const row = await c.env.DB.prepare(
     `SELECT u.id, u.email, u.display_name, u.username, u.password_hash, u.email_verified, cp.handle,
@@ -203,9 +213,11 @@ authRoutes.post('/signin', async (c) => {
   if (!row) {
     DUMMY_HASH_PROMISE.current ??= hashPassword('sweam-timing-equalizer');
     await verifyPassword(body.password, await DUMMY_HASH_PROMISE.current);
+    await recordLoginFailure(c.env.DB);
     fail(401, 'invalid_credentials', 'Invalid email or password.');
   }
   if (!(await verifyPassword(body.password, row.password_hash))) {
+    await recordLoginFailure(c.env.DB);
     fail(401, 'invalid_credentials', 'Invalid email or password.');
   }
   // Only reveal verification state to someone who has the correct password.
