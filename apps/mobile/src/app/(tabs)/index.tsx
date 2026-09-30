@@ -10,6 +10,7 @@ import {
   type ViewToken,
 } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -20,10 +21,11 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { Link, router } from 'expo-router';
-import { api, videoSource } from '../../lib/api';
+import { api, mediaUrl, videoSource } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { colors } from '../../lib/theme';
 import type { FeedItem } from '../../lib/types';
+import { CommentsSheet } from '../../components/CommentsSheet';
 
 export default function FeedScreen() {
   const { user, loading: authLoading, token } = useAuth();
@@ -31,6 +33,7 @@ export default function FeedScreen() {
   const [error, setError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [listHeight, setListHeight] = useState(0);
+  const [commentSlug, setCommentSlug] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -47,14 +50,12 @@ export default function FeedScreen() {
   }, [authLoading, user, load]);
 
   const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    const first = viewableItems[0];
+    const first = viewableItems.find((v) => v.isViewable);
     if (first?.index != null) setActiveIndex(first.index);
   }).current;
-  const viewConfig = useRef({ itemVisiblePercentThreshold: 80 }).current;
+  const viewConfig = useRef({ itemVisiblePercentThreshold: 60 }).current;
 
-  if (authLoading) {
-    return <Centered><ActivityIndicator color={colors.accent} /></Centered>;
-  }
+  if (authLoading) return <Centered><ActivityIndicator color={colors.accent} /></Centered>;
 
   if (!user) {
     return (
@@ -64,9 +65,7 @@ export default function FeedScreen() {
         <Pressable style={styles.primaryBtn} onPress={() => router.push('/signup')}>
           <Text style={styles.primaryBtnText}>Join free</Text>
         </Pressable>
-        <Link href="/signin" style={styles.link}>
-          Sign in
-        </Link>
+        <Link href="/signin" style={styles.link}>Sign in</Link>
       </Centered>
     );
   }
@@ -92,18 +91,30 @@ export default function FeedScreen() {
           onViewableItemsChanged={onViewable}
           viewabilityConfig={viewConfig}
           getItemLayout={(_, index) => ({ length: listHeight, offset: listHeight * index, index })}
-          windowSize={3}
+          initialNumToRender={1}
           maxToRenderPerBatch={2}
+          windowSize={3}
+          removeClippedSubviews
           renderItem={({ item, index }) => (
             <FeedCard
               item={item}
               height={listHeight}
               isActive={index === activeIndex}
+              // Preload the current and the next clip only; everything else is a poster.
+              isNear={index === activeIndex || index === activeIndex + 1}
               token={token}
+              onOpenComments={() => setCommentSlug(item.slug)}
             />
           )}
         />
       )}
+
+      <CommentsSheet
+        slug={commentSlug}
+        visible={commentSlug !== null}
+        signedIn={user !== null}
+        onClose={() => setCommentSlug(null)}
+      />
     </View>
   );
 }
@@ -112,27 +123,57 @@ function FeedCard({
   item,
   height,
   isActive,
+  isNear,
   token,
+  onOpenComments,
 }: {
   item: FeedItem;
   height: number;
   isActive: boolean;
+  isNear: boolean;
   token: string | null;
+  onOpenComments: () => void;
 }) {
   const [liked, setLiked] = useState(item.likedByMe);
   const [likeCount, setLikeCount] = useState(item.likes);
   const [paused, setPaused] = useState(false);
+  const [showPoster, setShowPoster] = useState(true);
   const heart = useSharedValue(0);
+  const poster = mediaUrl(item.posterUrl);
 
-  const player = useVideoPlayer(videoSource(item.videoUrl, token), (p) => {
+  const player = useVideoPlayer(null, (p) => {
     p.loop = true;
     p.muted = false;
   });
+
+  // Load the video only for the active clip and the next one (single stream while
+  // watching), so the feed does not buffer on many videos at once.
+  useEffect(() => {
+    if (isNear) {
+      try {
+        player.replace(videoSource(item.videoUrl, token));
+      } catch {
+        /* player may be released mid-scroll */
+      }
+    }
+  }, [isNear, item.videoUrl, token, player]);
 
   useEffect(() => {
     if (isActive && !paused) player.play();
     else player.pause();
   }, [isActive, paused, player]);
+
+  // Hide the poster once the active video is actually playing.
+  useEffect(() => {
+    if (!isActive) {
+      setShowPoster(true);
+      return;
+    }
+    const sub = player.addListener('playingChange', ({ isPlaying }) => {
+      if (isPlaying) setShowPoster(false);
+    });
+    return () => sub.remove();
+  }, [isActive, player]);
 
   const heartStyle = useAnimatedStyle(() => ({
     opacity: heart.value,
@@ -144,9 +185,7 @@ function FeedCard({
       setLiked(next);
       setLikeCount((n) => n + (next ? 1 : -1));
       try {
-        await (next
-          ? api.put(`/api/me/likes/${item.titleId}`)
-          : api.del(`/api/me/likes/${item.titleId}`));
+        await (next ? api.put(`/api/me/likes/${item.titleId}`) : api.del(`/api/me/likes/${item.titleId}`));
       } catch {
         setLiked(!next);
         setLikeCount((n) => n + (next ? -1 : 1));
@@ -160,45 +199,39 @@ function FeedCard({
     if (!liked) void like(true);
   }, [heart, liked, like]);
 
-  const doubleTap = Gesture.Tap()
-    .numberOfTaps(2)
-    .maxDuration(300)
-    .onEnd(() => {
-      runOnJS(burstLike)();
-    });
-  const singleTap = Gesture.Tap()
-    .numberOfTaps(1)
-    .onEnd(() => {
-      runOnJS(setPaused)((p) => !p);
-    });
+  const doubleTap = Gesture.Tap().numberOfTaps(2).maxDuration(300).onEnd(() => runOnJS(burstLike)());
+  const singleTap = Gesture.Tap().numberOfTaps(1).onEnd(() => runOnJS(setPaused)((p) => !p));
   const gesture = Gesture.Exclusive(doubleTap, singleTap);
 
   return (
     <View style={{ height, backgroundColor: '#000' }}>
+      {poster && (
+        <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" />
+      )}
       <GestureDetector gesture={gesture}>
         <View style={StyleSheet.absoluteFill}>
-          <VideoView
-            style={StyleSheet.absoluteFill}
-            player={player}
-            contentFit="cover"
-            nativeControls={false}
-          />
+          {isNear && (
+            <VideoView
+              style={[StyleSheet.absoluteFill, showPoster && isActive ? styles.hidden : null]}
+              player={player}
+              contentFit="cover"
+              nativeControls={false}
+            />
+          )}
           <Animated.View style={[styles.heartWrap, heartStyle]} pointerEvents="none">
             <Ionicons name="heart" size={120} color={colors.like} />
           </Animated.View>
-          {paused && (
-            <View style={styles.pausedWrap} pointerEvents="none">
+          {paused && isActive && (
+            <View style={styles.heartWrap} pointerEvents="none">
               <Ionicons name="play" size={72} color="rgba(255,255,255,0.85)" />
             </View>
           )}
         </View>
       </GestureDetector>
 
-      {/* Right-side action rail */}
       <View style={styles.rail}>
         <Pressable
           style={styles.railBtn}
-          accessibilityRole="button"
           accessibilityLabel={liked ? `Unlike, ${likeCount} likes` : `Like, ${likeCount} likes`}
           onPress={() => void like(!liked)}
         >
@@ -207,30 +240,25 @@ function FeedCard({
         </Pressable>
         <Pressable
           style={styles.railBtn}
-          accessibilityRole="button"
           accessibilityLabel={`${item.commentCount} comments`}
-          onPress={() => router.push(`/t/${item.slug}`)}
+          onPress={onOpenComments}
         >
           <Ionicons name="chatbubble-outline" size={32} color="#fff" />
           <Text style={styles.railText}>{item.commentCount}</Text>
         </Pressable>
         <Pressable
           style={styles.railBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Open title"
+          accessibilityLabel="Open full player"
           onPress={() => router.push(`/watch/${item.episodeId}`)}
         >
           <Ionicons name="expand-outline" size={30} color="#fff" />
-          <Text style={styles.railText}>Watch</Text>
+          <Text style={styles.railText}>Full</Text>
         </Pressable>
       </View>
 
-      {/* Bottom caption */}
       <View style={styles.caption} pointerEvents="box-none">
         <Text style={styles.captionName}>@{item.creator.handle}</Text>
-        <Text style={styles.captionText} numberOfLines={2}>
-          {item.name}
-        </Text>
+        <Text style={styles.captionText} numberOfLines={2}>{item.name}</Text>
       </View>
     </View>
   );
@@ -243,27 +271,13 @@ function Centered({ children }: { children: React.ReactNode }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   centered: { alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
+  hidden: { opacity: 0 },
   gateTitle: { color: colors.text, fontSize: 24, fontWeight: '700' },
   gateBody: { color: colors.muted, fontSize: 16, textAlign: 'center' },
-  primaryBtn: {
-    backgroundColor: colors.accent,
-    paddingVertical: 12,
-    paddingHorizontal: 28,
-    borderRadius: 10,
-    marginTop: 8,
-  },
+  primaryBtn: { backgroundColor: colors.accent, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 10, marginTop: 8 },
   primaryBtnText: { color: '#04121a', fontSize: 16, fontWeight: '700' },
   link: { color: colors.accent, fontSize: 15, marginTop: 4 },
   heartWrap: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  pausedWrap: {
     position: 'absolute',
     top: 0,
     left: 0,
