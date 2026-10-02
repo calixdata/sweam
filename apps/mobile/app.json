@@ -32,6 +32,20 @@
       "expo-video",
       "expo-secure-store",
       [
+        "expo-camera",
+        {
+          "cameraPermission": "Sweam uses your camera so you can record and post clips.",
+          "microphonePermission": "Sweam uses your microphone to record sound with your clips.",
+          "recordAudioAndroid": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Sweam needs access to your library so you can post a video you already have."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#080e19",

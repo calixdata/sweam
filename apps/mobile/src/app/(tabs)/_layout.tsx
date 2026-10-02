@@ -1,8 +1,10 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
+import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors } from '../../lib/theme';
+import { colors, radius } from '../../lib/theme';
 
 export default function TabsLayout() {
+  const router = useRouter();
   return (
     <Tabs
       screenOptions={{
@@ -27,6 +29,33 @@ export default function TabsLayout() {
         options={{
           title: 'Browse',
           tabBarIcon: ({ color, size }) => <Ionicons name="grid" color={color} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="create"
+        options={{
+          title: 'Create',
+          tabBarLabel: () => null,
+          tabBarIcon: () => (
+            <View
+              style={{
+                width: 48,
+                height: 32,
+                borderRadius: radius.sm,
+                backgroundColor: colors.accent,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="add" size={24} color={colors.bg} />
+            </View>
+          ),
+        }}
+        listeners={{
+          tabPress: (e) => {
+            e.preventDefault();
+            router.push('/record');
+          },
         }}
       />
       <Tabs.Screen

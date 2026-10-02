@@ -24,6 +24,10 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen
+            name="record"
+            options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }}
+          />
           <Stack.Screen name="watch/[episodeId]" options={{ animation: 'fade' }} />
           <Stack.Screen name="t/[slug]" options={{ headerShown: false }} />
           <Stack.Screen name="signin" options={{ presentation: 'modal' }} />
