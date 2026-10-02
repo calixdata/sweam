@@ -101,3 +101,22 @@ export interface WatchPayload {
   nextEpisode: { id: string; season: number; episode: number; name: string } | null;
   positionS: number;
 }
+
+export interface CreatorPublicPage {
+  handle: string;
+  displayName: string;
+  bio: string;
+  verified: boolean;
+  followerCount: number;
+  followedByMe: boolean;
+  titles: TitleSummary[];
+}
+
+export interface NotificationItem {
+  id: string;
+  kind: string;
+  body: string;
+  link: string | null;
+  read: boolean;
+  createdAt: string;
+}

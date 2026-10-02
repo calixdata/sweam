@@ -97,6 +97,16 @@ export default function TitleScreen() {
 
       <View style={styles.body}>
         <Text style={styles.name}>{title.name}</Text>
+        <Pressable
+          style={styles.creatorRow}
+          onPress={() => router.push(`/c/${title.creator.handle}`)}
+          accessibilityRole="button"
+          accessibilityLabel={`View ${title.creator.displayName}'s profile`}
+        >
+          <Ionicons name="person-circle-outline" size={18} color={colors.accent} />
+          <Text style={styles.creatorText}>@{title.creator.handle}</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.muted} />
+        </Pressable>
         <Text style={styles.metaLine} numberOfLines={1}>
           {[title.kind, title.audiences?.[0], title.genre, title.advisory].filter(Boolean).join('  ·  ')}
         </Text>
@@ -220,6 +230,8 @@ const styles = StyleSheet.create({
   back: { position: 'absolute', top: 12, left: 12, padding: 6, backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 20 },
   body: { padding: 16, gap: 8 },
   name: { color: colors.text, fontSize: 26, fontWeight: '800' },
+  creatorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
+  creatorText: { color: colors.accent, fontSize: 15, fontWeight: '600' },
   metaLine: { color: colors.muted, fontSize: 13 },
   stats: { color: colors.muted, fontSize: 13 },
   synopsis: { color: colors.text, fontSize: 15, lineHeight: 22, marginTop: 4 },

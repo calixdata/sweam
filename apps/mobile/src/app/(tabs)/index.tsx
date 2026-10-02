@@ -257,7 +257,13 @@ function FeedCard({
       </View>
 
       <View style={styles.caption} pointerEvents="box-none">
-        <Text style={styles.captionName}>@{item.creator.handle}</Text>
+        <Pressable
+          onPress={() => router.push(`/c/${item.creator.handle}`)}
+          accessibilityRole="button"
+          accessibilityLabel={`View @${item.creator.handle}'s profile`}
+        >
+          <Text style={styles.captionName}>@{item.creator.handle}</Text>
+        </Pressable>
         <Text style={styles.captionText} numberOfLines={2}>{item.name}</Text>
       </View>
     </View>

@@ -30,6 +30,9 @@ export default function RootLayout() {
           />
           <Stack.Screen name="watch/[episodeId]" options={{ animation: 'fade' }} />
           <Stack.Screen name="t/[slug]" options={{ headerShown: false }} />
+          <Stack.Screen name="c/[handle]" />
+          <Stack.Screen name="search" options={{ animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="notifications" />
           <Stack.Screen name="signin" options={{ presentation: 'modal' }} />
           <Stack.Screen name="signup" options={{ presentation: 'modal' }} />
         </Stack>

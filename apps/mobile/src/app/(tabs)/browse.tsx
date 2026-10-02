@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { api, mediaUrl } from '../../lib/api';
 import { colors, radius } from '../../lib/theme';
@@ -26,6 +27,15 @@ export default function BrowseScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 40 }}>
       <Text style={styles.brand}>SWEAM</Text>
+      <Pressable
+        style={styles.searchBar}
+        onPress={() => router.push('/search')}
+        accessibilityRole="button"
+        accessibilityLabel="Search Sweam"
+      >
+        <Ionicons name="search" size={18} color={colors.muted} />
+        <Text style={styles.searchText}>Search titles and creators</Text>
+      </Pressable>
       {feature && (
         <Pressable style={styles.hero} onPress={() => router.push(`/t/${feature.slug}`)}>
           {feature.heroUrl || feature.posterUrl ? (
@@ -102,6 +112,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 12,
   },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  searchText: { color: colors.muted, fontSize: 15 },
   hero: { margin: 12, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.surface },
   heroImg: { width: '100%', aspectRatio: 16 / 10 },
   heroOverlay: {
