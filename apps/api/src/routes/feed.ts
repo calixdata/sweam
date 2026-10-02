@@ -37,6 +37,8 @@ feedRoutes.get('/', async (c) => {
   const user = currentUser(c);
   // Keyset pagination on published_at: pass the last item's `nextCursor` as ?before=.
   const before = c.req.query('before') ?? '';
+  // ?following=1 narrows the feed to clips from creators the viewer follows.
+  const following = c.req.query('following') === '1' ? 1 : 0;
   const rows = await c.env.DB.prepare(
     `SELECT t.id AS title_id, t.slug, t.name, t.kind, t.synopsis,
        u.display_name AS creator_name, cp.handle AS creator_handle, t.poster_url,
@@ -52,10 +54,13 @@ feedRoutes.get('/', async (c) => {
        SELECT id FROM episodes WHERE title_id = t.id ORDER BY season, episode LIMIT 1
      )
      WHERE t.published = 1 AND (?2 = '' OR t.published_at < ?2)
+       AND (?3 = 0 OR EXISTS (
+         SELECT 1 FROM follows f WHERE f.follower_id = ?1 AND f.creator_id = t.creator_id
+       ))
      ORDER BY t.published_at DESC
      LIMIT ${PAGE}`,
   )
-    .bind(user.id, before)
+    .bind(user.id, before, following)
     .all<FeedRow>();
 
   const items: FeedItem[] = rows.results.map((row) => ({

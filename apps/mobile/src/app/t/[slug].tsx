@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -25,6 +25,8 @@ export default function TitleScreen() {
   const [comments, setComments] = useState<CommentItem[]>([]);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [replyTo, setReplyTo] = useState<{ rootId: string; author: string } | null>(null);
+  const inputRef = useRef<TextInput>(null);
 
   const loadComments = useCallback(async () => {
     if (!slug) return;
@@ -59,19 +61,25 @@ export default function TitleScreen() {
     }
   }, []);
 
+  const startReply = useCallback((rootId: string, author: string) => {
+    setReplyTo({ rootId, author });
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
   const postComment = useCallback(async () => {
     if (!draft.trim() || !slug) return;
     try {
       await api.post(`/api/titles/${encodeURIComponent(slug)}/comments`, {
         body: draft.trim(),
-        parentId: null,
+        parentId: replyTo?.rootId ?? null,
       });
       setDraft('');
+      setReplyTo(null);
       await loadComments();
     } catch {
       /* ignore */
     }
-  }, [draft, slug, loadComments]);
+  }, [draft, slug, replyTo, loadComments]);
 
   if (error) return <Center><Text style={styles.muted}>{error}</Text></Center>;
   if (!title) return <Center><ActivityIndicator color={colors.accent} /></Center>;
@@ -126,16 +134,27 @@ export default function TitleScreen() {
         <Text style={styles.sectionTitle}>Comments</Text>
         {user ? (
           <View style={styles.composer}>
+            {replyTo && (
+              <View style={styles.replyBar}>
+                <Text style={styles.replyBarText} numberOfLines={1}>
+                  Replying to {replyTo.author}
+                </Text>
+                <Pressable onPress={() => setReplyTo(null)} hitSlop={8} accessibilityLabel="Cancel reply">
+                  <Ionicons name="close" size={16} color={colors.muted} />
+                </Pressable>
+              </View>
+            )}
             <TextInput
+              ref={inputRef}
               style={styles.input}
-              placeholder="Add a comment"
+              placeholder={replyTo ? `Reply to ${replyTo.author}…` : 'Add a comment'}
               placeholderTextColor={colors.muted}
               value={draft}
               onChangeText={setDraft}
               multiline
             />
             <Pressable style={styles.postBtn} onPress={() => void postComment()} disabled={!draft.trim()}>
-              <Text style={styles.postText}>Post</Text>
+              <Text style={styles.postText}>{replyTo ? 'Reply' : 'Post'}</Text>
             </Pressable>
           </View>
         ) : (
@@ -145,7 +164,14 @@ export default function TitleScreen() {
         )}
 
         {comments.map((c) => (
-          <CommentRow key={c.id} comment={c} signedIn={user !== null} onLike={setCommentLike} />
+          <CommentRow
+            key={c.id}
+            comment={c}
+            rootId={c.id}
+            signedIn={user !== null}
+            onLike={setCommentLike}
+            onReply={startReply}
+          />
         ))}
       </View>
     </ScrollView>
@@ -162,16 +188,22 @@ function applyLike(list: CommentItem[], id: string, likes: number, likedByMe: bo
 
 function CommentRow({
   comment,
+  rootId,
   signedIn,
   onLike,
+  onReply,
   isReply,
 }: {
   comment: CommentItem;
+  rootId: string;
   signedIn: boolean;
   onLike: (c: CommentItem, liked: boolean) => void;
+  onReply: (rootId: string, author: string) => void;
   isReply?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const removed = comment.status !== 'visible';
+  const replyCount = comment.replies.length;
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .onEnd(() => {
@@ -193,25 +225,59 @@ function CommentRow({
               <Text style={styles.commentBody}>{comment.body}</Text>
             </View>
           </GestureDetector>
-          <Pressable
-            style={styles.commentLike}
-            disabled={!signedIn}
-            accessibilityRole="button"
-            accessibilityLabel={comment.likedByMe ? 'Unlike comment' : 'Like comment'}
-            onPress={() => onLike(comment, !comment.likedByMe)}
-          >
-            <Ionicons
-              name={comment.likedByMe ? 'heart' : 'heart-outline'}
-              size={16}
-              color={comment.likedByMe ? colors.like : colors.muted}
-            />
-            <Text style={styles.commentLikeText}>{comment.likes}</Text>
-          </Pressable>
+          <View style={styles.commentActions}>
+            <Pressable
+              style={styles.commentLike}
+              disabled={!signedIn}
+              accessibilityRole="button"
+              accessibilityLabel={comment.likedByMe ? 'Unlike comment' : 'Like comment'}
+              onPress={() => onLike(comment, !comment.likedByMe)}
+            >
+              <Ionicons
+                name={comment.likedByMe ? 'heart' : 'heart-outline'}
+                size={16}
+                color={comment.likedByMe ? colors.like : colors.muted}
+              />
+              <Text style={styles.commentLikeText}>{comment.likes}</Text>
+            </Pressable>
+            {signedIn && (
+              <Pressable
+                onPress={() => onReply(rootId, comment.author.displayName)}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={`Reply to ${comment.author.displayName}`}
+              >
+                <Text style={styles.replyBtn}>Reply</Text>
+              </Pressable>
+            )}
+          </View>
         </>
       )}
-      {comment.replies.map((r) => (
-        <CommentRow key={r.id} comment={r} signedIn={signedIn} onLike={onLike} isReply />
-      ))}
+      {!isReply && replyCount > 0 && (
+        <Pressable
+          onPress={() => setExpanded((v) => !v)}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? 'Hide replies' : `View ${replyCount} replies`}
+        >
+          <Text style={styles.viewReplies}>
+            {expanded ? 'Hide replies' : `View ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`}
+          </Text>
+        </Pressable>
+      )}
+      {!isReply &&
+        expanded &&
+        comment.replies.map((r) => (
+          <CommentRow
+            key={r.id}
+            comment={r}
+            rootId={rootId}
+            signedIn={signedIn}
+            onLike={onLike}
+            onReply={onReply}
+            isReply
+          />
+        ))}
     </View>
   );
 }
@@ -265,6 +331,11 @@ const styles = StyleSheet.create({
   removed: { color: colors.muted, fontStyle: 'italic' },
   commentMeta: { color: colors.muted, fontSize: 12, marginBottom: 2 },
   commentBody: { color: colors.text, fontSize: 15 },
-  commentLike: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+  commentActions: { flexDirection: 'row', alignItems: 'center', gap: 16, marginTop: 6 },
+  commentLike: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   commentLikeText: { color: colors.muted, fontSize: 13 },
+  replyBtn: { color: colors.muted, fontSize: 13, fontWeight: '700' },
+  viewReplies: { color: colors.accent, fontSize: 13, fontWeight: '600', marginTop: 8 },
+  replyBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 2 },
+  replyBarText: { color: colors.muted, fontSize: 13, flex: 1 },
 });

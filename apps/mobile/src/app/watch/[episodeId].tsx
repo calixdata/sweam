@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { api, videoSource } from '../../lib/api';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
@@ -35,6 +35,25 @@ export default function WatchScreen() {
     (p) => {
       p.play();
     },
+  );
+
+  // Stop playback (and its audio) whenever this screen loses focus — e.g. the
+  // user navigates to another tab or screen — and resume on return.
+  useFocusEffect(
+    useCallback(() => {
+      try {
+        player.play();
+      } catch {
+        /* no source yet */
+      }
+      return () => {
+        try {
+          player.pause();
+        } catch {
+          /* player released */
+        }
+      };
+    }, [player]),
   );
 
   const toggleLike = useCallback(async () => {

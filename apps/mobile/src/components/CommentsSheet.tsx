@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -19,9 +19,15 @@ import { api } from '../lib/api';
 import { colors } from '../lib/theme';
 import type { CommentItem } from '../lib/types';
 
+interface ReplyTarget {
+  rootId: string;
+  author: string;
+}
+
 /**
  * TikTok-style comments: slides up over the video (which keeps playing behind).
- * Read, double-tap or tap the heart to like, and post inline. No navigation.
+ * Read, double-tap or tap the heart to like, reply to a specific comment (kept
+ * threaded under it), and post inline. No navigation.
  */
 export function CommentsSheet({
   slug,
@@ -39,6 +45,8 @@ export function CommentsSheet({
   const [comments, setComments] = useState<CommentItem[] | null>(null);
   const [draft, setDraft] = useState('');
   const [posting, setPosting] = useState(false);
+  const [replyTo, setReplyTo] = useState<ReplyTarget | null>(null);
+  const inputRef = useRef<TextInput>(null);
 
   const load = useCallback(async () => {
     if (!slug) return;
@@ -55,7 +63,11 @@ export function CommentsSheet({
   }, [slug, onCountChange]);
 
   useEffect(() => {
-    if (visible) void load();
+    if (visible) {
+      setReplyTo(null);
+      setDraft('');
+      void load();
+    }
   }, [visible, load]);
 
   const setLike = useCallback(async (comment: CommentItem, liked: boolean) => {
@@ -74,22 +86,28 @@ export function CommentsSheet({
     }
   }, []);
 
+  const startReply = useCallback((rootId: string, author: string) => {
+    setReplyTo({ rootId, author });
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, []);
+
   const post = useCallback(async () => {
     if (!draft.trim() || !slug) return;
     setPosting(true);
     try {
       await api.post(`/api/titles/${encodeURIComponent(slug)}/comments`, {
         body: draft.trim(),
-        parentId: null,
+        parentId: replyTo?.rootId ?? null,
       });
       setDraft('');
+      setReplyTo(null);
       await load();
     } catch {
       /* ignore */
     } finally {
       setPosting(false);
     }
-  }, [draft, slug, load]);
+  }, [draft, slug, replyTo, load]);
 
   const count = comments ? countVisible(comments) : 0;
 
@@ -123,33 +141,48 @@ export function CommentsSheet({
             contentContainerStyle={{ paddingBottom: 12 }}
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
-              <SheetComment comment={item} signedIn={signedIn} onLike={setLike} />
+              <SheetComment
+                comment={item}
+                rootId={item.id}
+                signedIn={signedIn}
+                onLike={setLike}
+                onReply={startReply}
+              />
             )}
           />
         )}
 
         {signedIn ? (
-          <View style={styles.composer}>
-            <TextInput
-              style={styles.input}
-              placeholder="Add a comment…"
-              placeholderTextColor={colors.muted}
-              value={draft}
-              onChangeText={setDraft}
-              multiline
-            />
-            <Pressable
-              onPress={() => void post()}
-              disabled={!draft.trim() || posting}
-              accessibilityLabel="Post comment"
-              hitSlop={8}
-            >
-              <Ionicons
-                name="send"
-                size={24}
-                color={draft.trim() ? colors.accent : colors.muted}
+          <View>
+            {replyTo && (
+              <View style={styles.replyBar}>
+                <Text style={styles.replyBarText} numberOfLines={1}>
+                  Replying to {replyTo.author}
+                </Text>
+                <Pressable onPress={() => setReplyTo(null)} accessibilityLabel="Cancel reply" hitSlop={8}>
+                  <Ionicons name="close" size={16} color={colors.muted} />
+                </Pressable>
+              </View>
+            )}
+            <View style={styles.composer}>
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
+                placeholder={replyTo ? `Reply to ${replyTo.author}…` : 'Add a comment…'}
+                placeholderTextColor={colors.muted}
+                value={draft}
+                onChangeText={setDraft}
+                multiline
               />
-            </Pressable>
+              <Pressable
+                onPress={() => void post()}
+                disabled={!draft.trim() || posting}
+                accessibilityLabel={replyTo ? 'Post reply' : 'Post comment'}
+                hitSlop={8}
+              >
+                <Ionicons name="send" size={24} color={draft.trim() ? colors.accent : colors.muted} />
+              </Pressable>
+            </View>
           </View>
         ) : (
           <Pressable
@@ -169,16 +202,22 @@ export function CommentsSheet({
 
 function SheetComment({
   comment,
+  rootId,
   signedIn,
   onLike,
+  onReply,
   isReply,
 }: {
   comment: CommentItem;
+  rootId: string;
   signedIn: boolean;
   onLike: (c: CommentItem, liked: boolean) => void;
+  onReply: (rootId: string, author: string) => void;
   isReply?: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const removed = comment.status !== 'visible';
+  const replyCount = comment.replies.length;
   const doubleTap = Gesture.Tap()
     .numberOfTaps(2)
     .onEnd(() => {
@@ -206,9 +245,41 @@ function SheetComment({
             </View>
           </GestureDetector>
         )}
-        {comment.replies.map((r) => (
-          <SheetComment key={r.id} comment={r} signedIn={signedIn} onLike={onLike} isReply />
-        ))}
+        {!removed && signedIn && (
+          <Pressable
+            onPress={() => onReply(rootId, comment.author.displayName)}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`Reply to ${comment.author.displayName}`}
+          >
+            <Text style={styles.replyBtn}>Reply</Text>
+          </Pressable>
+        )}
+        {!isReply && replyCount > 0 && (
+          <Pressable
+            onPress={() => setExpanded((v) => !v)}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={expanded ? 'Hide replies' : `View ${replyCount} replies`}
+          >
+            <Text style={styles.viewReplies}>
+              {expanded ? 'Hide replies' : `View ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}`}
+            </Text>
+          </Pressable>
+        )}
+        {!isReply &&
+          expanded &&
+          comment.replies.map((r) => (
+            <SheetComment
+              key={r.id}
+              comment={r}
+              rootId={rootId}
+              signedIn={signedIn}
+              onLike={onLike}
+              onReply={onReply}
+              isReply
+            />
+          ))}
       </View>
       {!removed && (
         <Pressable
@@ -290,8 +361,18 @@ const styles = StyleSheet.create({
   author: { color: colors.muted, fontSize: 12, marginBottom: 2 },
   body: { color: colors.text, fontSize: 15, lineHeight: 20 },
   removed: { color: colors.muted, fontStyle: 'italic' },
+  replyBtn: { color: colors.muted, fontSize: 12, fontWeight: '700', marginTop: 6 },
+  viewReplies: { color: colors.accent, fontSize: 13, fontWeight: '600', marginTop: 8 },
   likeCol: { alignItems: 'center', width: 34, gap: 2 },
   likeText: { color: colors.muted, fontSize: 11 },
+  replyBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  replyBarText: { color: colors.muted, fontSize: 13, flex: 1 },
   composer: {
     flexDirection: 'row',
     alignItems: 'center',

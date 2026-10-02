@@ -20,29 +20,49 @@ import Animated, {
   withTiming,
   runOnJS,
 } from 'react-native-reanimated';
-import { Link, router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Link, router, useFocusEffect } from 'expo-router';
 import { api, mediaUrl, videoSource } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { colors } from '../../lib/theme';
 import type { FeedItem } from '../../lib/types';
 import { CommentsSheet } from '../../components/CommentsSheet';
 
+type FeedTab = 'following' | 'foryou';
+
 export default function FeedScreen() {
   const { user, loading: authLoading, token } = useAuth();
+  const insets = useSafeAreaInsets();
+  const [feedTab, setFeedTab] = useState<FeedTab>('foryou');
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [listHeight, setListHeight] = useState(0);
   const [commentSlug, setCommentSlug] = useState<string | null>(null);
+  const [screenFocused, setScreenFocused] = useState(true);
+
+  // Pause all feed playback when the Home tab/screen loses focus so audio never
+  // bleeds into other tabs or screens.
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => setScreenFocused(false);
+    }, []),
+  );
 
   const load = useCallback(async () => {
+    if (!user) return;
+    setItems(null);
+    setActiveIndex(0);
+    setError(null);
     try {
-      const data = await api.get<{ items: FeedItem[] }>('/api/feed');
+      const path = feedTab === 'following' ? '/api/feed?following=1' : '/api/feed';
+      const data = await api.get<{ items: FeedItem[] }>(path);
       setItems(data.items);
     } catch {
       setError('Could not load the feed.');
     }
-  }, []);
+  }, [user, feedTab]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -70,16 +90,33 @@ export default function FeedScreen() {
     );
   }
 
-  if (error) return <Centered><Text style={styles.gateBody}>{error}</Text></Centered>;
-  if (!items) return <Centered><ActivityIndicator color={colors.accent} /></Centered>;
-  if (items.length === 0) return <Centered><Text style={styles.gateBody}>No clips yet.</Text></Centered>;
+  const topTabs = (
+    <View style={[styles.topTabs, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
+      <Pressable
+        onPress={() => setFeedTab('following')}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: feedTab === 'following' }}
+        hitSlop={8}
+      >
+        <Text style={[styles.topTab, feedTab === 'following' && styles.topTabActive]}>Following</Text>
+      </Pressable>
+      <Pressable
+        onPress={() => setFeedTab('foryou')}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: feedTab === 'foryou' }}
+        hitSlop={8}
+      >
+        <Text style={[styles.topTab, feedTab === 'foryou' && styles.topTabActive]}>For You</Text>
+      </Pressable>
+    </View>
+  );
 
   return (
     <View
       style={styles.container}
       onLayout={(e: LayoutChangeEvent) => setListHeight(e.nativeEvent.layout.height)}
     >
-      {listHeight > 0 && (
+      {listHeight > 0 && items && items.length > 0 && (
         <FlatList
           data={items}
           keyExtractor={(item) => item.titleId}
@@ -102,12 +139,40 @@ export default function FeedScreen() {
               isActive={index === activeIndex}
               // Preload the current and the next clip only; everything else is a poster.
               isNear={index === activeIndex || index === activeIndex + 1}
+              screenFocused={screenFocused}
               token={token}
               onOpenComments={() => setCommentSlug(item.slug)}
             />
           )}
         />
       )}
+
+      {!items && !error && (
+        <View style={[StyleSheet.absoluteFill, styles.centeredOverlay]}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      )}
+      {error && (
+        <View style={[StyleSheet.absoluteFill, styles.centeredOverlay]}>
+          <Text style={styles.gateBody}>{error}</Text>
+        </View>
+      )}
+      {items && items.length === 0 && (
+        <View style={[StyleSheet.absoluteFill, styles.centeredOverlay]}>
+          <Text style={styles.gateBody}>
+            {feedTab === 'following'
+              ? 'Clips from creators you follow will show here.'
+              : 'No clips yet.'}
+          </Text>
+          {feedTab === 'following' && (
+            <Pressable onPress={() => router.push('/(tabs)/browse')}>
+              <Text style={styles.link}>Find creators to follow</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      {topTabs}
 
       <CommentsSheet
         slug={commentSlug}
@@ -124,6 +189,7 @@ function FeedCard({
   height,
   isActive,
   isNear,
+  screenFocused,
   token,
   onOpenComments,
 }: {
@@ -131,6 +197,7 @@ function FeedCard({
   height: number;
   isActive: boolean;
   isNear: boolean;
+  screenFocused: boolean;
   token: string | null;
   onOpenComments: () => void;
 }) {
@@ -158,10 +225,12 @@ function FeedCard({
     }
   }, [isNear, item.videoUrl, token, player]);
 
+  // Only the active, un-paused card plays — and only while the screen is focused,
+  // so leaving the tab/screen stops the audio.
   useEffect(() => {
-    if (isActive && !paused) player.play();
+    if (isActive && !paused && screenFocused) player.play();
     else player.pause();
-  }, [isActive, paused, player]);
+  }, [isActive, paused, screenFocused, player]);
 
   // Hide the poster once the active video is actually playing.
   useEffect(() => {
@@ -277,12 +346,30 @@ function Centered({ children }: { children: React.ReactNode }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
   centered: { alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
+  centeredOverlay: { alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
   hidden: { opacity: 0 },
   gateTitle: { color: colors.text, fontSize: 24, fontWeight: '700' },
   gateBody: { color: colors.muted, fontSize: 16, textAlign: 'center' },
   primaryBtn: { backgroundColor: colors.accent, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 10, marginTop: 8 },
   primaryBtnText: { color: '#04121a', fontSize: 16, fontWeight: '700' },
   link: { color: colors.accent, fontSize: 15, marginTop: 4 },
+  topTabs: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 24,
+    paddingBottom: 10,
+  },
+  topTab: { color: 'rgba(255,255,255,0.65)', fontSize: 16, fontWeight: '600' },
+  topTabActive: {
+    color: '#fff',
+    fontWeight: '800',
+    textDecorationLine: 'underline',
+    textDecorationColor: '#fff',
+  },
   heartWrap: {
     position: 'absolute',
     top: 0,
