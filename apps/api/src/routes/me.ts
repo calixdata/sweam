@@ -198,6 +198,42 @@ meRoutes.delete('/push-tokens', async (c) => {
   return c.json({ ok: true });
 });
 
+// The viewer's active Sweam Blu subscriptions and scout all-access (for the manage screen).
+meRoutes.get('/subscriptions', async (c) => {
+  const user = currentUser(c);
+  const { results } = await c.env.DB.prepare(
+    `SELECT bs.creator_id, cp.handle, u.display_name, bs.price_cents, bs.current_period_end
+     FROM blu_subscriptions bs
+     JOIN creator_profiles cp ON cp.user_id = bs.creator_id
+     JOIN users u ON u.id = bs.creator_id
+     WHERE bs.subscriber_id = ? AND bs.status = 'active'
+     ORDER BY bs.created_at DESC`,
+  )
+    .bind(user.id)
+    .all<{
+      creator_id: string;
+      handle: string;
+      display_name: string;
+      price_cents: number;
+      current_period_end: string | null;
+    }>();
+  const scout = await c.env.DB.prepare(
+    "SELECT current_period_end FROM scout_all_access WHERE user_id = ? AND status = 'active'",
+  )
+    .bind(user.id)
+    .first<{ current_period_end: string | null }>();
+  return c.json({
+    blu: results.map((r) => ({
+      creatorId: r.creator_id,
+      handle: r.handle,
+      displayName: r.display_name,
+      priceCents: r.price_cents,
+      currentPeriodEnd: r.current_period_end,
+    })),
+    scoutAllAccess: { active: scout !== null, currentPeriodEnd: scout?.current_period_end ?? null },
+  });
+});
+
 meRoutes.delete('/likes/:titleId', async (c) => {
   const user = currentUser(c);
   const titleId = c.req.param('titleId');

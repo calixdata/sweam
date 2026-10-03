@@ -281,6 +281,20 @@ export interface TitleDetail extends TitleSummary {
   genres: Genre[];
   /** Sub-genre refinements chosen. */
   subgenres: string[];
+  /**
+   * Whether the viewer may watch this title. Always true for Free titles; for
+   * Blu it requires an active subscription, scout all-access, or being the creator.
+   */
+  bluAccess: boolean;
+}
+
+/** One active Blu subscription, for the viewer's manage-subscriptions screen. */
+export interface BluSubscriptionSummary {
+  creatorId: string;
+  handle: string;
+  displayName: string;
+  priceCents: number;
+  currentPeriodEnd: string | null;
 }
 
 /**

@@ -43,6 +43,15 @@ export interface Env {
    * `wrangler secret put FCM_SERVICE_ACCOUNT`. Push is silently skipped when unset.
    */
   FCM_SERVICE_ACCOUNT?: string;
+  /**
+   * Stripe, for Sweam Blu billing and Connect payouts. Secrets; set with
+   * `wrangler secret put STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. The
+   * billing endpoints return "stripe_not_configured" until the secret key is set.
+   */
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  /** Public web origin for Checkout success/cancel and Connect return URLs (default https://sweam.co). */
+  PUBLIC_WEB_URL?: string;
 }
 
 /** Hono generic: bindings plus the per-request variables middleware attaches. */

@@ -85,6 +85,14 @@ bluRoutes.put('/titles/:id', async (c) => {
     ).bind(crypto.randomUUID(), titleId, user.id, wasBlu ? 1 : 0, body.isBlu ? 1 : 0, priceCents, now),
   ]);
 
+  // One Blu price per creator (a subscription unlocks all their Blu content):
+  // the tier chosen here sets the creator's subscription price.
+  if (body.isBlu && priceCents != null) {
+    await c.env.DB.prepare('UPDATE creator_profiles SET blu_price_cents = ? WHERE user_id = ?')
+      .bind(priceCents, user.id)
+      .run();
+  }
+
   // Notify the people a switch affects (a mere price change within Blu does not notify).
   if (switching) {
     if (body.isBlu) {

@@ -7,6 +7,7 @@ import { fail, nowIso, parseBody } from '../lib/http';
 import type { EpisodeRow, TitleRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, mapEpisode, mapTitle, parseJsonArray } from '../lib/mappers';
 import { notify } from '../lib/notify';
+import { hasBluAccess } from '../lib/blu';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
 import { commentCreateSchema } from '../lib/validate';
@@ -18,14 +19,23 @@ titleRoutes.get('/:slug', async (c) => {
   const slug = c.req.param('slug');
   const row = await c.env.DB.prepare(
     `SELECT ${TITLE_SELECT}, COALESCE(s.likes, 0) AS likes, COALESCE(s.plays, 0) AS plays,
-       t.genres AS genres, t.subgenres AS subgenres,
+       t.genres AS genres, t.subgenres AS subgenres, t.creator_id AS creator_id,
        (SELECT COUNT(*) FROM comments co WHERE co.title_id = t.id AND co.status = 'visible') AS comment_count
      ${TITLE_FROM}
      LEFT JOIN title_stats s ON s.title_id = t.id
      WHERE t.slug = ? AND t.published = 1`,
   )
     .bind(slug)
-    .first<TitleRow & { likes: number; plays: number; genres: string; subgenres: string; comment_count: number }>();
+    .first<
+      TitleRow & {
+        likes: number;
+        plays: number;
+        genres: string;
+        subgenres: string;
+        comment_count: number;
+        creator_id: string;
+      }
+    >();
   if (!row) fail(404, 'title_not_found', 'That title does not exist or is not published.');
 
   const { results: episodeRows } = await c.env.DB.prepare(
@@ -50,6 +60,9 @@ titleRoutes.get('/:slug', async (c) => {
     inMyWatchlist = (listed?.results?.length ?? 0) > 0;
   }
 
+  const bluAccess =
+    row.is_blu !== 1 || (await hasBluAccess(c.env.DB, user?.id ?? null, row.creator_id));
+
   const payload: TitleDetail = {
     ...mapTitle(row),
     episodes: episodeRows.map(mapEpisode),
@@ -60,6 +73,7 @@ titleRoutes.get('/:slug', async (c) => {
     inMyWatchlist,
     genres: parseJsonArray(row.genres) as TitleDetail['genres'],
     subgenres: parseJsonArray(row.subgenres),
+    bluAccess,
   };
   return c.json(payload);
 });

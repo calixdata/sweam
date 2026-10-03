@@ -18,6 +18,7 @@ import { mediaRoutes } from './routes/media';
 import { meRoutes } from './routes/me';
 import { scoutRoutes } from './routes/scout';
 import { studioRoutes } from './routes/studio';
+import { stripeRoutes } from './routes/stripe';
 import { submissionRoutes } from './routes/submissions';
 import { transcodeRoutes } from './routes/transcode';
 import { titleRoutes } from './routes/titles';
@@ -56,6 +57,7 @@ app.route('/api/ads', adRoutes);
 app.route('/api/submissions', submissionRoutes);
 app.route('/api/clips', clipRoutes);
 app.route('/api/blu', bluRoutes);
+app.route('/api/stripe', stripeRoutes);
 // Media (posters, video, HLS) is content: gated to signed-in accounts, with the
 // transcoder service allowed through by its Bearer token.
 app.use('/media/*', requireContentAccess);
