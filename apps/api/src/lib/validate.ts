@@ -450,6 +450,8 @@ export const clipCreateSchema = z.object({
   captionsUrl: mediaUrl.nullable().default(null),
   /** Monetization: a preset Blu tier id makes the clip Sweam Blu; null = free. */
   bluTierId: z.string().trim().max(32).nullable().default(null),
+  /** Attach the clip to one of the creator's series (as the next episode); null = standalone. */
+  seriesId: z.string().trim().min(1).max(64).nullable().default(null),
 });
 
 /** An admin's decision on a clip in the review queue. */

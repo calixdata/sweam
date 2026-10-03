@@ -28,20 +28,22 @@ async function runClipAiReview(
   reviewId: string,
   titleId: string,
   meta: { titleName: string; genre: string; caption: string },
+  allowAutoHide: boolean,
 ): Promise<void> {
   try {
     const review = await reviewSubmission(env, {
       titleName: meta.titleName,
       kind: 'short',
-      genre: meta.genre,
+      genre: meta.genre || 'Unspecified',
       synopsis: meta.caption,
       hosting:
         'Recorded and posted in Sweam as an instant clip. Only the caption and metadata are available, not the video itself.',
     });
     // The model reads text only, so auto-hide only when it is confident the
     // *described* clip breaks policy; otherwise leave it live and queued for a
-    // human.
-    const autoHide = review.recommendation === 'decline' && review.confidence >= 0.8;
+    // human. Never auto-hide when the clip was added to an existing series (that
+    // would unpublish the whole series over one episode) — flag it for a human.
+    const autoHide = allowAutoHide && review.recommendation === 'decline' && review.confidence >= 0.8;
     const statements = [
       env.DB
         .prepare('UPDATE clip_reviews SET ai_review = ?, ai_reviewed_at = ?, state = ? WHERE id = ?')
@@ -78,13 +80,25 @@ clipRoutes.post('/', async (c) => {
     fail(403, 'not_your_upload', 'That captions file does not belong to you.');
   }
 
+  // A clip can be attached to one of the creator's series (becomes its next
+  // episode, inheriting the series' Free/Blu setting).
+  if (body.seriesId) {
+    const owned = await c.env.DB.prepare('SELECT 1 AS x FROM series WHERE id = ? AND user_id = ?')
+      .bind(body.seriesId, user.id)
+      .first();
+    if (!owned) fail(404, 'series_not_found', 'That series does not exist or is not yours.');
+  }
+
   // Monetization is a forced, preset choice: free (null) or one of the Blu tiers.
+  // A series attach inherits the series' setting, so the per-clip Blu choice and
+  // its eligibility gate only apply to standalone clips.
   let bluPriceCents: number | null = null;
-  if (body.bluTierId) {
+  if (!body.seriesId && body.bluTierId) {
     const tier = bluTierById(body.bluTierId);
     if (!tier) fail(400, 'invalid_tier', 'Choose a Blu price from the preset options.');
-    // Offering Blu is gated until the creator is Fund-eligible (or Blu is open to all).
-    const gate = await getBluOfferGate(c.env.DB, user.id);
+    // Offering Blu is gated until the creator is Fund-eligible (or Blu is open to
+    // all); admins bypass for testing.
+    const gate = await getBluOfferGate(c.env.DB, user.id, user.isAdmin);
     if (!gate.canOfferBlu) fail(403, 'blu_not_eligible', BLU_NOT_ELIGIBLE_MESSAGE);
     bluPriceCents = tier.priceCents;
   }
@@ -100,6 +114,7 @@ clipRoutes.post('/', async (c) => {
       sourceUrl: body.sourceUrl,
       captionsUrl: body.captionsUrl,
       bluPriceCents,
+      seriesId: body.seriesId,
     },
     user.displayName,
   );
@@ -114,11 +129,17 @@ clipRoutes.post('/', async (c) => {
 
   if (aiReviewConfigured(c.env)) {
     c.executionCtx.waitUntil(
-      runClipAiReview(c.env, reviewId, published.titleId, {
-        titleName: published.name,
-        genre: body.genre,
-        caption: body.caption,
-      }),
+      runClipAiReview(
+        c.env,
+        reviewId,
+        published.titleId,
+        {
+          titleName: published.name,
+          genre: body.genre,
+          caption: body.caption,
+        },
+        !published.attachedToSeries,
+      ),
     );
   }
 

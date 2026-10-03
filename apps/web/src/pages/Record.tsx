@@ -11,7 +11,7 @@ import {
   RATINGS,
   UPLOAD_SPECS,
 } from '@sweam/shared';
-import type { BluFundStatus } from '@sweam/shared';
+import type { BluFundStatus, SeriesSummary } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { BluBadge } from '../components/BluBadge';
@@ -53,6 +53,9 @@ export function Record() {
   const [bluTierId, setBluTierId] = useState<string>(BLU_TIERS[3]?.id ?? 'blu_999');
   // Blu-offer gate + the creator's Free/Blu default for new uploads.
   const [bluFund, setBluFund] = useState<BluFundStatus | null>(null);
+  // The creator's series (for optionally attaching this clip as the next episode).
+  const [series, setSeries] = useState<SeriesSummary[]>([]);
+  const [seriesId, setSeriesId] = useState('');
 
   const [posting, setPosting] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -84,7 +87,8 @@ export function Record() {
     [],
   );
 
-  // Load the Blu-offer gate + the creator's Free/Blu default for new uploads.
+  // Load the Blu-offer gate + the creator's Free/Blu default, and the creator's
+  // series (for the optional series picker).
   useEffect(() => {
     if (!user?.id) return;
     let cancelled = false;
@@ -93,6 +97,11 @@ export function Record() {
         if (cancelled) return;
         setBluFund(data);
         setBluMode(data.canOfferBlu && data.contentDefault === 'blu' ? 'blu' : 'free');
+      })
+      .catch(() => undefined);
+    apiGet<{ series: SeriesSummary[] }>('/api/submissions/series')
+      .then((data) => {
+        if (!cancelled) setSeries(data.series);
       })
       .catch(() => undefined);
     return () => {
@@ -212,7 +221,8 @@ export function Record() {
         genre,
         audiences: audience ? [audience] : [],
         sourceUrl: url,
-        bluTierId: bluMode === 'blu' ? bluTierId : null,
+        bluTierId: !seriesId && bluMode === 'blu' ? bluTierId : null,
+        seriesId: seriesId || null,
       });
       stopStream();
       navigate(`/watch/${result.episodeId}`);
@@ -221,7 +231,7 @@ export function Record() {
       setPosting(false);
       setProgress(null);
     }
-  }, [clip, caption, rating, genre, audience, bluMode, bluTierId, navigate, stopStream]);
+  }, [clip, caption, rating, genre, audience, bluMode, bluTierId, seriesId, navigate, stopStream]);
 
   if (!user) {
     return (
@@ -371,12 +381,40 @@ export function Record() {
           </div>
         </div>
 
-        <fieldset className="field monetization">
-          <legend>Monetization</legend>
+        {series.length > 0 && (
+          <div className="field">
+            <label htmlFor="clip-series">Series</label>
+            <select
+              id="clip-series"
+              value={seriesId}
+              onChange={(event) => setSeriesId(event.target.value)}
+              disabled={posting}
+            >
+              <option value="">None — standalone clip</option>
+              {series.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <p className="field-hint">
+              Add this clip to one of your series as its next episode, or leave it standalone.
+            </p>
+          </div>
+        )}
+
+        {seriesId !== '' ? (
           <p className="field-hint monetization-intro">
-            Every clip is Free or Sweam Blu (paid). On Blu you keep 80%, prices are preset, and you
-            can switch a title between Free and Blu once every {BLU_SWITCH_COOLDOWN_DAYS} days.
+            This clip joins your series as its next episode and uses that series' Free or Sweam Blu
+            setting.
           </p>
+        ) : (
+          <fieldset className="field monetization">
+            <legend>Monetization</legend>
+            <p className="field-hint monetization-intro">
+              Every clip is Free or Sweam Blu (paid). On Blu you keep 80%, prices are preset, and you
+              can switch a title between Free and Blu once every {BLU_SWITCH_COOLDOWN_DAYS} days.
+            </p>
           <div className="mon-options">
             <label className={bluMode === 'free' ? 'mon-option is-selected' : 'mon-option'}>
               <input
@@ -448,7 +486,8 @@ export function Record() {
               </p>
             </div>
           )}
-        </fieldset>
+          </fieldset>
+        )}
 
         {progress && (
           <div className="upload-progress">

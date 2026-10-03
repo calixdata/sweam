@@ -76,13 +76,22 @@ export async function platformUserCount(db: D1Database): Promise<number> {
 export async function getBluOfferGate(
   db: D1Database,
   creatorId: string,
+  isAdmin = false,
 ): Promise<BluOfferGate & { eligibility: BluFundEligibility }> {
   const [eligibility, users] = await Promise.all([
     getBluFundEligibility(db, creatorId),
     platformUserCount(db),
   ]);
   const platformOpen = users >= BLU_OPEN_USER_THRESHOLD;
-  return { canOfferBlu: platformOpen || eligibility.eligible, platformOpen, eligible: eligibility.eligible, eligibility };
+  // Admins may offer Blu for testing even when the bar is not met.
+  const adminBypass = isAdmin && !platformOpen && !eligibility.eligible;
+  return {
+    canOfferBlu: platformOpen || eligibility.eligible || isAdmin,
+    platformOpen,
+    eligible: eligibility.eligible,
+    adminBypass,
+    eligibility,
+  };
 }
 
 /** The 403 message when a creator may not offer Blu yet. */

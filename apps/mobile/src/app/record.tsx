@@ -23,12 +23,14 @@ import {
   AUDIENCES,
   AUDIENCE_LABELS,
   ACCEPTED_VIDEO_TYPES,
+  BLU_FUND,
   BLU_TIERS,
   CLIP_SPEC,
   GENRES,
   RATINGS,
 } from '../lib/clipspec';
 import type { Audience, Genre, Rating } from '../lib/clipspec';
+import type { BluFundStatus, SeriesSummary } from '../lib/types';
 import { BluBadge } from '../components/BluBadge';
 import { colors, radius } from '../lib/theme';
 
@@ -90,10 +92,14 @@ export default function RecordScreen() {
 
   const [caption, setCaption] = useState('');
   const [rating, setRating] = useState<Rating | ''>('');
-  const [genre, setGenre] = useState<Genre>(GENRES[0]);
+  const [genre, setGenre] = useState<Genre | ''>('');
   const [audiences, setAudiences] = useState<Audience[]>([]);
   // null = Free; a preset tier id = Sweam Blu (subscriber-only) at that price.
   const [bluTierId, setBluTierId] = useState<string | null>(null);
+  // Blu-offer gate + default, and the creator's series (optional attach).
+  const [bluFund, setBluFund] = useState<BluFundStatus | null>(null);
+  const [series, setSeries] = useState<SeriesSummary[]>([]);
+  const [seriesId, setSeriesId] = useState('');
 
   const [posting, setPosting] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -121,6 +127,31 @@ export default function RecordScreen() {
       player.pause();
     }
   }, [phase, clip, player]);
+
+  // Load the Blu-offer gate + the creator's Free/Blu default and series on mount.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    api
+      .get<BluFundStatus>('/api/studio/blu-fund')
+      .then((data) => {
+        if (cancelled) return;
+        setBluFund(data);
+        setBluTierId(
+          data.canOfferBlu && data.contentDefault === 'blu' ? (BLU_TIERS[0]?.id ?? null) : null,
+        );
+      })
+      .catch(() => undefined);
+    api
+      .get<{ series: SeriesSummary[] }>('/api/submissions/series')
+      .then((data) => {
+        if (!cancelled) setSeries(data.series);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const stopRecording = useCallback(() => {
     stopTimer();
@@ -212,7 +243,8 @@ export default function RecordScreen() {
         genre,
         audiences,
         sourceUrl: url,
-        bluTierId,
+        bluTierId: seriesId ? null : bluTierId,
+        seriesId: seriesId || null,
       });
       player.pause();
       router.replace(`/watch/${result.episodeId}`);
@@ -225,7 +257,7 @@ export default function RecordScreen() {
       setPosting(false);
       setProgress(null);
     }
-  }, [clip, posting, caption, rating, genre, audiences, bluTierId, player, router]);
+  }, [clip, posting, caption, rating, genre, audiences, bluTierId, seriesId, player, router]);
 
   // --- Signed-out gate ---------------------------------------------------
   if (!user) {
@@ -309,6 +341,12 @@ export default function RecordScreen() {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.chipRowScroll}
             >
+              <Chip
+                label="None"
+                selected={genre === ''}
+                disabled={posting}
+                onPress={() => setGenre('')}
+              />
               {GENRES.map((value) => (
                 <Chip
                   key={value}
@@ -333,49 +371,104 @@ export default function RecordScreen() {
               ))}
             </View>
 
-            <Text style={styles.label}>Monetization</Text>
-            <View style={styles.chipRow}>
-              <Chip
-                label="Free"
-                selected={bluTierId === null}
-                disabled={posting}
-                onPress={() => setBluTierId(null)}
-              />
-              <Pressable
-                onPress={() => setBluTierId((id) => id ?? BLU_TIERS[0].id)}
-                disabled={posting}
-                accessibilityRole="button"
-                accessibilityLabel="Sweam Blu paid content"
-                accessibilityState={{ selected: bluTierId !== null }}
-                style={[styles.chip, styles.bluChip, bluTierId !== null && styles.chipOn]}
-              >
-                <BluBadge height={13} />
-                <Text style={[styles.chipText, bluTierId !== null && styles.chipTextOn]}>
-                  Sweam Blu
-                </Text>
-              </Pressable>
-            </View>
-            {bluTierId !== null && (
+            {series.length > 0 && (
               <>
+                <Text style={styles.label}>Series</Text>
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.chipRowScroll}
                 >
-                  {BLU_TIERS.map((tier) => (
+                  <Chip
+                    label="None"
+                    selected={seriesId === ''}
+                    disabled={posting}
+                    onPress={() => setSeriesId('')}
+                  />
+                  {series.map((s) => (
                     <Chip
-                      key={tier.id}
-                      label={`${tier.label}/mo`}
-                      selected={bluTierId === tier.id}
+                      key={s.id}
+                      label={s.name}
+                      selected={seriesId === s.id}
                       disabled={posting}
-                      onPress={() => setBluTierId(tier.id)}
+                      onPress={() => setSeriesId(s.id)}
                     />
                   ))}
                 </ScrollView>
-                <Text style={styles.hint}>
-                  Subscribers pay this monthly to watch; you keep 80%. Set up payouts in your Studio
-                  to get paid. A title can switch between Free and Blu once every 30 days.
-                </Text>
+              </>
+            )}
+
+            {seriesId !== '' ? (
+              <Text style={[styles.hint, styles.seriesInheritHint]}>
+                This clip joins your series as its next episode and uses that series' Free or Sweam
+                Blu setting.
+              </Text>
+            ) : (
+              <>
+                <Text style={styles.label}>Monetization</Text>
+                <View style={styles.chipRow}>
+                  <Chip
+                    label="Free"
+                    selected={bluTierId === null}
+                    disabled={posting}
+                    onPress={() => setBluTierId(null)}
+                  />
+                  <Pressable
+                    onPress={() => {
+                      if (bluFund != null && !bluFund.canOfferBlu) return;
+                      setBluTierId((id) => id ?? BLU_TIERS[0]?.id ?? null);
+                    }}
+                    disabled={posting || (bluFund != null && !bluFund.canOfferBlu)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Sweam Blu paid content"
+                    accessibilityState={{
+                      selected: bluTierId !== null,
+                      disabled: bluFund != null && !bluFund.canOfferBlu,
+                    }}
+                    style={[
+                      styles.chip,
+                      styles.bluChip,
+                      bluTierId !== null && styles.chipOn,
+                      bluFund != null && !bluFund.canOfferBlu && styles.chipDisabled,
+                    ]}
+                  >
+                    <BluBadge height={13} />
+                    <Text style={[styles.chipText, bluTierId !== null && styles.chipTextOn]}>
+                      Sweam Blu
+                    </Text>
+                  </Pressable>
+                </View>
+                {bluFund != null && !bluFund.canOfferBlu && (
+                  <Text style={styles.hint}>
+                    Sweam Blu is open to eligible creators for now: {BLU_FUND.minFollowers}+
+                    followers, {BLU_FUND.minViews.toLocaleString()} views, no violations in{' '}
+                    {BLU_FUND.violationWindowDays} days, and a verified 18+ age. Check Studio on
+                    sweam.co.
+                  </Text>
+                )}
+                {bluTierId !== null && (
+                  <>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.chipRowScroll}
+                    >
+                      {BLU_TIERS.map((tier) => (
+                        <Chip
+                          key={tier.id}
+                          label={`${tier.label}/mo`}
+                          selected={bluTierId === tier.id}
+                          disabled={posting}
+                          onPress={() => setBluTierId(tier.id)}
+                        />
+                      ))}
+                    </ScrollView>
+                    <Text style={styles.hint}>
+                      Subscribers pay this monthly to watch; you keep 80%. Set up payouts in your
+                      Studio to get paid. A title can switch between Free and Blu once every 30 days.
+                    </Text>
+                  </>
+                )}
               </>
             )}
 
@@ -660,8 +753,10 @@ const styles = StyleSheet.create({
   },
   chipOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   bluChip: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  chipDisabled: { opacity: 0.45 },
   chipText: { color: colors.text, fontSize: 14 },
   chipTextOn: { color: colors.bg, fontWeight: '700' },
+  seriesInheritHint: { marginTop: 12 },
   primaryBtn: {
     backgroundColor: colors.accent,
     borderRadius: radius.pill,

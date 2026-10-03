@@ -175,6 +175,8 @@ export interface BluOfferGate {
   /** True once the platform has crossed BLU_OPEN_USER_THRESHOLD (Blu open to all). */
   platformOpen: boolean;
   eligible: boolean;
+  /** An admin is allowed to offer Blu for testing even without meeting the bar. */
+  adminBypass: boolean;
 }
 
 /** The Studio Blu Fund payload: eligibility, the offer gate, and the creator's settings. */
@@ -182,6 +184,7 @@ export interface BluFundStatus {
   eligibility: BluFundEligibility;
   platformOpen: boolean;
   canOfferBlu: boolean;
+  adminBypass: boolean;
   /** The Free/Blu default applied to new uploads. */
   contentDefault: 'free' | 'blu';
   dob: string | null;

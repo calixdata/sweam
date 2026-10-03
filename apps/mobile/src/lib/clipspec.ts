@@ -78,3 +78,10 @@ export const BLU_TIERS: readonly BluTier[] = [
   { id: 'blu_3999', label: '$39.99', priceCents: 3999 },
   { id: 'blu_4999', label: '$49.99', priceCents: 4999 },
 ] as const;
+
+/** Sweam Blu Fund thresholds (mirrors BLU_FUND_THRESHOLDS on the server), for copy. */
+export const BLU_FUND = {
+  minFollowers: 500,
+  minViews: 10000,
+  violationWindowDays: 90,
+} as const;

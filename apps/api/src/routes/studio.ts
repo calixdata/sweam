@@ -632,8 +632,8 @@ interface BluFundProfileRow {
   blu_fund_attested_at: string | null;
 }
 
-async function bluFundStatus(c: Context<AppEnv>, creatorId: string) {
-  const gate = await getBluOfferGate(c.env.DB, creatorId);
+async function bluFundStatus(c: Context<AppEnv>, creatorId: string, isAdmin: boolean) {
+  const gate = await getBluOfferGate(c.env.DB, creatorId, isAdmin);
   const profile = await c.env.DB.prepare(
     'SELECT content_default, dob, blu_fund_attested_at FROM creator_profiles WHERE user_id = ?',
   )
@@ -643,6 +643,7 @@ async function bluFundStatus(c: Context<AppEnv>, creatorId: string) {
     eligibility: gate.eligibility,
     platformOpen: gate.platformOpen,
     canOfferBlu: gate.canOfferBlu,
+    adminBypass: gate.adminBypass,
     contentDefault: profile?.content_default === 'blu' ? ('blu' as const) : ('free' as const),
     dob: profile?.dob ?? null,
     attested: Boolean(profile?.blu_fund_attested_at),
@@ -652,7 +653,8 @@ async function bluFundStatus(c: Context<AppEnv>, creatorId: string) {
 // Any signed-in user can read the gate (the upload form needs it before a
 // creator profile exists); only creators can change settings.
 studioRoutes.get('/blu-fund', requireUser, async (c) => {
-  return c.json(await bluFundStatus(c, currentUser(c).id));
+  const user = currentUser(c);
+  return c.json(await bluFundStatus(c, user.id, user.isAdmin));
 });
 
 studioRoutes.post('/blu-fund', requireCreator, async (c) => {
@@ -693,7 +695,7 @@ studioRoutes.post('/blu-fund', requireCreator, async (c) => {
 
   if (body.contentDefault !== undefined) {
     if (body.contentDefault === 'blu') {
-      const gate = await getBluOfferGate(c.env.DB, user.id);
+      const gate = await getBluOfferGate(c.env.DB, user.id, user.isAdmin);
       if (!gate.canOfferBlu) fail(403, 'blu_not_eligible', BLU_NOT_ELIGIBLE_MESSAGE);
     }
     await c.env.DB.prepare('UPDATE creator_profiles SET content_default = ? WHERE user_id = ?')
@@ -701,7 +703,7 @@ studioRoutes.post('/blu-fund', requireCreator, async (c) => {
       .run();
   }
 
-  return c.json(await bluFundStatus(c, user.id));
+  return c.json(await bluFundStatus(c, user.id, user.isAdmin));
 });
 
 // ---------------------------------------------------------------------------

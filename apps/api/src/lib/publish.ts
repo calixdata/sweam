@@ -174,8 +174,10 @@ export interface ClipToPublish {
   audiences: string[];
   sourceUrl: string;
   captionsUrl: string | null;
-  /** Preset Blu price in cents when the creator posts this as Blu; null = free. */
+  /** Preset Blu price in cents when the creator posts this as Blu; null = free. Ignored for a series attach. */
   bluPriceCents: number | null;
+  /** Attach to this series (as the next episode) instead of a standalone short; null = standalone. */
+  seriesId: string | null;
 }
 
 /** A clip's title name is its caption, trimmed to a display-friendly length. */
@@ -186,53 +188,102 @@ function clipTitleName(caption: string): string {
 }
 
 /**
- * Publish a clip recorded in Sweam: it goes live immediately (published = 1)
- * but starts in review_state = 'pending' so it sits in the admin AI review
- * queue. Admin-locked like any published title. Returns the new title/episode.
+ * Publish a clip recorded in Sweam. It goes live immediately (published = 1) but
+ * starts in review_state = 'pending' for the admin AI review queue. Standalone
+ * clips become a new 'short' title; a clip attached to one of the creator's
+ * series is added as that series' next episode (inheriting the series' Free/Blu
+ * setting). Admin-locked like any published title.
  */
 export async function publishClip(
   env: Env,
   clip: ClipToPublish,
   displayName: string,
-): Promise<{ titleId: string; slug: string; episodeId: string; name: string }> {
+): Promise<{ titleId: string; slug: string; episodeId: string; name: string; attachedToSeries: boolean }> {
   await ensureCreator(env.DB, clip.userId, displayName);
   const now = nowIso();
   const advisory = RATING_TO_ADVISORY[clip.rating];
   const name = clipTitleName(clip.caption);
-  const titleId = crypto.randomUUID();
-  const slug = await uniqueSlug(env.DB, name);
-  const isBlu = clip.bluPriceCents != null;
+  const genres = JSON.stringify(clip.genre ? [clip.genre] : []);
 
-  await env.DB.batch([
-    env.DB
-      .prepare(
-        `INSERT INTO titles
-           (id, creator_id, kind, name, slug, synopsis, genre, audiences, genres, subgenres, advisory, poster_url,
-            published, published_at, admin_locked, series_id, review_state, is_blu, blu_price_cents, blu_changed_at, created_at)
-         VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, NULL, 1, ?, 1, NULL, 'pending', ?, ?, ?, ?)`,
-      )
-      .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), JSON.stringify(clip.genre ? [clip.genre] : []), advisory, now, isBlu ? 1 : 0, clip.bluPriceCents, isBlu ? now : null, now),
-    env.DB.prepare('INSERT INTO title_stats (title_id) VALUES (?)').bind(titleId),
-  ]);
+  let titleId: string;
+  let slug: string;
+  let attachedToSeries = false;
 
-  // One Blu price per creator: a subscription unlocks all their Blu content, so
-  // the tier chosen when posting this clip sets the creator's subscription price.
-  if (isBlu && clip.bluPriceCents != null) {
-    await env.DB
-      .prepare('UPDATE creator_profiles SET blu_price_cents = ? WHERE user_id = ?')
-      .bind(clip.bluPriceCents, clip.userId)
-      .run();
+  if (clip.seriesId) {
+    const series = await env.DB.prepare('SELECT name FROM series WHERE id = ? AND user_id = ?')
+      .bind(clip.seriesId, clip.userId)
+      .first<{ name: string }>();
+    if (!series) throw new PublishError('That series does not exist or is not yours.');
+    attachedToSeries = true;
+
+    const existing = await env.DB.prepare(
+      'SELECT id, slug FROM titles WHERE creator_id = ? AND series_id = ?',
+    )
+      .bind(clip.userId, clip.seriesId)
+      .first<{ id: string; slug: string }>();
+    if (existing) {
+      // Inherit the series title's Free/Blu setting; only add an episode.
+      titleId = existing.id;
+      slug = existing.slug;
+    } else {
+      // First clip in this series: create the series title. It starts Free; the
+      // creator sets the series' Blu on the title in the Studio.
+      titleId = crypto.randomUUID();
+      slug = await uniqueSlug(env.DB, series.name);
+      await env.DB.batch([
+        env.DB
+          .prepare(
+            `INSERT INTO titles
+               (id, creator_id, kind, name, slug, synopsis, genre, audiences, genres, subgenres, advisory, poster_url,
+                published, published_at, admin_locked, series_id, review_state, is_blu, blu_price_cents, blu_changed_at, created_at)
+             VALUES (?, ?, 'series', ?, ?, '', ?, ?, ?, '[]', ?, NULL, 1, ?, 1, ?, 'pending', 0, NULL, NULL, ?)`,
+          )
+          .bind(titleId, clip.userId, series.name, slug, clip.genre, JSON.stringify(clip.audiences), genres, advisory, now, clip.seriesId, now),
+        env.DB.prepare('INSERT INTO title_stats (title_id) VALUES (?)').bind(titleId),
+      ]);
+    }
+  } else {
+    // Standalone short.
+    const isBlu = clip.bluPriceCents != null;
+    titleId = crypto.randomUUID();
+    slug = await uniqueSlug(env.DB, name);
+    await env.DB.batch([
+      env.DB
+        .prepare(
+          `INSERT INTO titles
+             (id, creator_id, kind, name, slug, synopsis, genre, audiences, genres, subgenres, advisory, poster_url,
+              published, published_at, admin_locked, series_id, review_state, is_blu, blu_price_cents, blu_changed_at, created_at)
+           VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, NULL, 1, ?, 1, NULL, 'pending', ?, ?, ?, ?)`,
+        )
+        .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), genres, advisory, now, isBlu ? 1 : 0, clip.bluPriceCents, isBlu ? now : null, now),
+      env.DB.prepare('INSERT INTO title_stats (title_id) VALUES (?)').bind(titleId),
+    ]);
+
+    // One Blu price per creator: a subscription unlocks all their Blu content.
+    if (isBlu && clip.bluPriceCents != null) {
+      await env.DB
+        .prepare('UPDATE creator_profiles SET blu_price_cents = ? WHERE user_id = ?')
+        .bind(clip.bluPriceCents, clip.userId)
+        .run();
+    }
   }
 
+  // Add the clip as the next episode in season 1 (episode 1 for a new title).
+  const maxRow = await env.DB.prepare(
+    'SELECT COALESCE(MAX(episode), 0) AS m FROM episodes WHERE title_id = ? AND season = 1',
+  )
+    .bind(titleId)
+    .first<{ m: number }>();
+  const episode = (maxRow?.m ?? 0) + 1;
   const episodeId = crypto.randomUUID();
   await env.DB.prepare(
     `INSERT INTO episodes
        (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at)
-     VALUES (?, ?, 1, 1, ?, ?, ?, ?, 0, ?, ?)`,
+     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?)`,
   )
-    .bind(episodeId, titleId, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now)
+    .bind(episodeId, titleId, episode, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now)
     .run();
   await enqueueTranscode(env.DB, episodeId, clip.sourceUrl);
 
-  return { titleId, slug, episodeId, name };
+  return { titleId, slug, episodeId, name, attachedToSeries };
 }

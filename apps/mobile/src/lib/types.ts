@@ -124,3 +124,25 @@ export interface NotificationItem {
   read: boolean;
   createdAt: string;
 }
+
+export interface BluFundEligibilitySummary {
+  eligible: boolean;
+  followers: { actual: number; required: number; met: boolean };
+  views: { actual: number; required: number; met: boolean };
+  noRecentViolations: { met: boolean; violations: number; windowDays: number };
+  ageVerified: boolean;
+}
+
+/** GET /api/studio/blu-fund — the Blu-offer gate + the creator's upload default. */
+export interface BluFundStatus {
+  canOfferBlu: boolean;
+  platformOpen: boolean;
+  adminBypass: boolean;
+  contentDefault: 'free' | 'blu';
+  eligibility: BluFundEligibilitySummary;
+}
+
+export interface SeriesSummary {
+  id: string;
+  name: string;
+}

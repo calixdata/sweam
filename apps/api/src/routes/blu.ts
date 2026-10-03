@@ -60,9 +60,10 @@ bluRoutes.put('/titles/:id', async (c) => {
   }
 
   // Turning a title Blu is gated until the creator is Fund-eligible (or Blu is
-  // open to everyone). Changing the price of already-Blu content is not re-gated.
+  // open to everyone); admins bypass. Changing the price of already-Blu content
+  // is not re-gated.
   if (body.isBlu && switching) {
-    const gate = await getBluOfferGate(c.env.DB, user.id);
+    const gate = await getBluOfferGate(c.env.DB, user.id, user.isAdmin);
     if (!gate.canOfferBlu) fail(403, 'blu_not_eligible', BLU_NOT_ELIGIBLE_MESSAGE);
   }
 
