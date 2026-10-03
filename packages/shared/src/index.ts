@@ -297,6 +297,45 @@ export interface BluSubscriptionSummary {
   currentPeriodEnd: string | null;
 }
 
+/** The viewer's active Sweam Blu subscriptions and scout all-access (manage screen). */
+export interface MySubscriptions {
+  blu: BluSubscriptionSummary[];
+  scoutAllAccess: { active: boolean; currentPeriodEnd: string | null };
+}
+
+/** A creator's Stripe Connect payout-onboarding status. */
+export interface BluConnectStatus {
+  connected: boolean;
+  payoutsEnabled: boolean;
+  detailsSubmitted?: boolean;
+}
+
+/** One creator's cut of a scout royalty-pool distribution. */
+export interface ScoutRoyaltyAllocation {
+  creatorId: string;
+  handle: string;
+  watchSeconds: number;
+  amountCents: number;
+  status: 'pending' | 'paid' | 'failed';
+}
+
+/**
+ * One scout royalty-pool distribution run (admin view). Scouts pay a flat
+ * monthly all-access fee; the creator share of that pool is split across Blu
+ * creators by their share of scout-attributed watch-time in the period.
+ */
+export interface ScoutRoyaltyRun {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  poolCents: number;
+  scoutCount: number;
+  totalWatchSeconds: number;
+  status: string;
+  createdAt: string;
+  allocations: ScoutRoyaltyAllocation[];
+}
+
 /**
  * One playable entry in the mobile vertical feed: a title's first episode with
  * everything needed to autoplay it and show engagement, in one payload.

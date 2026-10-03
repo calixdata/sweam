@@ -283,6 +283,21 @@ export const payoutDecideSchema = z.object({
   paid: z.boolean(),
 });
 
+/**
+ * Run a scout royalty distribution. With no dates it runs the previous calendar
+ * month; an explicit [periodStart, periodEnd) (ISO dates, end exclusive) lets an
+ * admin re-run or backfill a specific window.
+ */
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Dates must be YYYY-MM-DD.');
+export const royaltyRunSchema = z
+  .object({
+    periodStart: isoDate.optional(),
+    periodEnd: isoDate.optional(),
+  })
+  .refine((v) => (v.periodStart == null) === (v.periodEnd == null), {
+    message: 'Provide both periodStart and periodEnd, or neither.',
+  });
+
 // ---------------------------------------------------------------------------
 // Submissions
 // ---------------------------------------------------------------------------
@@ -415,6 +430,8 @@ export const clipCreateSchema = z.object({
     'Record and upload the clip to Sweam first.',
   ),
   captionsUrl: mediaUrl.nullable().default(null),
+  /** Monetization: a preset Blu tier id makes the clip Sweam Blu; null = free. */
+  bluTierId: z.string().trim().max(32).nullable().default(null),
 });
 
 /** An admin's decision on a clip in the review queue. */

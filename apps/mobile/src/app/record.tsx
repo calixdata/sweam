@@ -23,11 +23,13 @@ import {
   AUDIENCES,
   AUDIENCE_LABELS,
   ACCEPTED_VIDEO_TYPES,
+  BLU_TIERS,
   CLIP_SPEC,
   GENRES,
   RATINGS,
 } from '../lib/clipspec';
 import type { Audience, Genre, Rating } from '../lib/clipspec';
+import { BluBadge } from '../components/BluBadge';
 import { colors, radius } from '../lib/theme';
 
 type Phase = 'capture' | 'review';
@@ -90,6 +92,8 @@ export default function RecordScreen() {
   const [rating, setRating] = useState<Rating | ''>('');
   const [genre, setGenre] = useState<Genre>(GENRES[0]);
   const [audiences, setAudiences] = useState<Audience[]>([]);
+  // null = Free; a preset tier id = Sweam Blu (subscriber-only) at that price.
+  const [bluTierId, setBluTierId] = useState<string | null>(null);
 
   const [posting, setPosting] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -174,6 +178,7 @@ export default function RecordScreen() {
     setClip(null);
     setProgress(null);
     setError(null);
+    setBluTierId(null);
     setPhase('capture');
   }, [player]);
 
@@ -207,6 +212,7 @@ export default function RecordScreen() {
         genre,
         audiences,
         sourceUrl: url,
+        bluTierId,
       });
       player.pause();
       router.replace(`/watch/${result.episodeId}`);
@@ -219,7 +225,7 @@ export default function RecordScreen() {
       setPosting(false);
       setProgress(null);
     }
-  }, [clip, posting, caption, rating, genre, audiences, player, router]);
+  }, [clip, posting, caption, rating, genre, audiences, bluTierId, player, router]);
 
   // --- Signed-out gate ---------------------------------------------------
   if (!user) {
@@ -326,6 +332,52 @@ export default function RecordScreen() {
                 />
               ))}
             </View>
+
+            <Text style={styles.label}>Monetization</Text>
+            <View style={styles.chipRow}>
+              <Chip
+                label="Free"
+                selected={bluTierId === null}
+                disabled={posting}
+                onPress={() => setBluTierId(null)}
+              />
+              <Pressable
+                onPress={() => setBluTierId((id) => id ?? BLU_TIERS[0].id)}
+                disabled={posting}
+                accessibilityRole="button"
+                accessibilityLabel="Sweam Blu paid content"
+                accessibilityState={{ selected: bluTierId !== null }}
+                style={[styles.chip, styles.bluChip, bluTierId !== null && styles.chipOn]}
+              >
+                <BluBadge height={13} />
+                <Text style={[styles.chipText, bluTierId !== null && styles.chipTextOn]}>
+                  Sweam Blu
+                </Text>
+              </Pressable>
+            </View>
+            {bluTierId !== null && (
+              <>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chipRowScroll}
+                >
+                  {BLU_TIERS.map((tier) => (
+                    <Chip
+                      key={tier.id}
+                      label={`${tier.label}/mo`}
+                      selected={bluTierId === tier.id}
+                      disabled={posting}
+                      onPress={() => setBluTierId(tier.id)}
+                    />
+                  ))}
+                </ScrollView>
+                <Text style={styles.hint}>
+                  Subscribers pay this monthly to watch; you keep 80%. Set up payouts in your Studio
+                  to get paid. A title can switch between Free and Blu once every 30 days.
+                </Text>
+              </>
+            )}
 
             {progress && (
               <Text style={styles.progress} accessibilityLiveRegion="polite">
@@ -607,6 +659,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   chipOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  bluChip: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   chipText: { color: colors.text, fontSize: 14 },
   chipTextOn: { color: colors.bg, fontWeight: '700' },
   primaryBtn: {

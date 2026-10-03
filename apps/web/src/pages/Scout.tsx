@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { ScoutLeaderboards } from '@sweam/shared';
+import type { MySubscriptions, ScoutLeaderboards } from '@sweam/shared';
+import { SCOUT_ALL_ACCESS_CENTS, formatUsdCents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote, Loading } from '../components/Status';
@@ -168,6 +169,8 @@ function ScoutBoards({ orgName }: { orgName: string }) {
         means the last 7 days. Opening a one-sheet is logged and visible to the creator.
       </p>
 
+      <ScoutAllAccessPanel />
+
       <section aria-labelledby="board-growth">
         <h2 id="board-growth">Fastest growing</h2>
         {boards.fastestGrowing.length === 0 ? (
@@ -279,5 +282,79 @@ function ScoutBoards({ orgName }: { orgName: string }) {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Scout all-access: one flat monthly fee that unlocks every creator's Sweam Blu
+ * content, instead of subscribing to each creator. The fee funds a royalty pool
+ * paid to Blu creators by watch-time.
+ */
+function ScoutAllAccessPanel() {
+  const [subs, setSubs] = useState<MySubscriptions | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<MySubscriptions>('/api/me/subscriptions')
+      .then((data) => {
+        if (!cancelled) setSubs(data);
+      })
+      .catch(() => {
+        if (!cancelled) setSubs(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function buy() {
+    setBusy(true);
+    setNotice('');
+    try {
+      const { url } = await apiSend<{ url: string }>('POST', '/api/stripe/scout');
+      window.location.href = url;
+    } catch (err) {
+      setNotice(
+        err instanceof ApiError && err.code === 'stripe_not_configured'
+          ? 'All-access billing is not switched on yet. Check back once payments are live.'
+          : err instanceof ApiError
+            ? err.message
+            : 'Could not start checkout.',
+      );
+      setBusy(false);
+    }
+  }
+
+  const active = subs?.scoutAllAccess.active ?? false;
+
+  return (
+    <section aria-labelledby="scout-all-access" className="scout-all-access">
+      <h2 id="scout-all-access">All-access to Sweam Blu</h2>
+      {active ? (
+        <p className="status status-ok" role="status">
+          Your all-access is active. You can watch any creator's Sweam Blu content without a
+          per-creator subscription. <Link to="/me/subscriptions">Manage billing</Link>.
+        </p>
+      ) : (
+        <>
+          <p className="page-intro">
+            Watch every creator's Sweam Blu content for one flat fee, with no per-creator
+            subscriptions. Your fee funds a royalty pool paid to Blu creators by watch-time.
+          </p>
+          <div className="title-actions">
+            <button type="button" className="button" onClick={() => void buy()} disabled={busy}>
+              {busy ? 'Starting…' : `Get all-access — ${formatUsdCents(SCOUT_ALL_ACCESS_CENTS)}/month`}
+            </button>
+          </div>
+        </>
+      )}
+      {notice && (
+        <p className="status" role="status">
+          {notice}
+        </p>
+      )}
+    </section>
   );
 }

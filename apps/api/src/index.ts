@@ -4,6 +4,7 @@ import type { ApiErrorBody } from '@sweam/shared';
 import type { AppEnv, Env } from './env';
 import { requireContentAccess, withUser } from './lib/session';
 import { setPushEnv } from './lib/fcm';
+import { previousMonthPeriod, runScoutRoyalty } from './lib/royalty';
 import { adminRoutes } from './routes/admin';
 import { adRoutes } from './routes/ads';
 import { authRoutes } from './routes/auth';
@@ -16,6 +17,7 @@ import { discoverRoutes } from './routes/discover';
 import { feedRoutes } from './routes/feed';
 import { mediaRoutes } from './routes/media';
 import { meRoutes } from './routes/me';
+import { royaltyRoutes } from './routes/royalty';
 import { scoutRoutes } from './routes/scout';
 import { studioRoutes } from './routes/studio';
 import { stripeRoutes } from './routes/stripe';
@@ -53,6 +55,7 @@ app.route('/api/integrations/verbatiim', verbatiimWebhookRoutes);
 app.route('/api/scout', scoutRoutes);
 app.route('/api/transcode', transcodeRoutes);
 app.route('/api/admin', adminRoutes);
+app.route('/api/admin/blu', royaltyRoutes);
 app.route('/api/ads', adRoutes);
 app.route('/api/submissions', submissionRoutes);
 app.route('/api/clips', clipRoutes);
@@ -91,6 +94,21 @@ export default {
       return app.fetch(request, env, ctx);
     }
     return env.ASSETS ? env.ASSETS.fetch(request) : app.fetch(request, env, ctx);
+  },
+
+  /**
+   * Monthly cron (see wrangler.toml triggers): distribute the previous calendar
+   * month's scout royalty pool. Idempotent per period, so a retry is safe; when
+   * Stripe is not yet configured it records pending allocations as a ledger.
+   */
+  scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): void {
+    const { periodStart, periodEnd } = previousMonthPeriod(new Date(event.scheduledTime));
+    ctx.waitUntil(
+      runScoutRoyalty(env.DB, env, periodStart, periodEnd).then(
+        () => undefined,
+        (err: unknown) => console.error('scout_royalty_run_failed', err),
+      ),
+    );
   },
 };
 

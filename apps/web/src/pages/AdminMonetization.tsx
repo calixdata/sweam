@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { AdminMonetization as AdminMonetizationPayload } from '@sweam/shared';
-import { formatMillicents } from '@sweam/shared';
+import type { AdminMonetization as AdminMonetizationPayload, ScoutRoyaltyRun } from '@sweam/shared';
+import { formatMillicents, formatUsdCents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote, Loading } from '../components/Status';
@@ -96,6 +96,8 @@ function MonetizationDashboard() {
         </div>
       </section>
 
+      <ScoutRoyaltySection />
+
       <section aria-labelledby="mon-payouts">
         <h2 id="mon-payouts">Pending payouts</h2>
         {data.pendingPayouts.length === 0 ? (
@@ -178,6 +180,106 @@ function MonetizationDashboard() {
         />
       </section>
     </div>
+  );
+}
+
+/**
+ * Scout royalty pool: the all-access fees scouts pay are split across Blu
+ * creators by scout-attributed watch-time. A monthly cron runs the previous
+ * month automatically; this lets an admin review runs and trigger one on demand.
+ * Until Stripe is live, allocations are recorded 'pending' as a ledger.
+ */
+function ScoutRoyaltySection() {
+  const [runs, setRuns] = useState<ScoutRoyaltyRun[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      setRuns((await apiGet<{ runs: ScoutRoyaltyRun[] }>('/api/admin/blu/royalty')).runs);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load royalty runs.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function runNow() {
+    setBusy(true);
+    setNotice('');
+    try {
+      const run = await apiSend<ScoutRoyaltyRun>('POST', '/api/admin/blu/royalty/run', {});
+      setNotice(
+        `Ran ${run.periodStart} → ${run.periodEnd}: pool ${formatUsdCents(run.poolCents)} from ` +
+          `${run.scoutCount} scout${run.scoutCount === 1 ? '' : 's'} across ${run.allocations.length} ` +
+          `creator${run.allocations.length === 1 ? '' : 's'} (${run.status}).`,
+      );
+      await load();
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Could not run the distribution.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="mon-royalty">
+      <h2 id="mon-royalty">Scout royalty pool</h2>
+      <p className="page-intro">
+        Scout all-access fees are pooled and split across Sweam Blu creators by scout-attributed
+        watch-time. Runs monthly; trigger the previous month on demand below.
+      </p>
+      <div className="title-actions">
+        <button type="button" className="button" onClick={() => void runNow()} disabled={busy}>
+          {busy ? 'Running…' : 'Run previous month'}
+        </button>
+      </div>
+      {notice && (
+        <p className="status" role="status">
+          {notice}
+        </p>
+      )}
+      {error ? (
+        <p className="status status-error" role="alert">
+          {error}
+        </p>
+      ) : !runs ? (
+        <p>Loading runs…</p>
+      ) : runs.length === 0 ? (
+        <p>No distributions yet.</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="studio-table">
+            <caption className="visually-hidden">Scout royalty distribution runs</caption>
+            <thead>
+              <tr>
+                <th scope="col">Period</th>
+                <th scope="col">Scouts</th>
+                <th scope="col">Pool</th>
+                <th scope="col">Creators</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((run) => (
+                <tr key={run.id}>
+                  <th scope="row">
+                    {run.periodStart} → {run.periodEnd}
+                  </th>
+                  <td>{run.scoutCount.toLocaleString()}</td>
+                  <td>{formatUsdCents(run.poolCents)}</td>
+                  <td>{run.allocations.length.toLocaleString()}</td>
+                  <td>{run.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

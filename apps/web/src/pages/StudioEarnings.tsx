@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { EarningsSummary } from '@sweam/shared';
+import type { BluConnectStatus, EarningsSummary } from '@sweam/shared';
 import { formatMillicents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { ErrorNote, Loading } from '../components/Status';
+import { BluBadge } from '../components/BluBadge';
 import { usePageTitle } from '../hooks';
 
 export function StudioEarnings() {
@@ -63,6 +64,8 @@ export function StudioEarnings() {
           {notice}
         </p>
       )}
+
+      <BluPayoutsSection />
 
       <section aria-labelledby="earnings-eligibility">
         <h2 id="earnings-eligibility">Monetization eligibility</h2>
@@ -214,5 +217,84 @@ export function StudioEarnings() {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Sweam Blu payouts run on Stripe Connect, separate from the ad-revenue balance
+ * above: subscription money and scout royalties are paid straight to the
+ * creator's connected account. A creator must finish Connect onboarding before
+ * their Blu content is purchasable.
+ */
+function BluPayoutsSection() {
+  const [status, setStatus] = useState<BluConnectStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<BluConnectStatus>('/api/stripe/connect')
+      .then((data) => {
+        if (!cancelled) setStatus(data);
+      })
+      .catch(() => {
+        if (!cancelled) setStatus({ connected: false, payoutsEnabled: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function connect() {
+    setBusy(true);
+    setNotice('');
+    try {
+      const { url } = await apiSend<{ url: string }>('POST', '/api/stripe/connect');
+      window.location.href = url;
+    } catch (err) {
+      setNotice(
+        err instanceof ApiError && err.code === 'stripe_not_configured'
+          ? 'Sweam Blu payments are not switched on yet. You can still mark content Blu; set up payouts here once billing is live.'
+          : err instanceof ApiError
+            ? err.message
+            : 'Could not start payout setup.',
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="blu-payouts">
+      <h2 id="blu-payouts" className="blu-heading">
+        <BluBadge height={20} decorative /> Sweam Blu payouts
+      </h2>
+      {status?.payoutsEnabled ? (
+        <p className="status status-ok" role="status">
+          Payouts enabled. Blu subscriptions and scout royalties are paid to your connected Stripe
+          account.
+        </p>
+      ) : (
+        <>
+          <p className="page-intro">
+            Blu subscribers pay monthly and you keep 80%. Connect a Stripe account to receive those
+            payouts; until you do, your Blu content is marked but not purchasable.
+          </p>
+          <div className="title-actions">
+            <button type="button" className="button" onClick={() => void connect()} disabled={busy}>
+              {busy
+                ? 'Starting…'
+                : status?.connected
+                  ? 'Finish connecting payouts'
+                  : 'Connect payouts'}
+            </button>
+          </div>
+        </>
+      )}
+      {notice && (
+        <p className="status" role="status">
+          {notice}
+        </p>
+      )}
+    </section>
   );
 }

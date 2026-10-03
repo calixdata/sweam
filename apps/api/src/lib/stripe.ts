@@ -136,6 +136,23 @@ export function createScoutCheckout(
   });
 }
 
+/**
+ * Send a Connect transfer to a creator's connected account (a scout royalty
+ * payout). Separate from Blu's destination charges: the scout pool is money
+ * Sweam already holds, moved out on a schedule.
+ */
+export function createTransfer(
+  env: Env,
+  opts: { amountCents: number; destination: string; metadata?: Record<string, string> },
+): Promise<{ id: string }> {
+  return stripeRequest<{ id: string }>(env, 'POST', '/transfers', {
+    amount: opts.amountCents,
+    currency: 'usd',
+    destination: opts.destination,
+    metadata: opts.metadata,
+  });
+}
+
 /** Create a Connect Express account for a creator to receive payouts. */
 export function createConnectAccount(env: Env, email: string): Promise<{ id: string }> {
   return stripeRequest<{ id: string }>(env, 'POST', '/accounts', {

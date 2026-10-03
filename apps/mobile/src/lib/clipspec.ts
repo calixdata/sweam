@@ -55,3 +55,26 @@ export const CLIP_SPEC = {
 
 /** Video container types the intake upload accepts (UPLOAD_CONTENT_TYPES on the API). */
 export const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm'] as const;
+
+/**
+ * Sweam Blu preset price tiers (mirrors BLU_TIERS on the server). Creators do
+ * not set free-form prices; they pick one of these for subscriber-only content.
+ * The creator keeps 80%; a subscription unlocks all of a creator's Blu content.
+ */
+export interface BluTier {
+  id: string;
+  label: string;
+  priceCents: number;
+}
+
+export const BLU_TIERS: readonly BluTier[] = [
+  { id: 'blu_299', label: '$2.99', priceCents: 299 },
+  { id: 'blu_499', label: '$4.99', priceCents: 499 },
+  { id: 'blu_699', label: '$6.99', priceCents: 699 },
+  { id: 'blu_999', label: '$9.99', priceCents: 999 },
+  { id: 'blu_1499', label: '$14.99', priceCents: 1499 },
+  { id: 'blu_1999', label: '$19.99', priceCents: 1999 },
+  { id: 'blu_2499', label: '$24.99', priceCents: 2499 },
+  { id: 'blu_3999', label: '$39.99', priceCents: 3999 },
+  { id: 'blu_4999', label: '$49.99', priceCents: 4999 },
+] as const;

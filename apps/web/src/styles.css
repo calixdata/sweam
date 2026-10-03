@@ -544,6 +544,28 @@ h1 .blu-badge {
   display: inline-block;
   vertical-align: middle;
 }
+.blu-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.subs-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.subs-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+}
+.scout-all-access {
+  margin-top: 1.25rem;
+}
 
 .poster {
   position: relative;

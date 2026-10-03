@@ -174,6 +174,8 @@ export interface ClipToPublish {
   audiences: string[];
   sourceUrl: string;
   captionsUrl: string | null;
+  /** Preset Blu price in cents when the creator posts this as Blu; null = free. */
+  bluPriceCents: number | null;
 }
 
 /** A clip's title name is its caption, trimmed to a display-friendly length. */
@@ -199,18 +201,28 @@ export async function publishClip(
   const name = clipTitleName(clip.caption);
   const titleId = crypto.randomUUID();
   const slug = await uniqueSlug(env.DB, name);
+  const isBlu = clip.bluPriceCents != null;
 
   await env.DB.batch([
     env.DB
       .prepare(
         `INSERT INTO titles
            (id, creator_id, kind, name, slug, synopsis, genre, audiences, genres, subgenres, advisory, poster_url,
-            published, published_at, admin_locked, series_id, review_state, created_at)
-         VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, NULL, 1, ?, 1, NULL, 'pending', ?)`,
+            published, published_at, admin_locked, series_id, review_state, is_blu, blu_price_cents, blu_changed_at, created_at)
+         VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, NULL, 1, ?, 1, NULL, 'pending', ?, ?, ?, ?)`,
       )
-      .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), JSON.stringify([clip.genre]), advisory, now, now),
+      .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), JSON.stringify([clip.genre]), advisory, now, isBlu ? 1 : 0, clip.bluPriceCents, isBlu ? now : null, now),
     env.DB.prepare('INSERT INTO title_stats (title_id) VALUES (?)').bind(titleId),
   ]);
+
+  // One Blu price per creator: a subscription unlocks all their Blu content, so
+  // the tier chosen when posting this clip sets the creator's subscription price.
+  if (isBlu && clip.bluPriceCents != null) {
+    await env.DB
+      .prepare('UPDATE creator_profiles SET blu_price_cents = ? WHERE user_id = ?')
+      .bind(clip.bluPriceCents, clip.userId)
+      .run();
+  }
 
   const episodeId = crypto.randomUUID();
   await env.DB.prepare(

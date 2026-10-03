@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { bluTierById } from '@sweam/shared';
 import type { AppEnv, Env } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
@@ -76,6 +77,14 @@ clipRoutes.post('/', async (c) => {
     fail(403, 'not_your_upload', 'That captions file does not belong to you.');
   }
 
+  // Monetization is a forced, preset choice: free (null) or one of the Blu tiers.
+  let bluPriceCents: number | null = null;
+  if (body.bluTierId) {
+    const tier = bluTierById(body.bluTierId);
+    if (!tier) fail(400, 'invalid_tier', 'Choose a Blu price from the preset options.');
+    bluPriceCents = tier.priceCents;
+  }
+
   const published = await publishClip(
     c.env,
     {
@@ -86,6 +95,7 @@ clipRoutes.post('/', async (c) => {
       audiences: body.audiences,
       sourceUrl: body.sourceUrl,
       captionsUrl: body.captionsUrl,
+      bluPriceCents,
     },
     user.displayName,
   );

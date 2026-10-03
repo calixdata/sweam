@@ -141,6 +141,18 @@ export function Settings() {
           {saving ? 'Saving…' : 'Save username'}
         </button>
       </section>
+
+      <section aria-labelledby="billing-heading">
+        <h2 id="billing-heading">Subscriptions &amp; billing</h2>
+        <p className="page-intro">
+          Manage your Sweam Blu subscriptions and scout all-access, update your card, or cancel.
+        </p>
+        <p>
+          <Link className="button button-quiet" to="/me/subscriptions">
+            Manage subscriptions
+          </Link>
+        </p>
+      </section>
     </div>
   );
 }

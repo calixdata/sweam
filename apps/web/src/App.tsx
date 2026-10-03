@@ -20,6 +20,7 @@ import { Cookies } from './pages/legal/Cookies';
 import { CreatorAgreement } from './pages/legal/CreatorAgreement';
 import { Privacy } from './pages/legal/Privacy';
 import { Terms } from './pages/legal/Terms';
+import { MeSubscriptions } from './pages/MeSubscriptions';
 import { Notifications } from './pages/Notifications';
 import { Record } from './pages/Record';
 import { Scout } from './pages/Scout';
@@ -108,6 +109,14 @@ export function App() {
           element={
             <RequireAuth>
               <ScoutOneSheet />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/me/subscriptions"
+          element={
+            <RequireAuth>
+              <MeSubscriptions />
             </RequireAuth>
           }
         />

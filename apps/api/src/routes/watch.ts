@@ -147,7 +147,20 @@ watchRoutes.post('/:episodeId/progress', requireUser, async (c) => {
     Math.min(maxPositionS - (existing?.max_position_s ?? 0), MAX_WATCH_DELTA_S),
   );
 
-  await c.env.DB.batch([
+  // Scout royalty attribution: when a viewer holding active scout all-access
+  // (and who is not the creator) watches Blu content, credit the creator's
+  // scout watch-time. This feeds the royalty-pool distribution.
+  let scoutWatch = false;
+  if (row.is_blu === 1 && row.creator_id !== user.id && watchDelta > 0) {
+    const scout = await c.env.DB.prepare(
+      "SELECT 1 AS x FROM scout_all_access WHERE user_id = ? AND status = 'active'",
+    )
+      .bind(user.id)
+      .first();
+    scoutWatch = scout !== null;
+  }
+
+  const statements = [
     c.env.DB.prepare(
       `INSERT INTO progress (user_id, episode_id, position_s, max_position_s, duration_s, completed, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -173,7 +186,17 @@ watchRoutes.post('/:episodeId/progress', requireUser, async (c) => {
          completes = completes + excluded.completes,
          watch_seconds = watch_seconds + excluded.watch_seconds`,
     ).bind(row.title_id, isFirstBeacon ? 1 : 0, newlyCompleted ? 1 : 0, watchDelta),
-  ]);
+  ];
+  if (scoutWatch) {
+    statements.push(
+      c.env.DB.prepare(
+        `INSERT INTO scout_watch_daily (creator_id, day, watch_seconds)
+         VALUES (?, date('now'), ?)
+         ON CONFLICT (creator_id, day) DO UPDATE SET watch_seconds = watch_seconds + excluded.watch_seconds`,
+      ).bind(row.creator_id, watchDelta),
+    );
+  }
+  await c.env.DB.batch(statements);
 
   return c.json({ ok: true, completed: completedNow });
 });
