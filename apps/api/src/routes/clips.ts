@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { bluTierById } from '@sweam/shared';
 import type { AppEnv, Env } from '../env';
+import { BLU_NOT_ELIGIBLE_MESSAGE, getBluOfferGate } from '../lib/blufund';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
@@ -82,6 +83,9 @@ clipRoutes.post('/', async (c) => {
   if (body.bluTierId) {
     const tier = bluTierById(body.bluTierId);
     if (!tier) fail(400, 'invalid_tier', 'Choose a Blu price from the preset options.');
+    // Offering Blu is gated until the creator is Fund-eligible (or Blu is open to all).
+    const gate = await getBluOfferGate(c.env.DB, user.id);
+    if (!gate.canOfferBlu) fail(403, 'blu_not_eligible', BLU_NOT_ELIGIBLE_MESSAGE);
     bluPriceCents = tier.priceCents;
   }
 

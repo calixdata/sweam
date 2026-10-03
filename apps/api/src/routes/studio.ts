@@ -11,9 +11,10 @@ import type {
   TitleAnalytics,
   TranscodeStatus,
 } from '@sweam/shared';
-import { CREATOR_REVENUE_SHARE, MIN_PAYOUT_MILLICENTS } from '@sweam/shared';
+import { CREATOR_REVENUE_SHARE, MIN_PAYOUT_MILLICENTS, ageInYears } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { loadDailySeries, loadRetention } from '../lib/analytics';
+import { BLU_NOT_ELIGIBLE_MESSAGE, getBluOfferGate } from '../lib/blufund';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { getCreatorEligibility } from '../lib/monetize';
 import { notifyFollowers } from '../lib/notify';
@@ -30,6 +31,7 @@ import {
   multipartAbortSchema,
   multipartCompleteSchema,
   multipartInitSchema,
+  bluFundSettingsSchema,
   publishSchema,
   removalRequestSchema,
   titleCreateSchema,
@@ -618,6 +620,88 @@ studioRoutes.get('/standing', requireCreator, async (c) => {
     })),
   };
   return c.json(payload);
+});
+
+// ---------------------------------------------------------------------------
+// Sweam Blu Fund + monetization defaults
+// ---------------------------------------------------------------------------
+
+interface BluFundProfileRow {
+  content_default: string | null;
+  dob: string | null;
+  blu_fund_attested_at: string | null;
+}
+
+async function bluFundStatus(c: Context<AppEnv>, creatorId: string) {
+  const gate = await getBluOfferGate(c.env.DB, creatorId);
+  const profile = await c.env.DB.prepare(
+    'SELECT content_default, dob, blu_fund_attested_at FROM creator_profiles WHERE user_id = ?',
+  )
+    .bind(creatorId)
+    .first<BluFundProfileRow>();
+  return {
+    eligibility: gate.eligibility,
+    platformOpen: gate.platformOpen,
+    canOfferBlu: gate.canOfferBlu,
+    contentDefault: profile?.content_default === 'blu' ? ('blu' as const) : ('free' as const),
+    dob: profile?.dob ?? null,
+    attested: Boolean(profile?.blu_fund_attested_at),
+  };
+}
+
+// Any signed-in user can read the gate (the upload form needs it before a
+// creator profile exists); only creators can change settings.
+studioRoutes.get('/blu-fund', requireUser, async (c) => {
+  return c.json(await bluFundStatus(c, currentUser(c).id));
+});
+
+studioRoutes.post('/blu-fund', requireCreator, async (c) => {
+  const user = currentUser(c);
+  const body = await parseBody(c, bluFundSettingsSchema);
+
+  const profile = await c.env.DB.prepare('SELECT dob FROM creator_profiles WHERE user_id = ?')
+    .bind(user.id)
+    .first<{ dob: string | null }>();
+
+  // Apply DOB + 18+ attestation first so a same-request contentDefault='blu'
+  // sees the updated age.
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  let effectiveDob = profile?.dob ?? null;
+  if (body.dob !== undefined) {
+    effectiveDob = body.dob;
+    sets.push('dob = ?');
+    binds.push(body.dob);
+  }
+  if (body.attest18) {
+    if (!effectiveDob) {
+      fail(400, 'dob_required', 'Add your date of birth before confirming you are 18 or older.');
+    }
+    const age = ageInYears(effectiveDob);
+    if (age == null) fail(400, 'bad_dob', 'That date of birth is not valid.');
+    if (age < 18) {
+      fail(400, 'under_18', 'Your date of birth indicates you are under 18, so you cannot join the Blu Fund.');
+    }
+    sets.push('blu_fund_attested_at = ?');
+    binds.push(nowIso());
+  }
+  if (sets.length > 0) {
+    await c.env.DB.prepare(`UPDATE creator_profiles SET ${sets.join(', ')} WHERE user_id = ?`)
+      .bind(...binds, user.id)
+      .run();
+  }
+
+  if (body.contentDefault !== undefined) {
+    if (body.contentDefault === 'blu') {
+      const gate = await getBluOfferGate(c.env.DB, user.id);
+      if (!gate.canOfferBlu) fail(403, 'blu_not_eligible', BLU_NOT_ELIGIBLE_MESSAGE);
+    }
+    await c.env.DB.prepare('UPDATE creator_profiles SET content_default = ? WHERE user_id = ?')
+      .bind(body.contentDefault, user.id)
+      .run();
+  }
+
+  return c.json(await bluFundStatus(c, user.id));
 });
 
 // ---------------------------------------------------------------------------

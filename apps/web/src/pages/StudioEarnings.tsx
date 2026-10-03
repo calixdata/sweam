@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { BluConnectStatus, EarningsSummary } from '@sweam/shared';
-import { formatMillicents } from '@sweam/shared';
+import type { BluConnectStatus, BluFundStatus, EarningsSummary } from '@sweam/shared';
+import { BLU_OPEN_USER_THRESHOLD, BLU_SWITCH_COOLDOWN_DAYS, formatMillicents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { ErrorNote, Loading } from '../components/Status';
 import { BluBadge } from '../components/BluBadge';
@@ -64,6 +64,8 @@ export function StudioEarnings() {
           {notice}
         </p>
       )}
+
+      <BluFundSection />
 
       <BluPayoutsSection />
 
@@ -217,6 +219,178 @@ export function StudioEarnings() {
         )}
       </section>
     </div>
+  );
+}
+
+/**
+ * Sweam Blu Fund: the ad-funded creator payout program. A creator must clear the
+ * bar (followers, views, a clean 90-day record, verified 18+) to be eligible, and
+ * — until the platform opens Blu to everyone — to put content behind the paywall.
+ * This panel shows status, takes the age verification, and sets the new-upload
+ * Free/Blu default.
+ */
+function BluFundSection() {
+  const [status, setStatus] = useState<BluFundStatus | null>(null);
+  const [dob, setDob] = useState('');
+  const [attest, setAttest] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const data = await apiGet<BluFundStatus>('/api/studio/blu-fund');
+      setStatus(data);
+      if (data.dob) setDob(data.dob);
+    } catch {
+      // Non-creators and transient errors simply hide the panel.
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (!status) return null;
+  const e = status.eligibility;
+
+  async function saveAge() {
+    setBusy(true);
+    setNotice('');
+    try {
+      const data = await apiSend<BluFundStatus>('POST', '/api/studio/blu-fund', {
+        dob,
+        attest18: true,
+      });
+      setStatus(data);
+      setAttest(false);
+      setNotice(data.attested ? 'Age verified.' : 'Saved.');
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Could not save your age.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setDefault(value: 'free' | 'blu') {
+    setBusy(true);
+    setNotice('');
+    try {
+      const data = await apiSend<BluFundStatus>('POST', '/api/studio/blu-fund', {
+        contentDefault: value,
+      });
+      setStatus(data);
+      setNotice(`New uploads now default to ${value === 'blu' ? 'Sweam Blu' : 'Free'}.`);
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Could not update the default.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="blu-fund">
+      <h2 id="blu-fund" className="blu-heading">
+        <BluBadge height={20} decorative /> Sweam Blu Fund
+      </h2>
+      <p className="page-intro">
+        The Blu Fund pays eligible creators from ad revenue, distributed by watch-time. You must
+        meet every requirement below.{' '}
+        {status.platformOpen
+          ? 'Blu is now open to all creators.'
+          : `Until Sweam reaches ${BLU_OPEN_USER_THRESHOLD.toLocaleString()} members, only eligible creators can put content behind the Blu paywall.`}
+      </p>
+      {e.eligible ? (
+        <p className="status status-ok" role="status">
+          You are eligible for the Sweam Blu Fund.
+        </p>
+      ) : (
+        <p className="status" role="status">
+          Not eligible yet. Meet every requirement below.
+        </p>
+      )}
+      <ul>
+        <li>
+          Followers: {e.followers.actual.toLocaleString()} of {e.followers.required.toLocaleString()}{' '}
+          — {e.followers.met ? 'met' : 'not yet'}
+        </li>
+        <li>
+          Views: {e.views.actual.toLocaleString()} of {e.views.required.toLocaleString()} —{' '}
+          {e.views.met ? 'met' : 'not yet'}
+        </li>
+        <li>
+          No violations in {e.noRecentViolations.windowDays} days:{' '}
+          {e.noRecentViolations.met
+            ? 'met'
+            : `${e.noRecentViolations.violations} in the last ${e.noRecentViolations.windowDays} days`}
+        </li>
+        <li>Verified 18+: {e.ageVerified ? 'met' : 'add your date of birth and confirm below'}</li>
+      </ul>
+
+      {status.attested ? (
+        <p className="field-hint">Age verified (18 or older).</p>
+      ) : (
+        <div className="studio-form">
+          <h3>Verify your age</h3>
+          <div className="field">
+            <label htmlFor="blu-dob">Date of birth</label>
+            <input
+              id="blu-dob"
+              type="date"
+              value={dob}
+              onChange={(event) => setDob(event.target.value)}
+            />
+          </div>
+          <div className="field field-checkbox">
+            <input
+              id="blu-attest"
+              type="checkbox"
+              checked={attest}
+              onChange={(event) => setAttest(event.target.checked)}
+            />
+            <label htmlFor="blu-attest">I confirm I am 18 years of age or older.</label>
+          </div>
+          <button
+            type="button"
+            className="button"
+            onClick={() => void saveAge()}
+            disabled={busy || !dob || !attest}
+          >
+            Save age verification
+          </button>
+        </div>
+      )}
+
+      <h3>Default for new uploads</h3>
+      <p className="field-hint">
+        New clips and titles start with this setting. You can still change each one (once every{' '}
+        {BLU_SWITCH_COOLDOWN_DAYS} days).
+        {!status.canOfferBlu ? ' Blu becomes selectable once you are eligible.' : ''}
+      </p>
+      <div className="title-actions">
+        <button
+          type="button"
+          className={status.contentDefault === 'free' ? 'button' : 'button button-quiet'}
+          onClick={() => void setDefault('free')}
+          disabled={busy || status.contentDefault === 'free'}
+        >
+          Default: Free
+        </button>
+        <button
+          type="button"
+          className={status.contentDefault === 'blu' ? 'button' : 'button button-quiet'}
+          onClick={() => void setDefault('blu')}
+          disabled={busy || status.contentDefault === 'blu' || !status.canOfferBlu}
+        >
+          Default: Sweam Blu
+        </button>
+      </div>
+
+      {notice && (
+        <p className="status" role="status">
+          {notice}
+        </p>
+      )}
+    </section>
   );
 }
 

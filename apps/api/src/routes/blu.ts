@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { BLU_SWITCH_COOLDOWN_DAYS, bluTierById } from '@sweam/shared';
 import type { AppEnv } from '../env';
+import { BLU_NOT_ELIGIBLE_MESSAGE, getBluOfferGate } from '../lib/blufund';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { notify, notifyFollowers } from '../lib/notify';
 import { requireUser, currentUser } from '../lib/session';
@@ -56,6 +57,13 @@ bluRoutes.put('/titles/:id', async (c) => {
 
   if (!switching && !changingTier) {
     return c.json({ isBlu: wasBlu, bluPriceCents: title.blu_price_cents, changed: false });
+  }
+
+  // Turning a title Blu is gated until the creator is Fund-eligible (or Blu is
+  // open to everyone). Changing the price of already-Blu content is not re-gated.
+  if (body.isBlu && switching) {
+    const gate = await getBluOfferGate(c.env.DB, user.id);
+    if (!gate.canOfferBlu) fail(403, 'blu_not_eligible', BLU_NOT_ELIGIBLE_MESSAGE);
   }
 
   // Smart switch-governance: a Free<->Blu flip is limited to once per cooldown.

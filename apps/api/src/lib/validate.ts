@@ -136,6 +136,23 @@ export const bluTitleSchema = z.object({
   tierId: z.string().trim().max(32).optional(),
 });
 
+// Blu Fund + monetization defaults: set the new-upload Free/Blu default, and/or
+// submit a date of birth and an 18+ attestation for Fund eligibility.
+export const bluFundSettingsSchema = z
+  .object({
+    contentDefault: z.enum(['free', 'blu']).optional(),
+    dob: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter your date of birth as YYYY-MM-DD.')
+      .optional(),
+    attest18: z.literal(true).optional(),
+  })
+  .refine(
+    (v) => v.contentDefault !== undefined || v.dob !== undefined || v.attest18 !== undefined,
+    'Nothing to update.',
+  );
+
 export const scoutApplySchema = z.object({
   orgName: z.string().trim().min(2, 'Organization name is required.').max(120),
   orgUrl: z

@@ -88,3 +88,102 @@ export function evaluateMonetizationEligibility(
     goodStanding,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Sweam Blu Fund
+// ---------------------------------------------------------------------------
+
+/**
+ * The Sweam Blu Fund is the ad-funded creator payout program (it replaces the
+ * flat ad-revenue share). Its bar is higher than basic monetization: a real
+ * audience, real views, a clean recent record, and a verified adult. The 18+
+ * check needs a date of birth on file AND an explicit attestation.
+ */
+export const BLU_FUND_THRESHOLDS = {
+  minFollowers: 500,
+  minViews: 10_000,
+  /** No account/content violations (strikes or takedowns) within this window. */
+  violationWindowDays: 90,
+  minAgeYears: 18,
+} as const;
+
+/**
+ * Total platform users at or above which Sweam opens Blu (paid) content to
+ * every creator. Below it, only Blu-Fund-eligible creators may paywall content,
+ * because the audience is not yet large enough to support paid-only creators.
+ */
+export const BLU_OPEN_USER_THRESHOLD = 10_000;
+
+export interface BluFundStats {
+  followers: number;
+  /** Lifetime plays across the creator's published titles. */
+  views: number;
+  /** Strikes + takedowns within the violation window. */
+  recentViolations: number;
+  /** A date of birth is on file, it is >= 18, AND an 18+ attestation is recorded. */
+  ageVerified18: boolean;
+}
+
+export interface BluFundEligibility {
+  eligible: boolean;
+  followers: EligibilityCheck;
+  views: EligibilityCheck;
+  noRecentViolations: { met: boolean; violations: number; windowDays: number };
+  ageVerified: boolean;
+}
+
+export function evaluateBluFundEligibility(stats: BluFundStats): BluFundEligibility {
+  const followers: EligibilityCheck = {
+    required: BLU_FUND_THRESHOLDS.minFollowers,
+    actual: Math.max(0, stats.followers),
+    met: stats.followers >= BLU_FUND_THRESHOLDS.minFollowers,
+  };
+  const views: EligibilityCheck = {
+    required: BLU_FUND_THRESHOLDS.minViews,
+    actual: Math.max(0, stats.views),
+    met: stats.views >= BLU_FUND_THRESHOLDS.minViews,
+  };
+  const noRecentViolations = {
+    met: stats.recentViolations === 0,
+    violations: Math.max(0, stats.recentViolations),
+    windowDays: BLU_FUND_THRESHOLDS.violationWindowDays,
+  };
+  const ageVerified = stats.ageVerified18;
+  return {
+    eligible: followers.met && views.met && noRecentViolations.met && ageVerified,
+    followers,
+    views,
+    noRecentViolations,
+    ageVerified,
+  };
+}
+
+/** Whole years between an ISO date (YYYY-MM-DD) and now, or null if unparseable. */
+export function ageInYears(dob: string | null | undefined, now: Date = new Date()): number | null {
+  if (!dob) return null;
+  const d = new Date(`${dob}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return null;
+  let age = now.getUTCFullYear() - d.getUTCFullYear();
+  const m = now.getUTCMonth() - d.getUTCMonth();
+  if (m < 0 || (m === 0 && now.getUTCDate() < d.getUTCDate())) age -= 1;
+  return age;
+}
+
+/** The viewer-facing Blu-offer gate: may this creator put content behind the paywall? */
+export interface BluOfferGate {
+  canOfferBlu: boolean;
+  /** True once the platform has crossed BLU_OPEN_USER_THRESHOLD (Blu open to all). */
+  platformOpen: boolean;
+  eligible: boolean;
+}
+
+/** The Studio Blu Fund payload: eligibility, the offer gate, and the creator's settings. */
+export interface BluFundStatus {
+  eligibility: BluFundEligibility;
+  platformOpen: boolean;
+  canOfferBlu: boolean;
+  /** The Free/Blu default applied to new uploads. */
+  contentDefault: 'free' | 'blu';
+  dob: string | null;
+  attested: boolean;
+}

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   AUDIENCES,
   AUDIENCE_LABELS,
+  BLU_FUND_THRESHOLDS,
   BLU_SWITCH_COOLDOWN_DAYS,
   BLU_TIERS,
   CLIP_SPEC,
@@ -10,7 +11,8 @@ import {
   RATINGS,
   UPLOAD_SPECS,
 } from '@sweam/shared';
-import { ApiError, apiSend } from '../api';
+import type { BluFundStatus } from '@sweam/shared';
+import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { BluBadge } from '../components/BluBadge';
 import { usePageTitle } from '../hooks';
@@ -49,6 +51,8 @@ export function Record() {
   // Forced Free/Blu choice, defaulted to Free. On Blu, a preset tier is required.
   const [bluMode, setBluMode] = useState<'free' | 'blu'>('free');
   const [bluTierId, setBluTierId] = useState<string>(BLU_TIERS[3]?.id ?? 'blu_999');
+  // Blu-offer gate + the creator's Free/Blu default for new uploads.
+  const [bluFund, setBluFund] = useState<BluFundStatus | null>(null);
 
   const [posting, setPosting] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -79,6 +83,22 @@ export function Record() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
+
+  // Load the Blu-offer gate + the creator's Free/Blu default for new uploads.
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    apiGet<BluFundStatus>('/api/studio/blu-fund')
+      .then((data) => {
+        if (cancelled) return;
+        setBluFund(data);
+        setBluMode(data.canOfferBlu && data.contentDefault === 'blu' ? 'blu' : 'free');
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const startCamera = useCallback(async () => {
     setError(null);
@@ -372,12 +392,20 @@ export function Record() {
               name="clip-monetization"
               checked={bluMode === 'blu'}
               onChange={() => setBluMode('blu')}
-              disabled={posting}
+              disabled={posting || (bluFund !== null && !bluFund.canOfferBlu)}
             />
             <label htmlFor="clip-blu" className="blu-radio-label">
               <BluBadge height={16} decorative /> Sweam Blu — subscribers only
             </label>
           </div>
+          {bluFund !== null && !bluFund.canOfferBlu && (
+            <p className="field-hint">
+              Sweam Blu is open to eligible creators for now: at least{' '}
+              {BLU_FUND_THRESHOLDS.minFollowers} followers, {BLU_FUND_THRESHOLDS.minViews.toLocaleString()}{' '}
+              views, no violations in {BLU_FUND_THRESHOLDS.violationWindowDays} days, and a verified
+              18+ age. Check your <Link to="/studio/earnings">Blu Fund status</Link>.
+            </p>
+          )}
           {bluMode === 'blu' && (
             <div className="field">
               <label htmlFor="clip-blu-tier">Monthly price (choose a preset)</label>
