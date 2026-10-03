@@ -29,6 +29,7 @@ interface FeedRow {
   likes: number;
   comment_count: number;
   liked_by_me: number;
+  is_blu: number;
 }
 
 const PAGE = 20;
@@ -42,6 +43,7 @@ feedRoutes.get('/', async (c) => {
   const rows = await c.env.DB.prepare(
     `SELECT t.id AS title_id, t.slug, t.name, t.kind, t.synopsis,
        u.display_name AS creator_name, cp.handle AS creator_handle, t.poster_url,
+       t.is_blu AS is_blu,
        e.id AS episode_id, e.video_url, t.published_at,
        COALESCE(s.plays, 0) AS views, COALESCE(s.likes, 0) AS likes,
        (SELECT COUNT(*) FROM comments co WHERE co.title_id = t.id AND co.status = 'visible') AS comment_count,
@@ -53,7 +55,7 @@ feedRoutes.get('/', async (c) => {
      JOIN episodes e ON e.id = (
        SELECT id FROM episodes WHERE title_id = t.id ORDER BY season, episode LIMIT 1
      )
-     WHERE t.published = 1 AND (?2 = '' OR t.published_at < ?2)
+     WHERE t.published = 1 AND t.is_blu = 0 AND (?2 = '' OR t.published_at < ?2)
        AND (?3 = 0 OR EXISTS (
          SELECT 1 FROM follows f WHERE f.follower_id = ?1 AND f.creator_id = t.creator_id
        ))
@@ -77,6 +79,7 @@ feedRoutes.get('/', async (c) => {
     likes: row.likes,
     commentCount: row.comment_count,
     likedByMe: row.liked_by_me > 0,
+    isBlu: row.is_blu === 1,
   }));
 
   const last = rows.results.at(-1);

@@ -8,6 +8,7 @@ import type { Advisory, ContentKind, EpisodeSummary, Genre, TitleSummary } from 
 export const TITLE_SELECT = `
   t.id, t.slug, t.name, t.kind, t.genre, t.audiences AS audiences, t.hero_url AS hero_url,
   t.synopsis, t.advisory, t.poster_url, t.published_at,
+  t.is_blu AS is_blu, t.blu_price_cents AS blu_price_cents,
   u.display_name AS creator_name, cp.handle AS creator_handle,
   (SELECT COUNT(*) FROM episodes e WHERE e.title_id = t.id) AS episode_count
 `;
@@ -30,6 +31,8 @@ export interface TitleRow {
   advisory: Advisory;
   poster_url: string | null;
   published_at: string | null;
+  is_blu: number;
+  blu_price_cents: number | null;
   creator_name: string;
   creator_handle: string;
   episode_count: number;
@@ -57,6 +60,8 @@ export function mapTitle(row: TitleRow): TitleSummary {
     publishedAt: row.published_at,
     episodeCount: row.episode_count,
     creator: { handle: row.creator_handle, displayName: row.creator_name },
+    isBlu: row.is_blu === 1,
+    bluPriceCents: row.blu_price_cents,
   };
 }
 

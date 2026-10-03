@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { api, mediaUrl } from '../../lib/api';
+import { BluBadge } from '../../components/BluBadge';
 import { colors, radius } from '../../lib/theme';
 import type { HomePayload, TitleSummary } from '../../lib/types';
 
@@ -83,13 +84,20 @@ function PosterCard({ title }: { title: TitleSummary }) {
   const poster = mediaUrl(title.posterUrl);
   return (
     <Pressable style={styles.card} onPress={() => router.push(`/t/${title.slug}`)}>
-      {poster ? (
-        <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" transition={150} />
-      ) : (
-        <View style={[styles.poster, styles.placeholder]}>
-          <Text style={styles.posterInitial}>{title.name.slice(0, 1).toUpperCase()}</Text>
-        </View>
-      )}
+      <View style={styles.posterWrap}>
+        {poster ? (
+          <Image source={{ uri: poster }} style={styles.poster} contentFit="cover" transition={150} />
+        ) : (
+          <View style={[styles.poster, styles.placeholder]}>
+            <Text style={styles.posterInitial}>{title.name.slice(0, 1).toUpperCase()}</Text>
+          </View>
+        )}
+        {title.isBlu && (
+          <View style={styles.bluOnPoster}>
+            <BluBadge height={18} />
+          </View>
+        )}
+      </View>
       <Text style={styles.cardName} numberOfLines={1}>
         {title.name}
       </Text>
@@ -142,6 +150,8 @@ const styles = StyleSheet.create({
   rail: { marginTop: 18 },
   railHeading: { color: colors.text, fontSize: 18, fontWeight: '700', paddingHorizontal: 16, marginBottom: 10 },
   card: { width: 120 },
+  posterWrap: { width: 120, position: 'relative' },
+  bluOnPoster: { position: 'absolute', top: 6, right: 6 },
   poster: { width: 120, height: 180, borderRadius: radius.sm, backgroundColor: colors.surface2 },
   placeholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface2 },
   posterInitial: { color: colors.accent, fontSize: 40, fontWeight: '800' },

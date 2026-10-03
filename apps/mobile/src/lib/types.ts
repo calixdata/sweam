@@ -31,6 +31,7 @@ export interface FeedItem {
   likes: number;
   commentCount: number;
   likedByMe: boolean;
+  isBlu: boolean;
 }
 
 export interface TitleSummary {
@@ -47,6 +48,8 @@ export interface TitleSummary {
   publishedAt: string | null;
   episodeCount: number;
   creator: CreatorRef;
+  isBlu: boolean;
+  bluPriceCents: number | null;
 }
 
 export interface Rail {

@@ -129,6 +129,13 @@ export const pushTokenDeleteSchema = z.object({
   token: z.string().trim().min(1).max(4096),
 });
 
+// Creators must explicitly choose Free or Blu (forced choice), and when Blu
+// they must pick one of the preset price tiers (no free-form pricing).
+export const bluTitleSchema = z.object({
+  isBlu: z.boolean(),
+  tierId: z.string().trim().max(32).optional(),
+});
+
 export const scoutApplySchema = z.object({
   orgName: z.string().trim().min(2, 'Organization name is required.').max(120),
   orgUrl: z

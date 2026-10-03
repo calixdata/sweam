@@ -14,6 +14,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
 import { api, mediaUrl } from '../../lib/api';
+import { BluBadge } from '../../components/BluBadge';
 import { useAuth } from '../../lib/auth';
 import { colors, radius } from '../../lib/theme';
 import type { CommentItem, TitleDetail } from '../../lib/types';
@@ -115,6 +116,15 @@ export default function TitleScreen() {
           <Text style={styles.creatorText}>@{title.creator.handle}</Text>
           <Ionicons name="chevron-forward" size={14} color={colors.muted} />
         </Pressable>
+        {title.isBlu && (
+          <View style={styles.bluRow}>
+            <BluBadge height={22} label />
+            <Text style={styles.bluText}>
+              {title.bluPriceCents != null ? `$${(title.bluPriceCents / 100).toFixed(2)}/mo · ` : ''}
+              Subscribers only
+            </Text>
+          </View>
+        )}
         <Text style={styles.metaLine} numberOfLines={1}>
           {[title.kind, title.audiences?.[0], title.genre, title.advisory].filter(Boolean).join('  ·  ')}
         </Text>
@@ -298,6 +308,8 @@ const styles = StyleSheet.create({
   name: { color: colors.text, fontSize: 26, fontWeight: '800' },
   creatorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   creatorText: { color: colors.accent, fontSize: 15, fontWeight: '600' },
+  bluRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  bluText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
   metaLine: { color: colors.muted, fontSize: 13 },
   stats: { color: colors.muted, fontSize: 13 },
   synopsis: { color: colors.text, fontSize: 15, lineHeight: 22, marginTop: 4 },

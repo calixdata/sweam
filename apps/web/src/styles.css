@@ -519,6 +519,21 @@ main:focus {
   text-decoration: none;
 }
 
+.blu-badge-wrap {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: inline-flex;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
+}
+.blu-badge {
+  display: block;
+}
+.blu-panel {
+  margin-top: 1.75rem;
+}
+
 .poster {
   position: relative;
   width: 100%;

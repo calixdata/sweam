@@ -73,6 +73,60 @@ export const RATING_TO_ADVISORY: Record<Rating, Advisory> = {
   'NC-17': 'TV-MA',
 };
 
+// ---------------------------------------------------------------------------
+// Sweam Blu: the subscriber-only paid-content tier.
+// ---------------------------------------------------------------------------
+
+/**
+ * Creators do not set free-form prices. They choose one monthly price from a
+ * fixed preset ladder (structured like Amazon KDP's royalty/price options).
+ * Sweam takes a flat 20% of Blu revenue; the creator keeps 80%. All Blu sales
+ * are final and non-refundable.
+ */
+export const BLU_CREATOR_SHARE = 0.8;
+export const BLU_PLATFORM_SHARE = 0.2;
+
+export interface BluTier {
+  id: string;
+  label: string;
+  priceCents: number;
+}
+
+/** The only monthly prices a creator may pick for Blu (choose exactly one). */
+export const BLU_TIERS: readonly BluTier[] = [
+  { id: 'blu_299', label: '$2.99 / month', priceCents: 299 },
+  { id: 'blu_499', label: '$4.99 / month', priceCents: 499 },
+  { id: 'blu_699', label: '$6.99 / month', priceCents: 699 },
+  { id: 'blu_999', label: '$9.99 / month', priceCents: 999 },
+  { id: 'blu_1499', label: '$14.99 / month', priceCents: 1499 },
+  { id: 'blu_1999', label: '$19.99 / month', priceCents: 1999 },
+  { id: 'blu_2499', label: '$24.99 / month', priceCents: 2499 },
+  { id: 'blu_3999', label: '$39.99 / month', priceCents: 3999 },
+  { id: 'blu_4999', label: '$49.99 / month', priceCents: 4999 },
+] as const;
+
+export function bluTierById(id: string): BluTier | undefined {
+  return BLU_TIERS.find((t) => t.id === id);
+}
+
+export function bluTierByCents(cents: number | null): BluTier | undefined {
+  return cents == null ? undefined : BLU_TIERS.find((t) => t.priceCents === cents);
+}
+
+/** A creator may flip a title between Free and Blu at most once per this window. */
+export const BLU_SWITCH_COOLDOWN_DAYS = 30;
+
+/** Scout All-Access: one monthly fee for all Blu content, no per-creator subscriptions. */
+export const SCOUT_ALL_ACCESS_CENTS = 9900;
+
+/** Accessible label for the Blu badge image. */
+export const BLU_BADGE_LABEL = 'Sweam Blu paid content';
+
+/** Format a cents amount as a USD price string. */
+export function formatUsdCents(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
 /** Minimum age to hold a Sweam account. Referenced in copy and enforced at sign-up. */
 export const MIN_AGE = 16;
 
@@ -192,6 +246,10 @@ export interface TitleSummary {
   publishedAt: string | null;
   episodeCount: number;
   creator: CreatorRef;
+  /** Sweam Blu: true when this title is subscriber-only paid content. */
+  isBlu: boolean;
+  /** Monthly Blu price in cents (one of the preset tiers), or null when free. */
+  bluPriceCents: number | null;
 }
 
 export interface EpisodeSummary {
@@ -243,6 +301,8 @@ export interface FeedItem {
   likes: number;
   commentCount: number;
   likedByMe: boolean;
+  /** Sweam Blu: true when subscriber-only paid content. */
+  isBlu: boolean;
 }
 
 /** One entry in the Discover feed, with the human-readable reason it ranked where it did. */
@@ -476,7 +536,8 @@ export type NotificationKind =
   | 'comment'
   | 'follow'
   | 'submission'
-  | 'verbatiim';
+  | 'verbatiim'
+  | 'blu';
 
 export interface NotificationItem {
   id: string;

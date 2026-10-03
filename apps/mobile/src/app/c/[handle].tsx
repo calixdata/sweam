@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, mediaUrl } from '../../lib/api';
+import { BluBadge } from '../../components/BluBadge';
 import { useAuth } from '../../lib/auth';
 import { colors, radius } from '../../lib/theme';
 import type { CreatorPublicPage } from '../../lib/types';
@@ -140,6 +141,11 @@ export default function CreatorScreen() {
                 ) : (
                   <View style={[{ width: col, height: col * 1.5, borderRadius: radius.sm }, styles.placeholder]}>
                     <Text style={styles.posterInitial}>{t.name.slice(0, 1).toUpperCase()}</Text>
+                  </View>
+                )}
+                {t.isBlu && (
+                  <View style={{ position: 'absolute', top: 6, right: 6 }}>
+                    <BluBadge height={16} />
                   </View>
                 )}
                 <Text style={styles.cardName} numberOfLines={1}>

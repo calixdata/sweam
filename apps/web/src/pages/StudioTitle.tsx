@@ -2,7 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { StudioEpisode, StudioTitleDetail } from '@sweam/shared';
-import { ADVISORIES, CONTENT_KINDS, CONTENT_KIND_LABELS, GENRES } from '@sweam/shared';
+import {
+  ADVISORIES,
+  BLU_SWITCH_COOLDOWN_DAYS,
+  BLU_TIERS,
+  bluTierByCents,
+  CONTENT_KINDS,
+  CONTENT_KIND_LABELS,
+  GENRES,
+} from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { ErrorNote, Loading } from '../components/Status';
 import { VerbatiimPanel } from '../components/VerbatiimPanel';
@@ -103,6 +111,7 @@ export function StudioTitle() {
       )}
 
       <TitleEditForm title={title} onSaved={load} />
+      <BluPanel title={title} onChanged={load} setNotice={setNotice} />
       <EpisodesSection title={title} onChanged={load} />
       <VerbatiimPanel title={title} onChanged={load} />
     </div>
@@ -316,6 +325,131 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
           {submitting ? 'Saving…' : 'Save details'}
         </button>
       </form>
+    </section>
+  );
+}
+
+/**
+ * Sweam Blu control: the creator makes an explicit Free/Blu choice and, for Blu,
+ * picks one of the preset monthly prices. The server enforces the switch cooldown
+ * and notifies affected viewers.
+ */
+function BluPanel({
+  title,
+  onChanged,
+  setNotice,
+}: {
+  title: StudioTitleDetail;
+  onChanged: () => Promise<void>;
+  setNotice: (message: string) => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [mode, setMode] = useState<'free' | 'blu'>('free');
+  const [tierId, setTierId] = useState<string>(BLU_TIERS[3]?.id ?? 'blu_999');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGet<{ isBlu: boolean; bluPriceCents: number | null }>(
+      `/api/titles/${encodeURIComponent(title.slug)}`,
+    )
+      .then((t) => {
+        setMode(t.isBlu ? 'blu' : 'free');
+        const tier = bluTierByCents(t.bluPriceCents);
+        if (tier) setTierId(tier.id);
+      })
+      .catch(() => undefined)
+      .finally(() => setLoaded(true));
+  }, [title.slug]);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = mode === 'blu' ? { isBlu: true, tierId } : { isBlu: false };
+      const res = await apiSend<{ isBlu: boolean; changed: boolean }>(
+        'PUT',
+        `/api/blu/titles/${title.id}`,
+        body,
+      );
+      setNotice(
+        !res.changed
+          ? 'No change to the Blu setting.'
+          : res.isBlu
+            ? 'This title is now Sweam Blu. Your followers were notified it is no longer free.'
+            : 'This title is now free. Your subscribers were notified.',
+      );
+      await onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not update the Blu setting.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="blu-heading" className="blu-panel">
+      <h2 id="blu-heading">Sweam Blu</h2>
+      <p className="field-hint">
+        Choose whether this title is Free or Sweam Blu (paid). You must pick one. On Blu you keep 80%
+        of the revenue and all sales are final. Prices are preset — no custom amounts. You can switch
+        a title between Free and Blu at most once every {BLU_SWITCH_COOLDOWN_DAYS} days, and viewers
+        are notified when it changes.
+      </p>
+      {!loaded ? (
+        <p className="status" role="status">
+          Loading…
+        </p>
+      ) : (
+        <form
+          className="studio-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save();
+          }}
+        >
+          <div className="field field-checkbox">
+            <input
+              type="radio"
+              id="blu-free"
+              name="blu-mode"
+              checked={mode === 'free'}
+              onChange={() => setMode('free')}
+            />
+            <label htmlFor="blu-free">Free — anyone can watch</label>
+          </div>
+          <div className="field field-checkbox">
+            <input
+              type="radio"
+              id="blu-paid"
+              name="blu-mode"
+              checked={mode === 'blu'}
+              onChange={() => setMode('blu')}
+            />
+            <label htmlFor="blu-paid">Sweam Blu — subscribers only</label>
+          </div>
+          {mode === 'blu' && (
+            <div className="field">
+              <label htmlFor="blu-tier">Monthly price (choose a preset)</label>
+              <select id="blu-tier" value={tierId} onChange={(event) => setTierId(event.target.value)}>
+                {BLU_TIERS.map((tier) => (
+                  <option key={tier.id} value={tier.id}>
+                    {tier.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {error && (
+            <p className="status status-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button type="submit" className="button" disabled={busy}>
+            {busy ? 'Saving…' : 'Save Blu setting'}
+          </button>
+        </form>
+      )}
     </section>
   );
 }

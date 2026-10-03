@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Genre, TitleSummary } from '@sweam/shared';
 import { CONTENT_KIND_LABELS } from '@sweam/shared';
+import { BluBadge } from './BluBadge';
 
 /**
  * Deterministic hue per genre for poster placeholders: enough variety that a
@@ -38,7 +39,7 @@ const GENRE_HUES: Partial<Record<Genre, number>> = {
 export function TitleCard({ title }: { title: TitleSummary }) {
   const label = `${title.name}, ${CONTENT_KIND_LABELS[title.kind]}${
     title.kind === 'series' ? `, ${title.episodeCount} episodes` : ''
-  }, ${title.genre}, by ${title.creator.displayName}`;
+  }, ${title.genre}, by ${title.creator.displayName}${title.isBlu ? ', Sweam Blu paid content' : ''}`;
   const hue = GENRE_HUES[title.genre] ?? 210;
 
   const noPoster = !title.posterUrl;
@@ -55,6 +56,11 @@ export function TitleCard({ title }: { title: TitleSummary }) {
         >
           {title.posterUrl && <img src={title.posterUrl} alt="" loading="lazy" />}
           <span className="tag-new card-tag">{CONTENT_KIND_LABELS[title.kind]}</span>
+          {title.isBlu && (
+            <span className="blu-badge-wrap">
+              <BluBadge height={22} decorative />
+            </span>
+          )}
           <span className="poster-title">{title.name}</span>
         </div>
         <p className="card-meta">

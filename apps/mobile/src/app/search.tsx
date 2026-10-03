@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, mediaUrl } from '../lib/api';
+import { BluBadge } from '../components/BluBadge';
 import { colors, radius } from '../lib/theme';
 import type { TitleSummary } from '../lib/types';
 
@@ -111,9 +112,12 @@ function ResultRow({ title }: { title: TitleSummary }) {
         </View>
       )}
       <View style={styles.rowBody}>
-        <Text style={styles.rowName} numberOfLines={1}>
-          {title.name}
-        </Text>
+        <View style={styles.rowNameWrap}>
+          <Text style={styles.rowName} numberOfLines={1}>
+            {title.name}
+          </Text>
+          {title.isBlu && <BluBadge height={16} />}
+        </View>
         <Text style={styles.rowMeta} numberOfLines={1}>
           @{title.creator.handle} · {title.genre}
         </Text>
@@ -154,6 +158,7 @@ const styles = StyleSheet.create({
   placeholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface2 },
   thumbInitial: { color: colors.accent, fontSize: 24, fontWeight: '800' },
   rowBody: { flex: 1, gap: 3 },
-  rowName: { color: colors.text, fontSize: 16, fontWeight: '600' },
+  rowNameWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  rowName: { color: colors.text, fontSize: 16, fontWeight: '600', flexShrink: 1 },
   rowMeta: { color: colors.muted, fontSize: 13 },
 });

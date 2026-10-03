@@ -4,6 +4,7 @@ import type { AppEnv } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
 import type { EpisodeRow } from '../lib/mappers';
 import { mapEpisode } from '../lib/mappers';
+import { hasBluAccess } from '../lib/blu';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
 import { progressSchema, viewBeaconSchema } from '../lib/validate';
@@ -24,6 +25,7 @@ interface WatchRow extends EpisodeRow {
   title_kind: WatchPayload['title']['kind'];
   creator_id: string;
   published: number;
+  is_blu: number;
   creator_name: string;
   creator_handle: string;
 }
@@ -33,7 +35,7 @@ async function loadEpisode(db: D1Database, episodeId: string): Promise<WatchRow 
     .prepare(
       `SELECT e.id, e.season, e.episode, e.name, e.synopsis, e.video_url, e.captions_url, e.duration_s, e.ai_credits,
         t.id AS title_id, t.slug AS title_slug, t.name AS title_name, t.kind AS title_kind,
-        t.creator_id, t.published,
+        t.creator_id, t.published, t.is_blu,
         u.display_name AS creator_name, cp.handle AS creator_handle
        FROM episodes e
        JOIN titles t ON t.id = e.title_id
@@ -57,6 +59,18 @@ watchRoutes.get('/:episodeId', async (c) => {
   if (!row) fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
   const user = c.get('user');
   assertViewable(row, user?.id ?? null);
+
+  if (
+    row.is_blu === 1 &&
+    row.creator_id !== (user?.id ?? '') &&
+    !(await hasBluAccess(c.env.DB, user?.id ?? null, row.creator_id))
+  ) {
+    fail(
+      402,
+      'blu_subscription_required',
+      `This is Sweam Blu content. Subscribe to @${row.creator_handle} to watch.`,
+    );
+  }
 
   const nextEpisode = await c.env.DB.prepare(
     `SELECT id, season, episode, name FROM episodes
@@ -103,6 +117,13 @@ watchRoutes.post('/:episodeId/progress', requireUser, async (c) => {
   const row = await loadEpisode(c.env.DB, c.req.param('episodeId'));
   if (!row) fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
   assertViewable(row, user.id);
+  if (
+    row.is_blu === 1 &&
+    row.creator_id !== user.id &&
+    !(await hasBluAccess(c.env.DB, user.id, row.creator_id))
+  ) {
+    fail(402, 'blu_subscription_required', 'This is Sweam Blu content.');
+  }
 
   const positionS = Math.round(Math.min(body.positionS, body.durationS));
   const durationS = Math.round(body.durationS);
@@ -171,6 +192,9 @@ watchRoutes.post('/:episodeId/view', async (c) => {
   if (!row) fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
   if (row.published !== 1) {
     fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
+  }
+  if (row.is_blu === 1) {
+    fail(402, 'blu_subscription_required', 'This is Sweam Blu content.');
   }
 
   const positionS = Math.round(Math.min(body.positionS, body.durationS));

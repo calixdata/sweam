@@ -7,6 +7,7 @@ import { setPushEnv } from './lib/fcm';
 import { adminRoutes } from './routes/admin';
 import { adRoutes } from './routes/ads';
 import { authRoutes } from './routes/auth';
+import { bluRoutes } from './routes/blu';
 import { catalogRoutes } from './routes/catalog';
 import { clipRoutes } from './routes/clips';
 import { commentRoutes } from './routes/comments';
@@ -54,6 +55,7 @@ app.route('/api/admin', adminRoutes);
 app.route('/api/ads', adRoutes);
 app.route('/api/submissions', submissionRoutes);
 app.route('/api/clips', clipRoutes);
+app.route('/api/blu', bluRoutes);
 // Media (posters, video, HLS) is content: gated to signed-in accounts, with the
 // transcoder service allowed through by its Bearer token.
 app.use('/media/*', requireContentAccess);
