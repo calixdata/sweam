@@ -533,6 +533,17 @@ main:focus {
 .blu-panel {
   margin-top: 1.75rem;
 }
+.blu-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  margin: 0.35rem 0;
+}
+h1 .blu-badge {
+  display: inline-block;
+  vertical-align: middle;
+}
 
 .poster {
   position: relative;

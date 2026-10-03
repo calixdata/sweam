@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { EpisodeSummary, TitleDetail } from '@sweam/shared';
-import { CONTENT_KIND_LABELS } from '@sweam/shared';
+import { CONTENT_KIND_LABELS, formatUsdCents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { BluBadge } from '../components/BluBadge';
 import { CommentsSection } from '../components/CommentsSection';
 import { ReportControl } from '../components/ReportControl';
 import { ErrorNote, Loading } from '../components/Status';
@@ -88,7 +89,15 @@ export function TitlePage() {
   return (
     <div className="page page-narrow">
       <header className="title-header">
-        <h1>{title.name}</h1>
+        <h1>
+          {title.name}
+          {title.isBlu && (
+            <>
+              {' '}
+              <BluBadge height={24} />
+            </>
+          )}
+        </h1>
         <p className="title-meta">
           {CONTENT_KIND_LABELS[title.kind]} · {title.genre} · {title.advisory} · by{' '}
           <Link to={`/c/${title.creator.handle}`}>
@@ -114,6 +123,15 @@ export function TitlePage() {
           {title.likes.toLocaleString()} like{title.likes === 1 ? '' : 's'} ·{' '}
           {title.commentCount.toLocaleString()} comment{title.commentCount === 1 ? '' : 's'}
         </p>
+        {title.isBlu && (
+          <p className="blu-notice">
+            <BluBadge height={22} decorative />
+            <span>
+              {title.bluPriceCents != null ? `${formatUsdCents(title.bluPriceCents)}/month · ` : ''}
+              Subscribers only
+            </span>
+          </p>
+        )}
         <div className="title-actions">
           {firstEpisode && (
             <Link className="button" to={`/watch/${firstEpisode.id}`}>
