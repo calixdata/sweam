@@ -566,21 +566,86 @@ h1 .blu-badge {
 .scout-all-access {
   margin-top: 1.25rem;
 }
-.record-monetization {
+.monetization {
   border: 0;
   padding: 0;
-  margin: 0;
+  margin: 0 0 1.15rem;
   min-inline-size: 0;
 }
-.record-monetization legend {
+.monetization legend {
   font-weight: 600;
   padding: 0;
-  margin-bottom: 0.35rem;
 }
-.blu-radio-label {
+.monetization-intro {
+  margin-top: 0.2rem;
+}
+.mon-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 0.7rem;
+}
+.mon-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.mon-option:hover {
+  border-color: var(--accent-strong);
+}
+.mon-option.is-selected {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.mon-option.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.mon-option.is-disabled:hover {
+  border-color: var(--line);
+}
+.mon-option input[type='radio'] {
+  width: 18px;
+  height: 18px;
+  margin: 0.2rem 0 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+.mon-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.mon-option-title {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.45rem;
+  font-weight: 600;
+}
+.mon-option-sub {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.mon-tier {
+  margin: 0.85rem 0 0;
+  max-width: 340px;
+}
+/* Radios in the shared .field-checkbox pattern must not stretch to full width
+   (the global input rule does, which flings the label away from the control). */
+.field-checkbox input[type='radio'] {
+  width: 18px;
+  height: 18px;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+  accent-color: var(--accent);
 }
 
 .poster {

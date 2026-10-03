@@ -114,7 +114,8 @@ export function TitlePage() {
           )}
         </h1>
         <p className="title-meta">
-          {CONTENT_KIND_LABELS[title.kind]} · {title.genre} · {title.advisory} · by{' '}
+          {CONTENT_KIND_LABELS[title.kind]}
+          {title.genre ? ` · ${title.genre}` : ''} · {title.advisory} · by{' '}
           <Link to={`/c/${title.creator.handle}`}>
             {title.creator.displayName} (@{title.creator.handle})
           </Link>

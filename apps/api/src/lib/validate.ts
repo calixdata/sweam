@@ -440,7 +440,8 @@ export const submissionStatusSchema = z.object({
 export const clipCreateSchema = z.object({
   caption: z.string().trim().min(1, 'Add a short caption.').max(CLIP_SPEC.captionMax),
   rating: z.enum(RATINGS),
-  genre,
+  // Clips may be posted without a genre ('' = None).
+  genre: z.enum(GENRES).or(z.literal('')).default(''),
   audiences: z.array(audience).max(AUDIENCES.length).default([]),
   sourceUrl: mediaUrl.refine(
     (value) => value.startsWith('/media/sub/'),

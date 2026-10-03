@@ -46,7 +46,7 @@ export function Record() {
 
   const [caption, setCaption] = useState('');
   const [rating, setRating] = useState('');
-  const [genre, setGenre] = useState<string>(GENRES[0]);
+  const [genre, setGenre] = useState<string>('');
   const [audience, setAudience] = useState('');
   // Forced Free/Blu choice, defaulted to Free. On Blu, a preset tier is required.
   const [bluMode, setBluMode] = useState<'free' | 'blu'>('free');
@@ -237,6 +237,9 @@ export function Record() {
     );
   }
 
+  // Fail safe: Blu stays locked until we have confirmed the creator may offer it.
+  const bluLocked = !bluFund?.canOfferBlu;
+
   return (
     <div className="page page-narrow">
       <h1>Record a clip</h1>
@@ -343,6 +346,7 @@ export function Record() {
           <div className="field">
             <label htmlFor="clip-genre">Genre</label>
             <select id="clip-genre" value={genre} onChange={(event) => setGenre(event.target.value)}>
+              <option value="">None</option>
               {GENRES.map((value) => (
                 <option key={value} value={value}>
                   {value}
@@ -367,47 +371,64 @@ export function Record() {
           </div>
         </div>
 
-        <fieldset className="field record-monetization">
+        <fieldset className="field monetization">
           <legend>Monetization</legend>
-          <p className="field-hint">
-            Every clip is Free or Sweam Blu (paid). You must pick one. On Blu you keep 80% and prices
-            are preset. You can switch a title between Free and Blu once every{' '}
-            {BLU_SWITCH_COOLDOWN_DAYS} days.
+          <p className="field-hint monetization-intro">
+            Every clip is Free or Sweam Blu (paid). On Blu you keep 80%, prices are preset, and you
+            can switch a title between Free and Blu once every {BLU_SWITCH_COOLDOWN_DAYS} days.
           </p>
-          <div className="field field-checkbox">
-            <input
-              type="radio"
-              id="clip-free"
-              name="clip-monetization"
-              checked={bluMode === 'free'}
-              onChange={() => setBluMode('free')}
-              disabled={posting}
-            />
-            <label htmlFor="clip-free">Free — anyone can watch</label>
-          </div>
-          <div className="field field-checkbox">
-            <input
-              type="radio"
-              id="clip-blu"
-              name="clip-monetization"
-              checked={bluMode === 'blu'}
-              onChange={() => setBluMode('blu')}
-              disabled={posting || (bluFund !== null && !bluFund.canOfferBlu)}
-            />
-            <label htmlFor="clip-blu" className="blu-radio-label">
-              <BluBadge height={16} decorative /> Sweam Blu — subscribers only
+          <div className="mon-options">
+            <label className={bluMode === 'free' ? 'mon-option is-selected' : 'mon-option'}>
+              <input
+                type="radio"
+                name="clip-monetization"
+                checked={bluMode === 'free'}
+                onChange={() => setBluMode('free')}
+                disabled={posting}
+              />
+              <span className="mon-option-body">
+                <span className="mon-option-title">Free</span>
+                <span className="mon-option-sub">Anyone can watch.</span>
+              </span>
+            </label>
+            <label
+              className={
+                'mon-option' +
+                (bluMode === 'blu' ? ' is-selected' : '') +
+                (bluLocked ? ' is-disabled' : '')
+              }
+            >
+              <input
+                type="radio"
+                name="clip-monetization"
+                checked={bluMode === 'blu'}
+                onChange={() => setBluMode('blu')}
+                disabled={posting || bluLocked}
+              />
+              <span className="mon-option-body">
+                <span className="mon-option-title">
+                  <BluBadge height={16} decorative /> Sweam Blu
+                </span>
+                <span className="mon-option-sub">
+                  Subscribers only.{' '}
+                  {bluLocked ? 'Locked until you qualify for the Blu Fund.' : 'You keep 80%.'}
+                </span>
+              </span>
             </label>
           </div>
+
           {bluFund !== null && !bluFund.canOfferBlu && (
             <p className="field-hint">
               Sweam Blu is open to eligible creators for now: at least{' '}
-              {BLU_FUND_THRESHOLDS.minFollowers} followers, {BLU_FUND_THRESHOLDS.minViews.toLocaleString()}{' '}
-              views, no violations in {BLU_FUND_THRESHOLDS.violationWindowDays} days, and a verified
-              18+ age. Check your <Link to="/studio/earnings">Blu Fund status</Link>.
+              {BLU_FUND_THRESHOLDS.minFollowers} followers,{' '}
+              {BLU_FUND_THRESHOLDS.minViews.toLocaleString()} views, no violations in{' '}
+              {BLU_FUND_THRESHOLDS.violationWindowDays} days, and a verified 18+ age. Check your{' '}
+              <Link to="/studio/earnings">Blu Fund status</Link>.
             </p>
           )}
-          {bluMode === 'blu' && (
-            <div className="field">
+
+          {bluMode === 'blu' && !bluLocked && (
+            <div className="field mon-tier">
               <label htmlFor="clip-blu-tier">Monthly price (choose a preset)</label>
               <select
                 id="clip-blu-tier"
