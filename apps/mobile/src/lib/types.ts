@@ -83,6 +83,7 @@ export interface TitleDetail extends TitleSummary {
   inMyWatchlist: boolean;
   genres: string[];
   subgenres: string[];
+  bluAccess: boolean;
 }
 
 export interface CommentItem {

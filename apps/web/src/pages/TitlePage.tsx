@@ -17,6 +17,8 @@ export function TitlePage() {
   const [title, setTitle] = useState<TitleDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [bluBusy, setBluBusy] = useState(false);
+  const [bluError, setBluError] = useState<string | null>(null);
 
   usePageTitle(title?.name ?? 'Title');
 
@@ -56,6 +58,19 @@ export function TitlePage() {
     if (user) return false;
     navigate('/signin', { state: { from: `/t/${title?.slug ?? ''}` } });
     return true;
+  }
+
+  async function subscribeBlu() {
+    if (!title || requireSignIn()) return;
+    setBluBusy(true);
+    setBluError(null);
+    try {
+      const { url } = await apiSend<{ url: string }>('POST', `/api/stripe/blu/${title.creator.handle}`);
+      window.location.href = url;
+    } catch (err) {
+      setBluError(err instanceof ApiError ? err.message : 'Could not start checkout.');
+      setBluBusy(false);
+    }
   }
 
   async function toggleWatchlist() {
@@ -133,11 +148,18 @@ export function TitlePage() {
           </p>
         )}
         <div className="title-actions">
-          {firstEpisode && (
-            <Link className="button" to={`/watch/${firstEpisode.id}`}>
-              {isSeries ? 'Play S1 E1' : 'Play'}
-            </Link>
-          )}
+          {firstEpisode &&
+            (title.isBlu && !title.bluAccess ? (
+              <button type="button" className="button" onClick={subscribeBlu} disabled={bluBusy}>
+                {bluBusy
+                  ? 'Starting…'
+                  : `Subscribe${title.bluPriceCents != null ? ` ${formatUsdCents(title.bluPriceCents)}/mo` : ''}`}
+              </button>
+            ) : (
+              <Link className="button" to={`/watch/${firstEpisode.id}`}>
+                {isSeries ? 'Play S1 E1' : 'Play'}
+              </Link>
+            ))}
           <button
             type="button"
             className="button button-quiet"
@@ -158,6 +180,11 @@ export function TitlePage() {
           </button>
           <ReportControl titleId={title.id} titleSlug={title.slug} signedIn={user !== null} />
         </div>
+        {bluError && (
+          <p className="status status-error" role="alert">
+            {bluError}
+          </p>
+        )}
       </header>
 
       {(isSeries || title.episodes.length > 1) && (

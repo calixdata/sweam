@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,11 +10,12 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import * as WebBrowser from 'expo-web-browser';
 import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
-import { api, mediaUrl } from '../../lib/api';
+import { api, ApiError, mediaUrl } from '../../lib/api';
 import { BluBadge } from '../../components/BluBadge';
 import { useAuth } from '../../lib/auth';
 import { colors, radius } from '../../lib/theme';
@@ -82,6 +84,20 @@ export default function TitleScreen() {
     }
   }, [draft, slug, replyTo, loadComments]);
 
+  const subscribeBlu = useCallback(async () => {
+    if (!title) return;
+    if (!user) {
+      router.push('/signup');
+      return;
+    }
+    try {
+      const { url } = await api.post<{ url: string }>(`/api/stripe/blu/${title.creator.handle}`);
+      await WebBrowser.openBrowserAsync(url);
+    } catch (e) {
+      Alert.alert('Subscribe', e instanceof ApiError ? e.message : 'Could not start checkout.');
+    }
+  }, [title, user]);
+
   if (error) return <Center><Text style={styles.muted}>{error}</Text></Center>;
   if (!title) return <Center><ActivityIndicator color={colors.accent} /></Center>;
 
@@ -134,12 +150,20 @@ export default function TitleScreen() {
         </Text>
         <Text style={styles.synopsis}>{title.synopsis}</Text>
 
-        {firstEpisode && (
-          <Pressable style={styles.playBtn} onPress={() => router.push(`/watch/${firstEpisode.id}`)}>
-            <Ionicons name="play" size={20} color="#04121a" />
-            <Text style={styles.playText}>{title.episodes.length > 1 ? 'Play S1 E1' : 'Play'}</Text>
-          </Pressable>
-        )}
+        {firstEpisode &&
+          (title.isBlu && !title.bluAccess ? (
+            <Pressable style={styles.playBtn} onPress={() => void subscribeBlu()}>
+              <Ionicons name="lock-closed" size={18} color="#04121a" />
+              <Text style={styles.playText}>
+                Subscribe{title.bluPriceCents != null ? ` $${(title.bluPriceCents / 100).toFixed(2)}/mo` : ''}
+              </Text>
+            </Pressable>
+          ) : (
+            <Pressable style={styles.playBtn} onPress={() => router.push(`/watch/${firstEpisode.id}`)}>
+              <Ionicons name="play" size={20} color="#04121a" />
+              <Text style={styles.playText}>{title.episodes.length > 1 ? 'Play S1 E1' : 'Play'}</Text>
+            </Pressable>
+          ))}
 
         <Text style={styles.sectionTitle}>Comments</Text>
         {user ? (
