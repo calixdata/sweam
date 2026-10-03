@@ -1,8 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AUDIENCES, AUDIENCE_LABELS, CLIP_SPEC, GENRES, RATINGS, UPLOAD_SPECS } from '@sweam/shared';
+import {
+  AUDIENCES,
+  AUDIENCE_LABELS,
+  BLU_SWITCH_COOLDOWN_DAYS,
+  BLU_TIERS,
+  CLIP_SPEC,
+  GENRES,
+  RATINGS,
+  UPLOAD_SPECS,
+} from '@sweam/shared';
 import { ApiError, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { BluBadge } from '../components/BluBadge';
 import { usePageTitle } from '../hooks';
 import { uploadMedia } from '../upload';
 import type { UploadProgress } from '../upload';
@@ -36,6 +46,9 @@ export function Record() {
   const [rating, setRating] = useState('');
   const [genre, setGenre] = useState<string>(GENRES[0]);
   const [audience, setAudience] = useState('');
+  // Forced Free/Blu choice, defaulted to Free. On Blu, a preset tier is required.
+  const [bluMode, setBluMode] = useState<'free' | 'blu'>('free');
+  const [bluTierId, setBluTierId] = useState<string>(BLU_TIERS[3]?.id ?? 'blu_999');
 
   const [posting, setPosting] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -179,6 +192,7 @@ export function Record() {
         genre,
         audiences: audience ? [audience] : [],
         sourceUrl: url,
+        bluTierId: bluMode === 'blu' ? bluTierId : null,
       });
       stopStream();
       navigate(`/watch/${result.episodeId}`);
@@ -187,7 +201,7 @@ export function Record() {
       setPosting(false);
       setProgress(null);
     }
-  }, [clip, caption, rating, genre, audience, navigate, stopStream]);
+  }, [clip, caption, rating, genre, audience, bluMode, bluTierId, navigate, stopStream]);
 
   if (!user) {
     return (
@@ -332,6 +346,60 @@ export function Record() {
             </select>
           </div>
         </div>
+
+        <fieldset className="field record-monetization">
+          <legend>Monetization</legend>
+          <p className="field-hint">
+            Every clip is Free or Sweam Blu (paid). You must pick one. On Blu you keep 80% and prices
+            are preset. You can switch a title between Free and Blu once every{' '}
+            {BLU_SWITCH_COOLDOWN_DAYS} days.
+          </p>
+          <div className="field field-checkbox">
+            <input
+              type="radio"
+              id="clip-free"
+              name="clip-monetization"
+              checked={bluMode === 'free'}
+              onChange={() => setBluMode('free')}
+              disabled={posting}
+            />
+            <label htmlFor="clip-free">Free — anyone can watch</label>
+          </div>
+          <div className="field field-checkbox">
+            <input
+              type="radio"
+              id="clip-blu"
+              name="clip-monetization"
+              checked={bluMode === 'blu'}
+              onChange={() => setBluMode('blu')}
+              disabled={posting}
+            />
+            <label htmlFor="clip-blu" className="blu-radio-label">
+              <BluBadge height={16} decorative /> Sweam Blu — subscribers only
+            </label>
+          </div>
+          {bluMode === 'blu' && (
+            <div className="field">
+              <label htmlFor="clip-blu-tier">Monthly price (choose a preset)</label>
+              <select
+                id="clip-blu-tier"
+                value={bluTierId}
+                onChange={(event) => setBluTierId(event.target.value)}
+                disabled={posting}
+              >
+                {BLU_TIERS.map((tier) => (
+                  <option key={tier.id} value={tier.id}>
+                    {tier.label}
+                  </option>
+                ))}
+              </select>
+              <p className="field-hint">
+                Subscribers pay this monthly; connect payouts in your{' '}
+                <Link to="/studio/earnings">Studio</Link> to get paid.
+              </p>
+            </div>
+          )}
+        </fieldset>
 
         {progress && (
           <div className="upload-progress">

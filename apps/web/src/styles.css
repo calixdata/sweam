@@ -566,6 +566,22 @@ h1 .blu-badge {
 .scout-all-access {
   margin-top: 1.25rem;
 }
+.record-monetization {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+.record-monetization legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 0.35rem;
+}
+.blu-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
 
 .poster {
   position: relative;
