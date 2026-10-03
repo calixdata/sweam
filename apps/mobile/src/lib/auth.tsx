@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { api, getToken, setToken } from './api';
+import { unregisterPush } from './push';
 import type { SessionUser } from './types';
 
 interface AuthState {
@@ -72,6 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    // Drop this device's push token while the session is still valid.
+    await unregisterPush();
     try {
       await api.post('/api/auth/signout');
     } catch {

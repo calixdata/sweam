@@ -37,6 +37,12 @@ export interface Env {
    */
   RESEND_API_KEY?: string;
   MAIL_FROM?: string;
+  /**
+   * Firebase service account JSON (the entire key file contents) used to send
+   * FCM v1 push notifications to the mobile app. A secret; set with
+   * `wrangler secret put FCM_SERVICE_ACCOUNT`. Push is silently skipped when unset.
+   */
+  FCM_SERVICE_ACCOUNT?: string;
 }
 
 /** Hono generic: bindings plus the per-request variables middleware attaches. */

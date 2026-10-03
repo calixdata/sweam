@@ -3,6 +3,7 @@ import { HTTPException } from 'hono/http-exception';
 import type { ApiErrorBody } from '@sweam/shared';
 import type { AppEnv, Env } from './env';
 import { requireContentAccess, withUser } from './lib/session';
+import { setPushEnv } from './lib/fcm';
 import { adminRoutes } from './routes/admin';
 import { adRoutes } from './routes/ads';
 import { authRoutes } from './routes/auth';
@@ -27,6 +28,11 @@ const app = new Hono<AppEnv>();
 // Session resolution runs for API routes only; /media stays a cold path with
 // no database work per segment request.
 app.use('/api/*', withUser);
+// Stash the env so notify() can reach the FCM secret to send device pushes.
+app.use('/api/*', (c, next) => {
+  setPushEnv(c.env);
+  return next();
+});
 
 app.get('/api/health', (c) => c.json({ ok: true, service: 'sweam-api' }));
 

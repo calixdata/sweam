@@ -1,5 +1,6 @@
 import type { NotificationKind } from '@sweam/shared';
 import { nowIso } from './http';
+import { sendPushToFollowers, sendPushToUser } from './fcm';
 
 /**
  * In-app notifications. Body text is rendered at write time so the
@@ -19,6 +20,12 @@ export async function notify(
     )
     .bind(crypto.randomUUID(), userId, kind, body, link, nowIso())
     .run();
+  // Best-effort device push on top of the durable in-app notification.
+  try {
+    await sendPushToUser(db, userId, 'Sweam', body, link);
+  } catch {
+    /* push failures never break the write */
+  }
 }
 
 /**
@@ -41,4 +48,9 @@ export async function notifyFollowers(
     )
     .bind(kind, body, link, nowIso(), creatorId)
     .run();
+  try {
+    await sendPushToFollowers(db, creatorId, 'Sweam', body, link);
+  } catch {
+    /* best-effort */
+  }
 }

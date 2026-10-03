@@ -6,7 +6,7 @@ import type { TitleRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
-import { reportCreateSchema, usernameSchema } from '../lib/validate';
+import { pushTokenDeleteSchema, pushTokenSchema, reportCreateSchema, usernameSchema } from '../lib/validate';
 
 /** Signed-in viewer state: watchlist, likes, reports, and notifications. */
 export const meRoutes = new Hono<AppEnv>();
@@ -171,6 +171,29 @@ meRoutes.get('/notifications/unread-count', async (c) => {
 meRoutes.post('/notifications/read-all', async (c) => {
   await c.env.DB.prepare('UPDATE notifications SET read = 1 WHERE user_id = ? AND read = 0')
     .bind(currentUser(c).id)
+    .run();
+  return c.json({ ok: true });
+});
+
+// The mobile app registers its FCM device token here after sign-in.
+meRoutes.post('/push-tokens', async (c) => {
+  const user = currentUser(c);
+  const body = await parseBody(c, pushTokenSchema);
+  await c.env.DB.prepare(
+    `INSERT INTO push_tokens (token, user_id, platform, created_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(token) DO UPDATE SET
+       user_id = excluded.user_id, platform = excluded.platform, created_at = excluded.created_at`,
+  )
+    .bind(body.token, user.id, body.platform, nowIso())
+    .run();
+  return c.json({ ok: true });
+});
+
+meRoutes.delete('/push-tokens', async (c) => {
+  const body = await parseBody(c, pushTokenDeleteSchema);
+  await c.env.DB.prepare('DELETE FROM push_tokens WHERE token = ? AND user_id = ?')
+    .bind(body.token, currentUser(c).id)
     .run();
   return c.json({ ok: true });
 });

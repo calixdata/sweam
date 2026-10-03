@@ -15,6 +15,7 @@
     "android": {
       "package": "co.sweam.app",
       "versionCode": 1,
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#080e19",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -43,6 +44,13 @@
         "expo-image-picker",
         {
           "photosPermission": "Sweam needs access to your library so you can post a video you already have."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/android-icon-monochrome.png",
+          "color": "#4de0f3"
         }
       ],
       [
