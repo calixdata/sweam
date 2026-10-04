@@ -179,6 +179,49 @@ export interface BluOfferGate {
   adminBypass: boolean;
 }
 
+/**
+ * The Sweam Blu Fund distribution. Each month the creator share of ad revenue
+ * (CREATOR_REVENUE_SHARE of the gross) forms a pool split across Fund-eligible
+ * creators by their share of watch-time on free (ad-supported) content. Each
+ * creator's effective rate is reported as revenue per 1,000 views (RPM).
+ */
+export interface BluFundAllocation {
+  creatorId: string;
+  handle: string;
+  watchSeconds: number;
+  views: number;
+  amountMillicents: number;
+  status: 'pending' | 'paid' | 'failed';
+}
+
+export interface BluFundRun {
+  id: string;
+  periodStart: string;
+  periodEnd: string;
+  grossMillicents: number;
+  poolMillicents: number;
+  eligibleCreators: number;
+  totalWatchSeconds: number;
+  status: string;
+  createdAt: string;
+  allocations: BluFundAllocation[];
+}
+
+/** One monthly Blu Fund payout, for the creator's Studio view. */
+export interface CreatorFundPayout {
+  periodStart: string;
+  periodEnd: string;
+  watchSeconds: number;
+  views: number;
+  amountMillicents: number;
+  status: string;
+}
+
+/** Effective revenue per 1,000 views (RPM), in millicents; 0 when no views. */
+export function rpmMillicents(amountMillicents: number, views: number): number {
+  return views > 0 ? Math.round(amountMillicents / (views / 1000)) : 0;
+}
+
 /** The Studio Blu Fund payload: eligibility, the offer gate, and the creator's settings. */
 export interface BluFundStatus {
   eligibility: BluFundEligibility;

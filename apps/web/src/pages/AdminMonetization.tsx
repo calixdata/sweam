@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { AdminMonetization as AdminMonetizationPayload, ScoutRoyaltyRun } from '@sweam/shared';
+import type {
+  AdminMonetization as AdminMonetizationPayload,
+  BluFundRun,
+  ScoutRoyaltyRun,
+} from '@sweam/shared';
 import { formatMillicents, formatUsdCents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
@@ -96,10 +100,12 @@ function MonetizationDashboard() {
         </div>
       </section>
 
+      <BluFundRunsSection />
+
       <ScoutRoyaltySection />
 
       <section aria-labelledby="mon-payouts">
-        <h2 id="mon-payouts">Pending payouts</h2>
+        <h2 id="mon-payouts">Pending payouts (legacy)</h2>
         {data.pendingPayouts.length === 0 ? (
           <p>No payouts awaiting review.</p>
         ) : (
@@ -180,6 +186,107 @@ function MonetizationDashboard() {
         />
       </section>
     </div>
+  );
+}
+
+/**
+ * Sweam Blu Fund: the creator share of ad revenue, pooled and paid monthly to
+ * Fund-eligible creators by watch-time (it replaces the manual request-payout
+ * flow). A monthly cron runs the previous month automatically; this lets an
+ * admin review runs and trigger one on demand. Until Stripe is live, allocations
+ * are recorded 'pending' as a ledger.
+ */
+function BluFundRunsSection() {
+  const [runs, setRuns] = useState<BluFundRun[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      setRuns((await apiGet<{ runs: BluFundRun[] }>('/api/admin/blu/fund')).runs);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load Fund runs.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function runNow() {
+    setBusy(true);
+    setNotice('');
+    try {
+      const run = await apiSend<BluFundRun>('POST', '/api/admin/blu/fund/run', {});
+      setNotice(
+        `Ran ${run.periodStart} → ${run.periodEnd}: pool ${formatMillicents(run.poolMillicents)} ` +
+          `from ${formatMillicents(run.grossMillicents)} gross across ${run.eligibleCreators} eligible ` +
+          `creator${run.eligibleCreators === 1 ? '' : 's'} (${run.status}).`,
+      );
+      await load();
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Could not run the Fund.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="mon-fund">
+      <h2 id="mon-fund">Sweam Blu Fund</h2>
+      <p className="page-intro">
+        The creator share of ad revenue, pooled and paid monthly to Fund-eligible creators by
+        watch-time. Runs automatically each month; trigger the previous month on demand below.
+      </p>
+      <div className="title-actions">
+        <button type="button" className="button" onClick={() => void runNow()} disabled={busy}>
+          {busy ? 'Running…' : 'Run previous month'}
+        </button>
+      </div>
+      {notice && (
+        <p className="status" role="status">
+          {notice}
+        </p>
+      )}
+      {error ? (
+        <p className="status status-error" role="alert">
+          {error}
+        </p>
+      ) : !runs ? (
+        <p>Loading runs…</p>
+      ) : runs.length === 0 ? (
+        <p>No distributions yet.</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="studio-table">
+            <caption className="visually-hidden">Blu Fund distribution runs</caption>
+            <thead>
+              <tr>
+                <th scope="col">Period</th>
+                <th scope="col">Gross</th>
+                <th scope="col">Pool</th>
+                <th scope="col">Creators</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((run) => (
+                <tr key={run.id}>
+                  <th scope="row">
+                    {run.periodStart} → {run.periodEnd}
+                  </th>
+                  <td>{formatMillicents(run.grossMillicents)}</td>
+                  <td>{formatMillicents(run.poolMillicents)}</td>
+                  <td>{run.eligibleCreators.toLocaleString()}</td>
+                  <td>{run.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -15,6 +15,7 @@ import { CREATOR_REVENUE_SHARE, MIN_PAYOUT_MILLICENTS, ageInYears } from '@sweam
 import type { AppEnv } from '../env';
 import { loadDailySeries, loadRetention } from '../lib/analytics';
 import { BLU_NOT_ELIGIBLE_MESSAGE, getBluOfferGate } from '../lib/blufund';
+import { creatorFundPayouts } from '../lib/fund';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { getCreatorEligibility } from '../lib/monetize';
 import { notifyFollowers } from '../lib/notify';
@@ -561,34 +562,22 @@ studioRoutes.get('/earnings', requireCreator, async (c) => {
   return c.json(payload);
 });
 
-/** Requests a payout of the full available balance. */
-studioRoutes.post('/payouts', requireCreator, async (c) => {
-  const user = currentUser(c);
-  const existing = await c.env.DB.prepare(
-    "SELECT 1 AS x FROM payout_requests WHERE creator_id = ? AND status = 'pending'",
-  )
-    .bind(user.id)
-    .first();
-  if (existing) fail(409, 'payout_pending', 'You already have a payout awaiting review.');
+/** A creator's recent monthly Blu Fund payouts. */
+studioRoutes.get('/fund-payouts', requireCreator, async (c) => {
+  return c.json({ payouts: await creatorFundPayouts(c.env.DB, currentUser(c).id) });
+});
 
-  const lifetimeRow = await c.env.DB.prepare(
-    'SELECT COALESCE(SUM(creator_millicents), 0) AS n FROM ad_impressions WHERE creator_id = ?',
-  )
-    .bind(user.id)
-    .first<{ n: number }>();
-  const totals = await payoutTotals(c.env.DB, user.id);
-  const available = Math.max(0, (lifetimeRow?.n ?? 0) - totals.pending - totals.paid);
-  if (available < MIN_PAYOUT_MILLICENTS) {
-    fail(400, 'below_minimum', 'Payouts unlock at $10.00 of available earnings.');
-  }
-
-  await c.env.DB.prepare(
-    `INSERT INTO payout_requests (id, creator_id, amount_millicents, status, requested_at)
-     VALUES (?, ?, ?, 'pending', ?)`,
-  )
-    .bind(crypto.randomUUID(), user.id, available, nowIso())
-    .run();
-  return c.json({ requested: true, amountMillicents: available }, 201);
+/**
+ * Manual payout requests are retired: the Sweam Blu Fund now pays eligible
+ * creators automatically each month by watch-time. Kept so older clients get a
+ * clear message instead of a 404.
+ */
+studioRoutes.post('/payouts', requireCreator, async () => {
+  fail(
+    410,
+    'payouts_retired',
+    'Manual payout requests are retired. The Sweam Blu Fund now pays eligible creators automatically each month.',
+  );
 });
 
 // ---------------------------------------------------------------------------

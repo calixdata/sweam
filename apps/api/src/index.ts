@@ -4,6 +4,7 @@ import type { ApiErrorBody } from '@sweam/shared';
 import type { AppEnv, Env } from './env';
 import { requireContentAccess, withUser } from './lib/session';
 import { setPushEnv } from './lib/fcm';
+import { runBluFund } from './lib/fund';
 import { previousMonthPeriod, runScoutRoyalty } from './lib/royalty';
 import { adminRoutes } from './routes/admin';
 import { adRoutes } from './routes/ads';
@@ -98,16 +99,21 @@ export default {
 
   /**
    * Monthly cron (see wrangler.toml triggers): distribute the previous calendar
-   * month's scout royalty pool. Idempotent per period, so a retry is safe; when
-   * Stripe is not yet configured it records pending allocations as a ledger.
+   * month's Blu Fund (ad-revenue creator payouts) and scout royalty pool. Both
+   * are idempotent per period, so a retry is safe; when Stripe is not yet
+   * configured they record pending allocations as a ledger.
    */
   scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): void {
     const { periodStart, periodEnd } = previousMonthPeriod(new Date(event.scheduledTime));
     ctx.waitUntil(
-      runScoutRoyalty(env.DB, env, periodStart, periodEnd).then(
-        () => undefined,
-        (err: unknown) => console.error('scout_royalty_run_failed', err),
-      ),
+      Promise.allSettled([
+        runBluFund(env.DB, env, periodStart, periodEnd),
+        runScoutRoyalty(env.DB, env, periodStart, periodEnd),
+      ]).then((results) => {
+        for (const r of results) {
+          if (r.status === 'rejected') console.error('monthly_payout_run_failed', r.reason);
+        }
+      }),
     );
   },
 };

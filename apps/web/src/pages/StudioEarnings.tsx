@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { BluConnectStatus, BluFundStatus, EarningsSummary } from '@sweam/shared';
-import { BLU_OPEN_USER_THRESHOLD, BLU_SWITCH_COOLDOWN_DAYS, formatMillicents } from '@sweam/shared';
+import type { BluConnectStatus, BluFundStatus, CreatorFundPayout, EarningsSummary } from '@sweam/shared';
+import { BLU_OPEN_USER_THRESHOLD, BLU_SWITCH_COOLDOWN_DAYS, formatMillicents, rpmMillicents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { ErrorNote, Loading } from '../components/Status';
 import { BluBadge } from '../components/BluBadge';
@@ -11,8 +11,6 @@ export function StudioEarnings() {
   usePageTitle('Earnings');
   const [earnings, setEarnings] = useState<EarningsSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState('');
-  const [requesting, setRequesting] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -29,24 +27,6 @@ export function StudioEarnings() {
   if (error) return <ErrorNote message={error} />;
   if (!earnings) return <Loading label="Loading earnings" />;
 
-  const canRequest =
-    earnings.availableMillicents >= earnings.minPayoutMillicents &&
-    !earnings.payouts.some((payout) => payout.status === 'pending');
-
-  async function requestPayout() {
-    setNotice('');
-    setRequesting(true);
-    try {
-      const result = await apiSend<{ amountMillicents: number }>('POST', '/api/studio/payouts');
-      setNotice(`Payout of ${formatMillicents(result.amountMillicents)} requested. An admin will review it.`);
-      await load();
-    } catch (err) {
-      setNotice(err instanceof ApiError ? err.message : 'Payout request failed.');
-    } finally {
-      setRequesting(false);
-    }
-  }
-
   return (
     <div className="page page-narrow">
       <p>
@@ -54,95 +34,16 @@ export function StudioEarnings() {
       </p>
       <h1>Earnings</h1>
       <p className="page-intro">
-        Sweam is free to watch and ad-supported. Creators keep {earnings.creatorSharePercent}% of
-        the ad revenue earned on their titles; the split is part of the platform, not a private
-        deal.
+        Sweam is free to watch and ad-supported. Ad revenue funds the Sweam Blu Fund, which pays
+        eligible creators automatically each month by their share of watch-time. Blu subscriptions
+        are paid separately to your connected account.
       </p>
-
-      {notice && (
-        <p className="status" role="status">
-          {notice}
-        </p>
-      )}
 
       <BluFundSection />
 
+      <FundPayoutsSection lifetimeMillicents={earnings.lifetimeMillicents} />
+
       <BluPayoutsSection />
-
-      <section aria-labelledby="earnings-eligibility">
-        <h2 id="earnings-eligibility">Monetization eligibility</h2>
-        {earnings.eligibility.eligible ? (
-          <p className="status" role="status">
-            You are monetizing: your {earnings.creatorSharePercent}% share accrues on every ad
-            served against your titles.
-          </p>
-        ) : (
-          <p className="status" role="status">
-            Not monetizing yet. Ads may run on your titles, but your share starts accruing the
-            moment every threshold below is met. The full policy is in the public Creator Program
-            document.
-          </p>
-        )}
-        <ul>
-          <li>
-            Followers: {earnings.eligibility.followers.actual.toLocaleString()} of{' '}
-            {earnings.eligibility.followers.required.toLocaleString()} required —{' '}
-            {earnings.eligibility.followers.met ? 'met' : 'not yet'}
-          </li>
-          <li>
-            Watch time: {Math.round(earnings.eligibility.watchSeconds.actual / 60).toLocaleString()}{' '}
-            of {Math.round(earnings.eligibility.watchSeconds.required / 60).toLocaleString()} minutes
-            required — {earnings.eligibility.watchSeconds.met ? 'met' : 'not yet'}
-          </li>
-          <li>
-            Published titles: {earnings.eligibility.publishedTitles.actual.toLocaleString()} of{' '}
-            {earnings.eligibility.publishedTitles.required.toLocaleString()} required —{' '}
-            {earnings.eligibility.publishedTitles.met ? 'met' : 'not yet'}
-          </li>
-          <li>
-            Account standing:{' '}
-            {earnings.eligibility.goodStanding ? 'good' : 'suspended (monetization paused)'}
-          </li>
-        </ul>
-      </section>
-
-      <section aria-labelledby="earnings-summary">
-        <h2 id="earnings-summary">Balance</h2>
-        <div className="table-scroll">
-          <table className="studio-table">
-            <caption className="visually-hidden">Earnings balance summary</caption>
-            <tbody>
-              <tr>
-                <th scope="row">Available</th>
-                <td>{formatMillicents(earnings.availableMillicents)}</td>
-              </tr>
-              <tr>
-                <th scope="row">Pending payout</th>
-                <td>{formatMillicents(earnings.pendingMillicents)}</td>
-              </tr>
-              <tr>
-                <th scope="row">Paid out</th>
-                <td>{formatMillicents(earnings.paidMillicents)}</td>
-              </tr>
-              <tr>
-                <th scope="row">Lifetime earned</th>
-                <td>{formatMillicents(earnings.lifetimeMillicents)}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div className="title-actions">
-          <button type="button" className="button" disabled={!canRequest || requesting} onClick={requestPayout}>
-            {requesting ? 'Requesting…' : `Request payout of ${formatMillicents(earnings.availableMillicents)}`}
-          </button>
-        </div>
-        {!canRequest && (
-          <p className="field-hint">
-            Payouts unlock at {formatMillicents(earnings.minPayoutMillicents)} of available
-            earnings, one open request at a time.
-          </p>
-        )}
-      </section>
 
       <section aria-labelledby="earnings-per-title">
         <h2 id="earnings-per-title">By title</h2>
@@ -201,24 +102,73 @@ export function StudioEarnings() {
           </div>
         )}
       </section>
-
-      <section aria-labelledby="earnings-payouts">
-        <h2 id="earnings-payouts">Payout history</h2>
-        {earnings.payouts.length === 0 ? (
-          <p>No payout requests yet.</p>
-        ) : (
-          <ul>
-            {earnings.payouts.map((payout) => (
-              <li key={payout.id}>
-                {formatMillicents(payout.amountMillicents)} · {payout.status} · requested{' '}
-                {payout.requestedAt.slice(0, 10)}
-                {payout.decidedAt ? `, decided ${payout.decidedAt.slice(0, 10)}` : ''}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
     </div>
+  );
+}
+
+/**
+ * The creator's monthly Blu Fund payouts: what the ad-revenue pool paid them each
+ * month, by watch-time, with the effective rate per 1,000 views (RPM). Paid
+ * automatically; there is no manual request.
+ */
+function FundPayoutsSection({ lifetimeMillicents }: { lifetimeMillicents: number }) {
+  const [payouts, setPayouts] = useState<CreatorFundPayout[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<{ payouts: CreatorFundPayout[] }>('/api/studio/fund-payouts')
+      .then((data) => {
+        if (!cancelled) setPayouts(data.payouts);
+      })
+      .catch(() => {
+        if (!cancelled) setPayouts([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section aria-labelledby="fund-payouts">
+      <h2 id="fund-payouts">Blu Fund payouts</h2>
+      <p className="field-hint">
+        Paid automatically each month to eligible creators by watch-time. Lifetime ad revenue share
+        recorded to date: {formatMillicents(lifetimeMillicents)}.
+      </p>
+      {!payouts ? (
+        <p>Loading…</p>
+      ) : payouts.length === 0 ? (
+        <p>No Fund payouts yet. They begin once you are eligible and the month closes.</p>
+      ) : (
+        <div className="table-scroll">
+          <table className="studio-table">
+            <caption className="visually-hidden">Monthly Blu Fund payouts</caption>
+            <thead>
+              <tr>
+                <th scope="col">Month</th>
+                <th scope="col">Watch time</th>
+                <th scope="col">Views</th>
+                <th scope="col">RPM</th>
+                <th scope="col">Amount</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {payouts.map((p) => (
+                <tr key={p.periodStart}>
+                  <th scope="row">{p.periodStart.slice(0, 7)}</th>
+                  <td>{Math.round(p.watchSeconds / 60).toLocaleString()} min</td>
+                  <td>{p.views.toLocaleString()}</td>
+                  <td>{formatMillicents(rpmMillicents(p.amountMillicents, p.views))}</td>
+                  <td>{formatMillicents(p.amountMillicents)}</td>
+                  <td>{p.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
