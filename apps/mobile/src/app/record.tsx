@@ -68,7 +68,8 @@ function filenameForUri(uri: string, fallback: string): string {
 }
 
 function isAcceptedVideo(mime: string): boolean {
-  return (ACCEPTED_VIDEO_TYPES as readonly string[]).includes(mime);
+  const ct = (mime || '').split(';')[0]?.trim().toLowerCase() ?? '';
+  return (ACCEPTED_VIDEO_TYPES as readonly string[]).includes(ct);
 }
 
 export default function RecordScreen() {
@@ -196,10 +197,13 @@ export default function RecordScreen() {
     });
     const asset = result.canceled ? null : result.assets?.[0];
     if (!asset) return;
+    const name = asset.fileName ?? filenameForUri(asset.uri, 'clip.mp4');
     setClip({
       uri: asset.uri,
-      mime: mimeForUri(asset.uri, asset.mimeType ?? ''),
-      name: asset.fileName ?? filenameForUri(asset.uri, 'clip.mp4'),
+      // Detect from the filename first (robust), then the picker's mime, then
+      // default to MP4 — phone-gallery videos are MP4 and often report no mime.
+      mime: mimeForUri(name, asset.mimeType || 'video/mp4'),
+      name,
     });
     setPhase('review');
   }, []);
@@ -229,7 +233,7 @@ export default function RecordScreen() {
       setError('Choose a maturity rating.');
       return;
     }
-    if (!isAcceptedVideo(clip.mime)) {
+    if (!isAcceptedVideo(clip.mime) && !/\.(mp4|webm)$/i.test(clip.name)) {
       setError('That video format is not supported yet. Record in the app, or pick an MP4 or WebM file.');
       return;
     }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  AD_CATEGORIES,
   ADVISORIES,
   AUDIENCES,
   CLIP_SPEC,
@@ -286,6 +287,10 @@ export const adCreateSchema = z.object({
   durationS: z.number().int().min(3).max(60),
   cpmCents: z.number().int().min(1).max(1_000_000),
   active: z.boolean().default(true),
+  /** Advertiser vertical; Sweam's inventory starts with streaming/entertainment. */
+  category: z.enum(AD_CATEGORIES).default('general'),
+  /** Target a single content genre, or null to run across all genres. */
+  targetGenre: z.enum(GENRES).nullable().default(null),
 });
 
 export const adUpdateSchema = adCreateSchema

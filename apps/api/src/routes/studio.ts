@@ -56,6 +56,38 @@ export const UPLOAD_CONTENT_TYPES = new Set([
   'application/pdf',
 ]);
 
+/** Accepted file extension -> stored content type, used when the client's
+ *  reported content-type is missing or a non-standard variant (common for MP4
+ *  from phone galleries and some browsers). */
+const EXTENSION_CONTENT_TYPE: Record<string, string> = {
+  mp4: 'video/mp4',
+  m4v: 'video/mp4',
+  webm: 'video/webm',
+  vtt: 'text/vtt',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  pdf: 'application/pdf',
+};
+
+/**
+ * Resolve the content type to store from the client's header and the filename.
+ * The header is normalized (parameters stripped, lowercased); if it is not an
+ * accepted type, the filename extension is used instead. Returns null when the
+ * upload is genuinely unsupported.
+ */
+export function resolveUploadContentType(
+  contentType: string | undefined,
+  filename: string,
+): string | null {
+  const header = (contentType ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+  if (UPLOAD_CONTENT_TYPES.has(header)) return header;
+  const ext = filename.toLowerCase().split('.').pop() ?? '';
+  const byExt = EXTENSION_CONTENT_TYPE[ext];
+  return byExt && UPLOAD_CONTENT_TYPES.has(byExt) ? byExt : null;
+}
+
 interface StudioTitleRow {
   id: string;
   slug: string;
@@ -772,8 +804,9 @@ studioRoutes.get('/titles/:titleId/analytics', requireCreator, async (c) => {
 studioRoutes.put('/upload/:filename', requireCreator, async (c) => {
   await assertGoodStanding(c.env.DB, currentUser(c).id);
   await enforceRateLimit(c.env.DB, RATE_LIMITS.upload, currentUser(c).id);
-  const contentType = c.req.header('content-type') ?? '';
-  if (!UPLOAD_CONTENT_TYPES.has(contentType)) {
+  const filename = c.req.param('filename');
+  const contentType = resolveUploadContentType(c.req.header('content-type'), filename);
+  if (!contentType) {
     fail(415, 'unsupported_type', 'Upload MP4/WebM video, WebVTT captions, or JPEG/PNG/WebP images.');
   }
   const contentLength = Number(c.req.header('content-length') ?? '0');
@@ -785,7 +818,7 @@ studioRoutes.put('/upload/:filename', requireCreator, async (c) => {
   }
   if (!c.req.raw.body) fail(400, 'empty_body', 'Upload body is empty.');
 
-  const key = mediaKeyFor(currentUser(c).id, c.req.param('filename'));
+  const key = mediaKeyFor(currentUser(c).id, filename);
   await c.env.MEDIA.put(key, c.req.raw.body, { httpMetadata: { contentType } });
   return c.json({ url: `/media/${key}` }, 201);
 });
@@ -818,12 +851,13 @@ studioRoutes.post('/upload/multipart', requireCreator, async (c) => {
   await assertGoodStanding(c.env.DB, currentUser(c).id);
   await enforceRateLimit(c.env.DB, RATE_LIMITS.upload, currentUser(c).id);
   const body = await parseBody(c, multipartInitSchema);
-  if (!UPLOAD_CONTENT_TYPES.has(body.contentType)) {
+  const contentType = resolveUploadContentType(body.contentType, body.filename);
+  if (!contentType) {
     fail(415, 'unsupported_type', 'Upload MP4/WebM video, WebVTT captions, or JPEG/PNG/WebP images.');
   }
   const key = mediaKeyFor(currentUser(c).id, body.filename);
   const upload = await c.env.MEDIA.createMultipartUpload(key, {
-    httpMetadata: { contentType: body.contentType },
+    httpMetadata: { contentType },
   });
   const payload: MultipartInit = { key, uploadId: upload.uploadId, partSize: MULTIPART_PART_SIZE };
   return c.json(payload, 201);

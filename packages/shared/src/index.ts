@@ -688,6 +688,22 @@ export interface AdminTranscodeJob {
 // Monetization (AVOD)
 // ---------------------------------------------------------------------------
 
+/**
+ * Advertiser verticals. Sweam is a streaming platform, so its ad inventory
+ * starts with streaming/entertainment advertisers (Netflix, Disney, Hulu and
+ * other movie/TV platforms) — the contextually relevant ones. `category` labels
+ * each ad's advertiser type; an ad may also target a single content genre.
+ */
+export const AD_CATEGORIES = ['streaming', 'studio', 'entertainment', 'gaming', 'general'] as const;
+export type AdCategory = (typeof AD_CATEGORIES)[number];
+export const AD_CATEGORY_LABELS: Record<AdCategory, string> = {
+  streaming: 'Streaming platform',
+  studio: 'Film / TV studio',
+  entertainment: 'Entertainment',
+  gaming: 'Gaming',
+  general: 'General',
+};
+
 /** The ad handed to the player for a pre-roll slot. */
 export interface PrerollAd {
   id: string;
@@ -731,6 +747,10 @@ export interface AdminAd {
   durationS: number;
   cpmCents: number;
   active: boolean;
+  /** Advertiser vertical (AD_CATEGORIES). */
+  category: string;
+  /** A single content genre this ad targets, or null to run across all genres. */
+  targetGenre: string | null;
   impressions: number;
   revenueMillicents: number;
 }

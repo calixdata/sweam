@@ -6,7 +6,7 @@ import type {
   BluFundRun,
   ScoutRoyaltyRun,
 } from '@sweam/shared';
-import { formatMillicents, formatUsdCents } from '@sweam/shared';
+import { AD_CATEGORIES, AD_CATEGORY_LABELS, GENRES, formatMillicents, formatUsdCents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote, Loading } from '../components/Status';
@@ -148,6 +148,7 @@ function MonetizationDashboard() {
                   <th scope="col">Sponsor</th>
                   <th scope="col">Headline</th>
                   <th scope="col">CPM</th>
+                  <th scope="col">Targeting</th>
                   <th scope="col">Status</th>
                   <th scope="col">Impressions</th>
                   <th scope="col">Revenue</th>
@@ -160,6 +161,10 @@ function MonetizationDashboard() {
                     <th scope="row">{ad.sponsor}</th>
                     <td>{ad.headline}</td>
                     <td>{`$${(ad.cpmCents / 100).toFixed(2)}`}</td>
+                    <td>
+                      {(AD_CATEGORY_LABELS as Record<string, string>)[ad.category] ?? ad.category}
+                      {ad.targetGenre ? ` · ${ad.targetGenre}` : ' · all genres'}
+                    </td>
                     <td>{ad.active ? 'Active' : 'Inactive'}</td>
                     <td>{ad.impressions.toLocaleString()}</td>
                     <td>{formatMillicents(ad.revenueMillicents)}</td>
@@ -397,6 +402,8 @@ function NewAdForm({ onCreated }: { onCreated: () => Promise<void> }) {
   const [clickUrl, setClickUrl] = useState('');
   const [durationS, setDurationS] = useState(10);
   const [cpmCents, setCpmCents] = useState(1200);
+  const [category, setCategory] = useState<string>('streaming');
+  const [targetGenre, setTargetGenre] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -412,6 +419,8 @@ function NewAdForm({ onCreated }: { onCreated: () => Promise<void> }) {
         clickUrl,
         durationS,
         cpmCents,
+        category,
+        targetGenre: targetGenre || null,
       });
       setSponsor('');
       setHeadline('');
@@ -494,6 +503,38 @@ function NewAdForm({ onCreated }: { onCreated: () => Promise<void> }) {
             value={cpmCents}
             onChange={(event) => setCpmCents(Number(event.target.value))}
           />
+        </div>
+      </div>
+      <div className="field-row">
+        <div className="field">
+          <label htmlFor="ad-category">Advertiser category</label>
+          <select
+            id="ad-category"
+            value={category}
+            onChange={(event) => setCategory(event.target.value)}
+          >
+            {AD_CATEGORIES.map((value) => (
+              <option key={value} value={value}>
+                {AD_CATEGORY_LABELS[value]}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="ad-target">Target genre</label>
+          <select
+            id="ad-target"
+            value={targetGenre}
+            onChange={(event) => setTargetGenre(event.target.value)}
+          >
+            <option value="">All genres</option>
+            {GENRES.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          <p className="field-hint">Serve this ad only on titles of this genre, or all genres.</p>
         </div>
       </div>
       {error && (

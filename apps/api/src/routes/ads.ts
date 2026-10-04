@@ -29,14 +29,21 @@ interface AdRow {
 adRoutes.get('/preroll', async (c) => {
   const titleId = c.req.query('titleId') ?? '';
   if (!titleId) return c.json({ ad: null });
-  const title = await c.env.DB.prepare('SELECT 1 AS x FROM titles WHERE id = ? AND published = 1')
+  const title = await c.env.DB.prepare('SELECT genre FROM titles WHERE id = ? AND published = 1')
     .bind(titleId)
-    .first();
+    .first<{ genre: string }>();
   if (!title) return c.json({ ad: null });
 
+  // Content-matched targeting: serve an ad that targets this title's genre, or
+  // any untargeted (all-genre) ad. Advertiser `category` curates the inventory
+  // (Sweam starts with streaming/entertainment advertisers).
   const row = await c.env.DB.prepare(
-    'SELECT id, sponsor, headline, media_url, click_url, duration_s, cpm_cents FROM ads WHERE active = 1 ORDER BY RANDOM() LIMIT 1',
-  ).first<AdRow>();
+    `SELECT id, sponsor, headline, media_url, click_url, duration_s, cpm_cents
+     FROM ads WHERE active = 1 AND (target_genre IS NULL OR target_genre = ?)
+     ORDER BY RANDOM() LIMIT 1`,
+  )
+    .bind(title.genre ?? '')
+    .first<AdRow>();
   if (!row) return c.json({ ad: null });
 
   const ad: PrerollAd = {

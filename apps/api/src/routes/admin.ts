@@ -928,6 +928,7 @@ adminRoutes.get('/monetization', async (c) => {
     ).first<{ impressions: number; revenue: number; creator: number }>(),
     c.env.DB.prepare(
       `SELECT a.id, a.sponsor, a.headline, a.media_url, a.click_url, a.duration_s, a.cpm_cents, a.active,
+         a.category, a.target_genre,
          COUNT(ai.id) AS impressions, COALESCE(SUM(ai.revenue_millicents), 0) AS revenue
        FROM ads a
        LEFT JOIN ad_impressions ai ON ai.ad_id = a.id
@@ -941,6 +942,8 @@ adminRoutes.get('/monetization', async (c) => {
       duration_s: number;
       cpm_cents: number;
       active: number;
+      category: string;
+      target_genre: string | null;
       impressions: number;
       revenue: number;
     }>(),
@@ -970,6 +973,8 @@ adminRoutes.get('/monetization', async (c) => {
     durationS: row.duration_s,
     cpmCents: row.cpm_cents,
     active: row.active === 1,
+    category: row.category,
+    targetGenre: row.target_genre,
     impressions: row.impressions,
     revenueMillicents: row.revenue,
   }));
@@ -997,8 +1002,8 @@ adminRoutes.post('/ads', async (c) => {
   const body = await parseBody(c, adCreateSchema);
   const id = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO ads (id, sponsor, headline, media_url, click_url, duration_s, cpm_cents, active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO ads (id, sponsor, headline, media_url, click_url, duration_s, cpm_cents, active, category, target_genre, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
@@ -1009,6 +1014,8 @@ adminRoutes.post('/ads', async (c) => {
       body.durationS,
       body.cpmCents,
       body.active ? 1 : 0,
+      body.category,
+      body.targetGenre,
       nowIso(),
     )
     .run();
@@ -1027,6 +1034,8 @@ adminRoutes.patch('/ads/:adId', async (c) => {
     duration_s: body.durationS,
     cpm_cents: body.cpmCents,
     active: body.active === undefined ? undefined : body.active ? 1 : 0,
+    category: body.category,
+    target_genre: body.targetGenre,
   };
   for (const [column, value] of Object.entries(columns)) {
     if (value !== undefined) {
