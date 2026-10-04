@@ -541,6 +541,7 @@ function EpisodesSection({
                   </button>
                 </div>
               </div>
+              <ReplacementRequest episodeId={episode.id} />
             </li>
           ))}
         </ol>
@@ -557,6 +558,76 @@ function EpisodesSection({
         onCancelEdit={() => setEditing(null)}
       />
     </section>
+  );
+}
+
+/**
+ * Submit a replacement video for a live episode for an admin to swap in. (You can
+ * also replace the video yourself by editing the episode; this is the
+ * admin-reviewed path — the title, episode, and URL stay the same either way.)
+ */
+function ReplacementRequest({ episodeId }: { episodeId: string }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [note, setNote] = useState('');
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    if (!file) return;
+    setBusy(true);
+    setStatus('Uploading…');
+    try {
+      const { url } = await uploadMedia(file, (progress) => setStatus(progress.message));
+      await apiSend('POST', `/api/studio/episodes/${episodeId}/replace-request`, {
+        sourceUrl: url,
+        note: note.trim(),
+      });
+      setStatus('Submitted. An admin will review it and swap it in.');
+      setFile(null);
+      setNote('');
+    } catch (err) {
+      setStatus(err instanceof ApiError ? err.message : 'Could not submit the replacement.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <details className="replace-request">
+      <summary>Request a video replacement</summary>
+      <p className="field-hint">
+        Upload a new video for this episode for an admin to swap in. The episode and its link stay
+        the same — no new submission.
+      </p>
+      <div className="field">
+        <label htmlFor={`replace-${episodeId}`}>Replacement video (MP4 or WebM)</label>
+        <input
+          id={`replace-${episodeId}`}
+          type="file"
+          accept="video/mp4,video/webm"
+          disabled={busy}
+          onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor={`replace-note-${episodeId}`}>Note for the admin (optional)</label>
+        <input
+          id={`replace-note-${episodeId}`}
+          type="text"
+          maxLength={500}
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+        />
+      </div>
+      <button type="button" className="button" onClick={() => void submit()} disabled={!file || busy}>
+        {busy ? 'Submitting…' : 'Submit for admin review'}
+      </button>
+      {status && (
+        <p className="field-hint" role="status">
+          {status}
+        </p>
+      )}
+    </details>
   );
 }
 

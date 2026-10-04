@@ -35,6 +35,7 @@ import {
   bluFundSettingsSchema,
   publishSchema,
   removalRequestSchema,
+  replaceRequestSchema,
   titleCreateSchema,
   titleUpdateSchema,
 } from '../lib/validate';
@@ -498,6 +499,39 @@ studioRoutes.post('/episodes/:episodeId/transcode', requireCreator, async (c) =>
   return c.json({ queued: true });
 });
 
+/**
+ * Submit a replacement video for a live episode, for an admin to swap in — no
+ * fresh submission, same title/episode. (Creators can also replace a draft or
+ * live episode's video directly by editing it; this is the admin-reviewed path.)
+ */
+studioRoutes.post('/episodes/:episodeId/replace-request', requireCreator, async (c) => {
+  const user = currentUser(c);
+  const body = await parseBody(c, replaceRequestSchema);
+  const ep = await c.env.DB.prepare(
+    `SELECT e.id, e.title_id, t.creator_id FROM episodes e JOIN titles t ON t.id = e.title_id
+     WHERE e.id = ? AND t.creator_id = ?`,
+  )
+    .bind(c.req.param('episodeId'), user.id)
+    .first<{ id: string; title_id: string; creator_id: string }>();
+  if (!ep) fail(404, 'episode_not_found', 'No such episode in your Studio.');
+  if (
+    !body.sourceUrl.startsWith(`/media/u/${user.id}/`) &&
+    !body.sourceUrl.startsWith(`/media/sub/${user.id}/`)
+  ) {
+    fail(403, 'not_your_upload', 'That upload does not belong to you.');
+  }
+
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO video_replacements
+       (id, episode_id, title_id, creator_id, requested_by, kind, source_url, captions_url, note, status, created_at)
+     VALUES (?, ?, ?, ?, ?, 'creator_request', ?, ?, ?, 'pending', ?)`,
+  )
+    .bind(id, ep.id, ep.title_id, ep.creator_id, user.id, body.sourceUrl, body.captionsUrl, body.note, nowIso())
+    .run();
+  return c.json({ id }, 201);
+});
+
 studioRoutes.delete('/episodes/:episodeId', requireCreator, async (c) => {
   const episode = await ownedEpisode(c, c.req.param('episodeId'));
   await c.env.DB.prepare('DELETE FROM episodes WHERE id = ?').bind(episode.id).run();
@@ -823,7 +857,7 @@ studioRoutes.put('/upload/:filename', requireCreator, async (c) => {
   return c.json({ url: `/media/${key}` }, 201);
 });
 
-function mediaKeyFor(userId: string, filename: string): string {
+export function mediaKeyFor(userId: string, filename: string): string {
   const safeName = filename
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, '-')

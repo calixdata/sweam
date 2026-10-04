@@ -590,6 +590,7 @@ export type NotificationKind =
   | 'follow'
   | 'submission'
   | 'verbatiim'
+  | 'video_update'
   | 'blu';
 
 export interface NotificationItem {
@@ -672,6 +673,35 @@ export interface AdminStrike {
   reason: string;
   createdAt: string;
   creator: { handle: string; displayName: string };
+}
+
+/** A compact episode for the admin video-swap tool. */
+export interface AdminEpisodeLite {
+  id: string;
+  season: number;
+  episode: number;
+  name: string;
+  durationS: number;
+}
+
+/** A title and its episodes, looked up by slug for the admin video-swap tool. */
+export interface AdminTitleEpisodes {
+  title: { id: string; name: string; slug: string; creatorHandle: string | null };
+  episodes: AdminEpisodeLite[];
+}
+
+/** A pending creator video-replacement request in the admin queue. */
+export interface AdminVideoReplacement {
+  id: string;
+  kind: 'creator_request' | 'admin_direct';
+  status: string;
+  note: string;
+  sourceUrl: string;
+  captionsUrl: string | null;
+  createdAt: string;
+  episode: { id: string; season: number; episode: number; name: string };
+  title: { id: string; name: string; slug: string };
+  creator: { handle: string | null; displayName: string };
 }
 
 export interface AdminTranscodeJob {

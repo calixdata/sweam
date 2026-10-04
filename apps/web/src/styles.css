@@ -566,6 +566,14 @@ h1 .blu-badge {
 .scout-all-access {
   margin-top: 1.25rem;
 }
+.replace-request {
+  margin-top: 0.6rem;
+}
+.replace-request summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.9rem;
+}
 .monetization {
   border: 0;
   padding: 0;

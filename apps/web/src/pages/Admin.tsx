@@ -105,8 +105,9 @@ function AdminDashboard() {
           : ' (queue is empty)'}
         ; ads and payouts on the <Link to="/admin/monetization">monetization page</Link>
         {overview.pendingPayouts > 0
-          ? ` (${overview.pendingPayouts} payout${overview.pendingPayouts === 1 ? '' : 's'} pending).`
-          : '.'}
+          ? ` (${overview.pendingPayouts} payout${overview.pendingPayouts === 1 ? '' : 's'} pending)`
+          : ''}
+        ; swap a live episode's video on the <Link to="/admin/video">video page</Link>.
       </p>
 
       {notice && (

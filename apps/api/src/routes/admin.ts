@@ -11,7 +11,9 @@ import type {
   AdminStrike,
   AdminSubmission,
   AdminTakedown,
+  AdminTitleEpisodes,
   AdminTranscodeJob,
+  AdminVideoReplacement,
   AiSubmissionReview,
   ClipReviewItem,
   CommentReportReason,
@@ -23,8 +25,10 @@ import { formatMillicents } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { notify } from '../lib/notify';
+import { applyVideoReplacement } from '../lib/replace';
 import { requireAdmin, currentUser } from '../lib/session';
 import { SUSPENSION_STRIKES, strikeCutoffIso } from '../lib/standing';
+import { MAX_UPLOAD_BYTES, mediaKeyFor, resolveUploadContentType } from './studio';
 import {
   adCreateSchema,
   adUpdateSchema,
@@ -32,6 +36,8 @@ import {
   commentReportResolveSchema,
   payoutDecideSchema,
   removalDecideSchema,
+  replaceDecideSchema,
+  replaceVideoSchema,
   reportResolveSchema,
   scoutDecideSchema,
   submissionDecideSchema,
@@ -1076,6 +1082,188 @@ adminRoutes.post('/payouts/:payoutId/decide', async (c) => {
     '/studio/earnings',
   );
   return c.json({ status: body.paid ? 'paid' : 'rejected' });
+});
+
+// ---------------------------------------------------------------------------
+// In-place video replacement
+// ---------------------------------------------------------------------------
+
+/** Admin upload for a replacement video (admins may not be creators). */
+adminRoutes.put('/upload/:filename', async (c) => {
+  const filename = c.req.param('filename');
+  const contentType = resolveUploadContentType(c.req.header('content-type'), filename);
+  if (!contentType) {
+    fail(415, 'unsupported_type', 'Upload MP4/WebM video, WebVTT captions, or JPEG/PNG/WebP images.');
+  }
+  const contentLength = Number(c.req.header('content-length') ?? '0');
+  if (!Number.isFinite(contentLength) || contentLength <= 0) {
+    fail(411, 'length_required', 'Uploads must include a Content-Length header.');
+  }
+  if (contentLength > MAX_UPLOAD_BYTES) {
+    fail(413, 'too_large', 'Uploads are limited to 512 MB in this release.');
+  }
+  if (!c.req.raw.body) fail(400, 'empty_body', 'Upload body is empty.');
+  const key = mediaKeyFor(currentUser(c).id, filename);
+  await c.env.MEDIA.put(key, c.req.raw.body, { httpMetadata: { contentType } });
+  return c.json({ url: `/media/${key}` }, 201);
+});
+
+/** Look up a title's episodes by slug, for the admin video-swap tool. */
+adminRoutes.get('/titles/:slug/episodes', async (c) => {
+  const title = await c.env.DB.prepare(
+    `SELECT t.id, t.name, t.slug, cp.handle FROM titles t
+     LEFT JOIN creator_profiles cp ON cp.user_id = t.creator_id WHERE t.slug = ?`,
+  )
+    .bind(c.req.param('slug'))
+    .first<{ id: string; name: string; slug: string; handle: string | null }>();
+  if (!title) fail(404, 'title_not_found', 'No title with that slug.');
+  const { results } = await c.env.DB.prepare(
+    'SELECT id, season, episode, name, duration_s FROM episodes WHERE title_id = ? ORDER BY season, episode',
+  )
+    .bind(title.id)
+    .all<{ id: string; season: number; episode: number; name: string; duration_s: number }>();
+  const payload: AdminTitleEpisodes = {
+    title: { id: title.id, name: title.name, slug: title.slug, creatorHandle: title.handle },
+    episodes: results.map((e) => ({
+      id: e.id,
+      season: e.season,
+      episode: e.episode,
+      name: e.name,
+      durationS: e.duration_s,
+    })),
+  };
+  return c.json(payload);
+});
+
+/** Swap an episode's live video directly (admin), then notify the creator. */
+adminRoutes.post('/episodes/:episodeId/replace-video', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, replaceVideoSchema);
+  const ep = await c.env.DB.prepare(
+    `SELECT e.id, e.title_id, e.season, e.episode, t.creator_id, t.name AS title_name, t.slug
+     FROM episodes e JOIN titles t ON t.id = e.title_id WHERE e.id = ?`,
+  )
+    .bind(c.req.param('episodeId'))
+    .first<{
+      id: string;
+      title_id: string;
+      season: number;
+      episode: number;
+      creator_id: string;
+      title_name: string;
+      slug: string;
+    }>();
+  if (!ep) fail(404, 'episode_not_found', 'No such episode.');
+
+  const now = nowIso();
+  await applyVideoReplacement(c.env, ep.id, body.sourceUrl, body.captionsUrl);
+  await c.env.DB.prepare(
+    `INSERT INTO video_replacements
+       (id, episode_id, title_id, creator_id, requested_by, kind, source_url, captions_url, note, status, created_at, decided_at, decided_by)
+     VALUES (?, ?, ?, ?, ?, 'admin_direct', ?, ?, '', 'applied', ?, ?, ?)`,
+  )
+    .bind(crypto.randomUUID(), ep.id, ep.title_id, ep.creator_id, admin.id, body.sourceUrl, body.captionsUrl, now, now, admin.id)
+    .run();
+  await notify(
+    c.env.DB,
+    ep.creator_id,
+    'video_update',
+    `An admin updated the video for ${ep.title_name} (S${ep.season} E${ep.episode}). It is re-processing now.`,
+    `/t/${ep.slug}`,
+  );
+  return c.json({ ok: true });
+});
+
+/** Pending creator video-replacement requests. */
+adminRoutes.get('/video-replacements', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT vr.id, vr.kind, vr.status, vr.note, vr.source_url, vr.captions_url, vr.created_at,
+       e.id AS episode_id, e.season, e.episode, e.name AS episode_name,
+       t.id AS title_id, t.name AS title_name, t.slug,
+       u.display_name AS creator_name, cp.handle AS creator_handle
+     FROM video_replacements vr
+     JOIN episodes e ON e.id = vr.episode_id
+     JOIN titles t ON t.id = vr.title_id
+     JOIN users u ON u.id = vr.creator_id
+     LEFT JOIN creator_profiles cp ON cp.user_id = vr.creator_id
+     WHERE vr.status = 'pending' ORDER BY vr.created_at`,
+  ).all<{
+    id: string;
+    kind: AdminVideoReplacement['kind'];
+    status: string;
+    note: string;
+    source_url: string;
+    captions_url: string | null;
+    created_at: string;
+    episode_id: string;
+    season: number;
+    episode: number;
+    episode_name: string;
+    title_id: string;
+    title_name: string;
+    slug: string;
+    creator_name: string;
+    creator_handle: string | null;
+  }>();
+  const replacements: AdminVideoReplacement[] = results.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    status: r.status,
+    note: r.note,
+    sourceUrl: r.source_url,
+    captionsUrl: r.captions_url,
+    createdAt: r.created_at,
+    episode: { id: r.episode_id, season: r.season, episode: r.episode, name: r.episode_name },
+    title: { id: r.title_id, name: r.title_name, slug: r.slug },
+    creator: { handle: r.creator_handle, displayName: r.creator_name },
+  }));
+  return c.json({ replacements });
+});
+
+/** Apply or reject a pending creator replacement request. */
+adminRoutes.post('/video-replacements/:id/decide', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, replaceDecideSchema);
+  const vr = await c.env.DB.prepare(
+    `SELECT vr.id, vr.episode_id, vr.creator_id, vr.source_url, vr.captions_url,
+       e.season, e.episode, t.name AS title_name, t.slug
+     FROM video_replacements vr
+     JOIN episodes e ON e.id = vr.episode_id
+     JOIN titles t ON t.id = vr.title_id
+     WHERE vr.id = ? AND vr.status = 'pending'`,
+  )
+    .bind(c.req.param('id'))
+    .first<{
+      id: string;
+      episode_id: string;
+      creator_id: string;
+      source_url: string;
+      captions_url: string | null;
+      season: number;
+      episode: number;
+      title_name: string;
+      slug: string;
+    }>();
+  if (!vr) fail(404, 'replacement_not_found', 'No pending replacement with that id.');
+
+  if (body.apply) {
+    await applyVideoReplacement(c.env, vr.episode_id, vr.source_url, vr.captions_url);
+  }
+  await c.env.DB.prepare(
+    'UPDATE video_replacements SET status = ?, decided_at = ?, decided_by = ? WHERE id = ?',
+  )
+    .bind(body.apply ? 'applied' : 'rejected', nowIso(), admin.id, vr.id)
+    .run();
+  await notify(
+    c.env.DB,
+    vr.creator_id,
+    'video_update',
+    body.apply
+      ? `Your replacement video for ${vr.title_name} (S${vr.season} E${vr.episode}) was applied and is re-processing.`
+      : `Your replacement video for ${vr.title_name} (S${vr.season} E${vr.episode}) was not applied.`,
+    `/t/${vr.slug}`,
+  );
+  return c.json({ status: body.apply ? 'applied' : 'rejected' });
 });
 
 // ---------------------------------------------------------------------------

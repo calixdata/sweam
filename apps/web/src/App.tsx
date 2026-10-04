@@ -10,6 +10,7 @@ import { Admin } from './pages/Admin';
 import { AdminModeration } from './pages/AdminModeration';
 import { AdminMonetization } from './pages/AdminMonetization';
 import { AdminSubmissions } from './pages/AdminSubmissions';
+import { AdminVideo } from './pages/AdminVideo';
 import { Browse } from './pages/Browse';
 import { Contact } from './pages/Contact';
 import { CreatorPage } from './pages/CreatorPage';
@@ -132,6 +133,7 @@ export function App() {
         <Route path="/admin/submissions" element={<AdminSubmissions />} />
         <Route path="/admin/moderation" element={<AdminModeration />} />
         <Route path="/admin/monetization" element={<AdminMonetization />} />
+        <Route path="/admin/video" element={<AdminVideo />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/verify" element={<Verify />} />

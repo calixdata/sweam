@@ -466,6 +466,41 @@ export const clipDecideSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// In-place video replacement
+// ---------------------------------------------------------------------------
+
+/** The replacement must be a video already uploaded to Sweam (so it transcodes). */
+const replacementSource = z
+  .string()
+  .trim()
+  .max(2048)
+  .refine((value) => /^\/media\/\S+$/.test(value), 'Upload the replacement video to Sweam first.');
+
+const replacementCaptions = z
+  .string()
+  .trim()
+  .max(2048)
+  .refine((value) => /^\/media\/\S+$/.test(value), 'Captions must be a /media upload.')
+  .nullable()
+  .default(null);
+
+/** A creator submits a replacement video for an episode (for an admin to apply). */
+export const replaceRequestSchema = z.object({
+  sourceUrl: replacementSource,
+  captionsUrl: replacementCaptions,
+  note: z.string().trim().max(500).default(''),
+});
+
+/** An admin swaps an episode's video directly. */
+export const replaceVideoSchema = z.object({
+  sourceUrl: replacementSource,
+  captionsUrl: replacementCaptions,
+});
+
+/** An admin's decision on a pending replacement request. */
+export const replaceDecideSchema = z.object({ apply: z.boolean() });
+
+// ---------------------------------------------------------------------------
 // Community
 // ---------------------------------------------------------------------------
 
