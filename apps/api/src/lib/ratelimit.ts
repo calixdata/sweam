@@ -33,6 +33,11 @@ export const RATE_LIMITS = {
   loginFailGlobal: { name: 'login-fail-global', limit: 100, windowS: 15 * 60 },
   /** Verification-token submissions per IP (token-guessing brake). */
   verifyIp: { name: 'verify-ip', limit: 20, windowS: 15 * 60 },
+  /** Password-reset requests per IP and per account (email-bombing brake). */
+  pwResetIp: { name: 'pwreset-ip', limit: 5, windowS: 60 * 60 },
+  pwResetEmail: { name: 'pwreset-email', limit: 5, windowS: 60 * 60 },
+  /** Reset-token submissions per IP (token-guessing brake). */
+  pwResetSubmitIp: { name: 'pwreset-submit-ip', limit: 20, windowS: 15 * 60 },
   report: { name: 'report', limit: 10, windowS: 24 * 60 * 60 },
   /** Anonymous beacons arrive at most every 10s; 60 per 5 minutes is 2x headroom. */
   anonView: { name: 'view', limit: 60, windowS: 5 * 60 },

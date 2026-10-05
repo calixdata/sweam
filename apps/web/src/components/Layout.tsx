@@ -246,7 +246,7 @@ export function Layout() {
           </nav>
         </div>
         <div className="footer-legal">
-          <p>© 2026 Sweam. Operated by Falcyn.</p>
+          <p>© 2026 Falcyn Inc dba Sweam.</p>
           <button type="button" className="footer-cookie-button" onClick={resetConsent}>
             Cookie settings
           </button>

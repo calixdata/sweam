@@ -15,6 +15,8 @@ import { Browse } from './pages/Browse';
 import { Contact } from './pages/Contact';
 import { CreatorPage } from './pages/CreatorPage';
 import { Faq } from './pages/Faq';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
 import { AiDisclosure } from './pages/legal/AiDisclosure';
 import { CommunityGuidelines } from './pages/legal/CommunityGuidelines';
 import { Cookies } from './pages/legal/Cookies';
@@ -136,6 +138,8 @@ export function App() {
         <Route path="/admin/video" element={<AdminVideo />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/verify" element={<Verify />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/faq" element={<Faq />} />

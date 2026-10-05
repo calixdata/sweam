@@ -12,8 +12,9 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          {SERVICE} is a free, ad-supported streaming service operated by {OPERATOR} ("{OPERATOR}",
-          "we", "us"). These Terms of Service are a binding agreement between you and {OPERATOR}. By
+          {SERVICE} is a free, ad-supported streaming service owned and operated by {OPERATOR}, doing
+          business as {SERVICE} ("{OPERATOR}", "we", "us"). These Terms of Service are a binding
+          agreement between you and {OPERATOR}. By
           creating an account, watching, or otherwise using {SERVICE}, you agree to these Terms, the{' '}
           <Link to="/legal/privacy">Privacy Policy</Link>, the{' '}
           <Link to="/legal/community-guidelines">Community Guidelines</Link>, and, if you publish

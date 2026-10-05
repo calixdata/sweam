@@ -76,3 +76,26 @@ export function verificationEmail(
     `</div></body></html>`;
   return { subject, html, text };
 }
+
+/** The password-reset email (subject, HTML, and plain-text parts). */
+export function passwordResetEmail(
+  link: string,
+  displayName: string,
+): { subject: string; html: string; text: string } {
+  const name = escapeHtml(displayName);
+  const subject = 'Reset your Sweam password';
+  const text =
+    `Hi ${displayName},\n\n` +
+    `We received a request to reset your Sweam password. Set a new one here:\n${link}\n\n` +
+    `This link expires in 1 hour. If you did not request this, you can ignore this email; your password will not change.`;
+  const html =
+    `<!doctype html><html><body style="margin:0;font-family:Segoe UI,Arial,sans-serif;background:#080e19;color:#f4f7ff;padding:24px">` +
+    `<div style="max-width:480px;margin:0 auto;background:#111c2d;border:1px solid #293a52;border-radius:14px;padding:28px">` +
+    `<h1 style="font-size:1.35rem;margin:0 0 12px">Reset your password</h1>` +
+    `<p style="color:#a5b5cd;margin:0 0 20px">Hi ${name}, we received a request to reset your Sweam password. Choose a new one:</p>` +
+    `<p style="margin:0 0 24px"><a href="${link}" style="display:inline-block;background:#4de0f3;color:#061827;font-weight:700;text-decoration:none;padding:12px 20px;border-radius:8px">Set a new password</a></p>` +
+    `<p style="color:#a5b5cd;font-size:0.85rem;margin:0">Or paste this link into your browser:<br><a href="${link}" style="color:#6fe1f2">${link}</a></p>` +
+    `<p style="color:#a5b5cd;font-size:0.85rem;margin:16px 0 0">This link expires in 1 hour. If you did not request this, ignore this email; your password will not change.</p>` +
+    `</div></body></html>`;
+  return { subject, html, text };
+}

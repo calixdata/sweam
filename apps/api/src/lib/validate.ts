@@ -54,6 +54,15 @@ export const verifyTokenSchema = z.object({ token: z.string().trim().min(1).max(
 /** Ask for a fresh verification email. */
 export const resendVerificationSchema = z.object({ email });
 
+/** Request a password-reset link. */
+export const forgotPasswordSchema = z.object({ email });
+
+/** Set a new password from a reset link's token. */
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(1).max(256),
+  password,
+});
+
 export const creatorProfileSchema = z.object({
   handle: z
     .string()

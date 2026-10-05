@@ -10,8 +10,9 @@ import { usePageTitle } from '../../hooks';
  * agreements. Section bodies are arbitrary JSX so real links and lists survive.
  */
 
-/** Who operates the service and how to reach the right desk. Used everywhere. */
-export const OPERATOR = 'Falcyn';
+/** Who operates the service and how to reach the right desk. Used everywhere.
+ *  Sweam is owned and operated by Falcyn Inc (doing business as Sweam). */
+export const OPERATOR = 'Falcyn Inc';
 export const SERVICE = 'Sweam';
 export const GOVERNING_STATE = 'Delaware';
 
@@ -98,7 +99,8 @@ export function LegalDoc({
         <h2 id="legal-contact">Questions</h2>
         <p>
           Questions about this document go to <MailLink address={contact} />. For anything else, see{' '}
-          <Link to="/contact">Contact</Link>. {OPERATOR} operates {SERVICE}.
+          <Link to="/contact">Contact</Link>. {OPERATOR} (doing business as {SERVICE}) operates{' '}
+          {SERVICE}.
         </p>
       </section>
     </article>

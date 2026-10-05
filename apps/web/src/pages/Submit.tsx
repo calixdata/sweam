@@ -933,8 +933,8 @@ function SubmissionForm({
                 />
                 <label htmlFor="sub-adaptation-attest">
                   I attest that I own or have licensed the rights to adapt this work, that the
-                  documents above are true, and I agree to hold Sweam and Falcyn harmless from any
-                  liability arising from it.
+                  documents above are true, and I agree to hold Falcyn Inc dba Sweam harmless from
+                  any liability arising from it.
                 </label>
               </div>
             </>

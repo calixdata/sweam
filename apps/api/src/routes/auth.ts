@@ -5,7 +5,13 @@ import type { SessionUser } from '@sweam/shared';
 import { USERNAME_RE } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { generateToken, hashPassword, sha256Hex, verifyPassword } from '../lib/auth';
-import { EmailError, emailConfigured, sendEmail, verificationEmail } from '../lib/email';
+import {
+  EmailError,
+  emailConfigured,
+  passwordResetEmail,
+  sendEmail,
+  verificationEmail,
+} from '../lib/email';
 import { fail, nowIso, parseBody } from '../lib/http';
 import {
   RATE_LIMITS,
@@ -16,7 +22,9 @@ import {
 } from '../lib/ratelimit';
 import { SESSION_COOKIE, createSession, destroySession } from '../lib/session';
 import {
+  forgotPasswordSchema,
   resendVerificationSchema,
+  resetPasswordSchema,
   signInSchema,
   signUpSchema,
   verifyTokenSchema,
@@ -26,6 +34,8 @@ export const authRoutes = new Hono<AppEnv>();
 
 /** Verification links are good for 24 hours. */
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+/** Password-reset links are good for 1 hour. */
+const RESET_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Burned when a sign-in hits an unknown email, so the request still performs a
@@ -175,6 +185,57 @@ authRoutes.post('/resend-verification', async (c) => {
       .run();
     await sendVerification(c, row.email, row.display_name, token).catch(() => undefined);
   }
+  return c.json({ ok: true });
+});
+
+/**
+ * Request a password-reset link. Always returns ok so the response never
+ * reveals whether an email is registered.
+ */
+authRoutes.post('/forgot-password', async (c) => {
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.pwResetIp, clientIp(c.req.raw));
+  const body = await parseBody(c, forgotPasswordSchema);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.pwResetEmail, body.email);
+
+  const row = await c.env.DB.prepare('SELECT id, email, display_name FROM users WHERE email = ?')
+    .bind(body.email)
+    .first<{ id: string; email: string; display_name: string }>();
+  if (row && emailConfigured(c.env)) {
+    const token = generateToken();
+    const expiresAt = new Date(Date.now() + RESET_TTL_MS).toISOString();
+    await c.env.DB.prepare('UPDATE users SET reset_token_hash = ?, reset_expires_at = ? WHERE id = ?')
+      .bind(await sha256Hex(token), expiresAt, row.id)
+      .run();
+    const link = `${new URL(c.req.url).origin}/reset-password?token=${encodeURIComponent(token)}`;
+    await sendEmail(c.env, { to: row.email, ...passwordResetEmail(link, row.display_name) }).catch(
+      () => undefined,
+    );
+  }
+  return c.json({ ok: true });
+});
+
+/** Set a new password from a valid reset token, then sign out all sessions. */
+authRoutes.post('/reset-password', async (c) => {
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.pwResetSubmitIp, clientIp(c.req.raw));
+  const body = await parseBody(c, resetPasswordSchema);
+  const tokenHash = await sha256Hex(body.token);
+  const row = await c.env.DB.prepare('SELECT id, reset_expires_at FROM users WHERE reset_token_hash = ?')
+    .bind(tokenHash)
+    .first<{ id: string; reset_expires_at: string | null }>();
+  if (!row || !row.reset_expires_at || row.reset_expires_at < nowIso()) {
+    fail(400, 'invalid_token', 'This reset link is invalid or has expired. Request a new one.');
+  }
+
+  // Set the new password, consume the token, confirm the email (they proved
+  // control of it), and sign out every existing session for safety.
+  await c.env.DB.batch([
+    c.env.DB
+      .prepare(
+        'UPDATE users SET password_hash = ?, reset_token_hash = NULL, reset_expires_at = NULL, email_verified = 1 WHERE id = ?',
+      )
+      .bind(await hashPassword(body.password), row.id),
+    c.env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(row.id),
+  ]);
   return c.json({ ok: true });
 });
 

@@ -77,6 +77,9 @@ export function SignIn() {
         </button>
       </form>
       <p>
+        <Link to="/forgot-password">Forgot your password?</Link>
+      </p>
+      <p>
         New here? <Link to="/signup">Create an account</Link>.
       </p>
     </div>
