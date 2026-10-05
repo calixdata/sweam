@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { getCookie } from 'hono/cookie';
-import type { NotificationItem } from '@sweam/shared';
+import type { MyVerification, NotificationItem, VerificationStatus } from '@sweam/shared';
 import { UPLOAD_SPECS } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { generateToken, hashPassword, sha256Hex, verifyPassword } from '../lib/auth';
@@ -18,6 +18,7 @@ import {
   pushTokenSchema,
   reportCreateSchema,
   usernameSchema,
+  verificationRequestSchema,
 } from '../lib/validate';
 import { mediaKeyFor, resolveUploadContentType } from './studio';
 
@@ -111,6 +112,148 @@ async function deleteOwnMediaObject(
     // Orphaned objects are harmless; the new picture is already in place.
   }
 }
+
+// ---------------------------------------------------------------------------
+// Identity verification (the free path: an ID plus a proof of address)
+// ---------------------------------------------------------------------------
+
+/** The account's verification state plus its latest request, for Settings. */
+meRoutes.get('/verification', async (c) => {
+  const user = currentUser(c);
+  const [account, request] = await Promise.all([
+    c.env.DB.prepare('SELECT verified, verified_at FROM users WHERE id = ?')
+      .bind(user.id)
+      .first<{ verified: number; verified_at: string | null }>(),
+    c.env.DB.prepare(
+      `SELECT id, status, note, created_at, decided_at FROM identity_verifications
+       WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,
+    )
+      .bind(user.id)
+      .first<{
+        id: string;
+        status: VerificationStatus;
+        note: string | null;
+        created_at: string;
+        decided_at: string | null;
+      }>(),
+  ]);
+  const payload: MyVerification = {
+    verified: account?.verified === 1,
+    verifiedAt: account?.verified_at ?? null,
+    request: request
+      ? {
+          id: request.id,
+          status: request.status,
+          createdAt: request.created_at,
+          decidedAt: request.decided_at,
+          note: request.status === 'rejected' ? request.note : null,
+        }
+      : null,
+  };
+  return c.json(payload);
+});
+
+/**
+ * Upload one verification document. Stored under verify/<userId>/ in R2, a
+ * prefix the media gate serves only to the owner and to admins (never public,
+ * even though it may be an image), and deleted once the request is decided.
+ */
+meRoutes.put('/verification/upload/:filename', async (c) => {
+  const user = currentUser(c);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.upload, user.id);
+  const filename = c.req.param('filename');
+  const contentType = resolveUploadContentType(c.req.header('content-type'), filename);
+  if (!contentType || !(contentType.startsWith('image/') || contentType === 'application/pdf')) {
+    fail(415, 'unsupported_type', `Upload a ${UPLOAD_SPECS.verification.formats} file.`);
+  }
+  const contentLength = Number(c.req.header('content-length') ?? '0');
+  if (!Number.isFinite(contentLength) || contentLength <= 0) {
+    fail(411, 'length_required', 'Uploads must include a Content-Length header.');
+  }
+  if (contentLength > UPLOAD_SPECS.verification.maxBytes) {
+    fail(413, 'too_large', `Documents are limited to ${UPLOAD_SPECS.verification.maxLabel}.`);
+  }
+  if (!c.req.raw.body) fail(400, 'empty_body', 'Upload body is empty.');
+
+  const key = `verify/${user.id}/${crypto.randomUUID()}/${safeFilename(filename)}`;
+  await c.env.MEDIA.put(key, c.req.raw.body, { httpMetadata: { contentType } });
+  return c.json({ url: `/media/${key}` }, 201);
+});
+
+function safeFilename(filename: string): string {
+  const safe = filename
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return safe || 'document';
+}
+
+/** Submit (or resubmit after a rejection) an identity verification request. */
+meRoutes.post('/verification', async (c) => {
+  const user = currentUser(c);
+  const body = await parseBody(c, verificationRequestSchema);
+  const account = await c.env.DB.prepare('SELECT verified FROM users WHERE id = ?')
+    .bind(user.id)
+    .first<{ verified: number }>();
+  if (account?.verified === 1) fail(409, 'already_verified', 'Your account is already verified.');
+  const open = await c.env.DB.prepare(
+    "SELECT 1 AS x FROM identity_verifications WHERE user_id = ? AND status = 'pending'",
+  )
+    .bind(user.id)
+    .first();
+  if (open) fail(409, 'already_pending', 'Your verification request is already under review.');
+  // Only this user's own uploads can be attached.
+  const prefix = `/media/verify/${user.id}/`;
+  if (!body.idDocUrl.startsWith(prefix) || !body.addressDocUrl.startsWith(prefix)) {
+    fail(403, 'not_your_upload', 'Those documents do not belong to this account.');
+  }
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(
+    `INSERT INTO identity_verifications (id, user_id, legal_name, id_doc_key, address_doc_key, status, created_at)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+  )
+    .bind(id, user.id, body.legalName, body.idDocUrl.slice('/media/'.length), body.addressDocUrl.slice('/media/'.length), nowIso())
+    .run();
+  return c.json({ id, status: 'pending' }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Release-day reminders for scheduled episodes
+// ---------------------------------------------------------------------------
+
+/** Loads a scheduled, still-unreleased episode on a published title, or 404. */
+async function upcomingEpisode(db: D1Database, episodeId: string): Promise<{ id: string }> {
+  const row = await db
+    .prepare(
+      `SELECT e.id FROM episodes e JOIN titles t ON t.id = e.title_id
+       WHERE e.id = ? AND t.published = 1 AND e.release_at IS NOT NULL
+         AND e.release_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`,
+    )
+    .bind(episodeId)
+    .first<{ id: string }>();
+  if (!row) fail(404, 'not_upcoming', 'That episode is not scheduled for a future release.');
+  return row;
+}
+
+meRoutes.put('/release-reminders/:episodeId', async (c) => {
+  const user = currentUser(c);
+  const episode = await upcomingEpisode(c.env.DB, c.req.param('episodeId'));
+  await c.env.DB.prepare(
+    'INSERT OR IGNORE INTO release_reminders (user_id, episode_id, created_at) VALUES (?, ?, ?)',
+  )
+    .bind(user.id, episode.id, nowIso())
+    .run();
+  return c.json({ reminderSet: true });
+});
+
+meRoutes.delete('/release-reminders/:episodeId', async (c) => {
+  const user = currentUser(c);
+  await c.env.DB.prepare('DELETE FROM release_reminders WHERE user_id = ? AND episode_id = ?')
+    .bind(user.id, c.req.param('episodeId'))
+    .run();
+  return c.json({ reminderSet: false });
+});
 
 // ---------------------------------------------------------------------------
 // Account security: change password, change email

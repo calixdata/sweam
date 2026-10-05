@@ -159,7 +159,9 @@ function AccountRow({ account }: { account: AccountSearchResult }) {
           <Text style={styles.rowName} numberOfLines={1}>
             {account.displayName}
           </Text>
-          {account.verified && <Ionicons name="checkmark-circle" size={16} color={colors.accent} />}
+          {account.verified && (
+            <Ionicons name="checkmark-circle" size={16} color={colors.pink} accessibilityLabel="Verified account" />
+          )}
         </View>
         <Text style={styles.rowMeta} numberOfLines={1}>
           {meta}

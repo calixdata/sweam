@@ -56,6 +56,8 @@ export function Record() {
   // The creator's series (for optionally attaching this clip as the next episode).
   const [series, setSeries] = useState<SeriesSummary[]>([]);
   const [seriesId, setSeriesId] = useState('');
+  // Optional scheduled release day (YYYY-MM-DD, Eastern); empty posts right away.
+  const [releaseDate, setReleaseDate] = useState('');
 
   const [posting, setPosting] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -223,6 +225,7 @@ export function Record() {
         sourceUrl: url,
         bluTierId: !seriesId && bluMode === 'blu' ? bluTierId : null,
         seriesId: seriesId || null,
+        releaseDate: releaseDate || null,
       });
       stopStream();
       navigate(`/watch/${result.episodeId}`);
@@ -231,7 +234,7 @@ export function Record() {
       setPosting(false);
       setProgress(null);
     }
-  }, [clip, caption, rating, genre, audience, bluMode, bluTierId, seriesId, navigate, stopStream]);
+  }, [clip, caption, rating, genre, audience, bluMode, bluTierId, seriesId, releaseDate, navigate, stopStream]);
 
   if (!user) {
     return (
@@ -403,6 +406,22 @@ export function Record() {
             </p>
           </div>
         )}
+
+        <div className="field">
+          <label htmlFor="clip-release-date">Release date (optional)</label>
+          <input
+            id="clip-release-date"
+            type="date"
+            value={releaseDate}
+            onChange={(event) => setReleaseDate(event.target.value)}
+            disabled={posting}
+            aria-describedby="clip-release-hint"
+          />
+          <p className="field-hint" id="clip-release-hint">
+            Schedule it: viewers see the cover and caption now and the video unlocks at 12:00 AM
+            Eastern on that day. Leave empty to post right away.
+          </p>
+        </div>
 
         {seriesId !== '' ? (
           <p className="field-hint monetization-intro">

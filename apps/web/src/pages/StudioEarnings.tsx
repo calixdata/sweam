@@ -249,7 +249,12 @@ function BluFundSection() {
           ? 'Blu is now open to all creators.'
           : `Until Sweam reaches ${BLU_OPEN_USER_THRESHOLD.toLocaleString()} members, only eligible creators can put content behind the Blu paywall.`}
       </p>
-      {e.eligible ? (
+      {status.officialBypass ? (
+        <p className="status status-ok" role="status">
+          Official Sweam account: the eligibility requirements are waived for you. You are eligible
+          for the Sweam Blu Fund and can offer Blu content.
+        </p>
+      ) : e.eligible ? (
         <p className="status status-ok" role="status">
           You are eligible for the Sweam Blu Fund.
         </p>

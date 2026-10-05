@@ -164,6 +164,74 @@ export function isFreeEmailDomain(email: string): boolean {
 /** Accessible label for the Blu badge image. */
 export const BLU_BADGE_LABEL = 'Sweam Blu paid content';
 
+/** Sweam's hot pink, the color of the verified-account check mark. */
+export const BRAND_PINK = '#FF2A8B';
+/** Accessible label for the verified-account check mark. */
+export const VERIFIED_BADGE_LABEL = 'Verified account';
+
+/**
+ * Uploads by official accounts (Sweam's own account and flagship creators) may
+ * be far larger than the normal 512 MB cap: a feature-length cut, for example.
+ */
+export const OFFICIAL_MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024;
+
+// ---------------------------------------------------------------------------
+// Scheduled releases
+// ---------------------------------------------------------------------------
+
+/** Release dates are chosen as calendar days and unlock at midnight in this zone. */
+export const RELEASE_TIME_ZONE = 'America/New_York';
+
+/** YYYY-MM-DD, the only shape a release date is accepted in. */
+export const RELEASE_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The UTC instant of 12:00 AM Eastern on a calendar date (daylight saving
+ * aware), as an ISO string. Midnight Eastern is 04:00Z in summer and 05:00Z in
+ * winter; the right one is found by asking the zone what hour each candidate is.
+ */
+export function easternMidnightUtc(dateYmd: string): string {
+  if (!RELEASE_DATE_RE.test(dateYmd)) throw new Error('Release date must be YYYY-MM-DD.');
+  const [y, m, d] = dateYmd.split('-').map(Number) as [number, number, number];
+  const hourIn = new Intl.DateTimeFormat('en-US', {
+    timeZone: RELEASE_TIME_ZONE,
+    hour: 'numeric',
+    hourCycle: 'h23',
+  });
+  for (const utcHour of [4, 5]) {
+    const candidate = new Date(Date.UTC(y, m - 1, d, utcHour));
+    // Date.UTC rolls an impossible day or month forward instead of failing.
+    if (
+      Number.isNaN(candidate.getTime()) ||
+      candidate.getUTCFullYear() !== y ||
+      candidate.getUTCMonth() !== m - 1 ||
+      candidate.getUTCDate() !== d
+    ) {
+      throw new Error('Release date is not a real date.');
+    }
+    if (hourIn.format(candidate) === '0' || hourIn.format(candidate) === '00') {
+      return candidate.toISOString();
+    }
+  }
+  // Only reachable if the zone offset is neither -4 nor -5 (it never is).
+  return new Date(Date.UTC(y, m - 1, d, 5)).toISOString();
+}
+
+/** True when a release instant has passed (or there is none). */
+export function isReleased(releaseAt: string | null, nowIso: string = new Date().toISOString()): boolean {
+  return releaseAt === null || releaseAt <= nowIso;
+}
+
+/** "October 10, 2026" for a release instant, as a date in the Eastern zone. */
+export function formatReleaseDate(releaseAt: string): string {
+  return new Date(releaseAt).toLocaleDateString('en-US', {
+    timeZone: RELEASE_TIME_ZONE,
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 /** Format a cents amount as a USD price string. */
 export function formatUsdCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -255,6 +323,13 @@ export const UPLOAD_SPECS = {
     maxLabel: '5 MB',
     recommended: 'Square works best (at least 256 x 256, e.g. 512 x 512).',
   },
+  /** Identity verification documents (an ID and a proof of address). */
+  verification: {
+    formats: 'JPEG, PNG, WebP, or PDF',
+    accept: 'image/jpeg,image/png,image/webp,application/pdf',
+    maxBytes: 10 * 1024 * 1024,
+    maxLabel: '10 MB',
+  },
 } as const;
 
 export type ScoutStatus = 'pending' | 'approved' | 'rejected';
@@ -343,6 +418,8 @@ export interface CreatorRef {
   displayName: string;
   /** Profile picture URL, when the payload carries it for this context. */
   avatarUrl?: string | null;
+  /** Identity-verified account (shows the pink check), when the payload carries it. */
+  verified?: boolean;
 }
 
 /** A catalog card: everything needed to render a title in a rail or grid. */
@@ -368,6 +445,10 @@ export interface TitleSummary {
   bluPriceCents: number | null;
   /** Company name when a scout promotion deal is active ("Promoted by X"), else null. */
   promotedBy: string | null;
+  /** Episodes already unlocked for streaming. */
+  releasedEpisodeCount: number;
+  /** The next scheduled release still in the future (ISO), or null. */
+  nextReleaseAt: string | null;
 }
 
 export interface EpisodeSummary {
@@ -376,11 +457,18 @@ export interface EpisodeSummary {
   episode: number;
   name: string;
   synopsis: string;
+  /** Playback URL. Empty for an episode that has not released yet (viewers see the date instead). */
   videoUrl: string;
   captionsUrl: string | null;
   durationS: number;
   /** Signed credits from Verbatiim (who wrote the words, which engines made it), when it made the episode. */
   aiCredits?: string | null;
+  /** Scheduled release instant (ISO; midnight Eastern on the chosen date), or null when released on publish. */
+  releaseAt: string | null;
+  /** True once the release instant has passed (or there was none). */
+  released: boolean;
+  /** Signed-in viewers only: a release-day reminder is set for this episode. */
+  reminderSet?: boolean;
 }
 
 /** Full title page payload. Viewer-specific fields are false for signed-out requests. */
@@ -798,7 +886,9 @@ export type NotificationKind =
   | 'submission'
   | 'verbatiim'
   | 'video_update'
-  | 'blu';
+  | 'blu'
+  | 'release'
+  | 'verification';
 
 export interface NotificationItem {
   id: string;
@@ -834,6 +924,43 @@ export interface AdminOverview {
   revenueMillicents: number;
   pendingSubmissions: number;
   pendingClips: number;
+  /** Identity verification requests awaiting review. */
+  pendingVerifications: number;
+}
+
+// ---------------------------------------------------------------------------
+// Identity verification
+// ---------------------------------------------------------------------------
+
+export type VerificationStatus = 'pending' | 'approved' | 'rejected';
+
+/** The signed-in account's own verification state (Settings). */
+export interface MyVerification {
+  verified: boolean;
+  verifiedAt: string | null;
+  /** The latest request, or null when none was ever made. */
+  request: {
+    id: string;
+    status: VerificationStatus;
+    createdAt: string;
+    decidedAt: string | null;
+    /** The reviewer's note, shown on a rejection. */
+    note: string | null;
+  } | null;
+}
+
+/** A pending identity verification, as the admin queue shows it. */
+export interface AdminVerificationRequest {
+  id: string;
+  userId: string;
+  displayName: string;
+  username: string | null;
+  email: string;
+  legalName: string;
+  /** Admin-only /media URLs of the submitted documents. */
+  idDocUrl: string;
+  addressDocUrl: string;
+  createdAt: string;
 }
 
 /** A creator's request for Sweam to remove one of their admin-locked titles. */
@@ -1108,6 +1235,8 @@ export interface SubmissionItem {
   idProofUrl: string | null;
   /** The submitter attested ownership and agreed to hold Sweam harmless. */
   adaptationAttested: boolean;
+  /** Scheduled release day (YYYY-MM-DD, midnight Eastern) chosen at submission, or null. */
+  releaseDate: string | null;
   status: SubmissionStatus;
   /** Reviewer note, shared with the submitter on decision. */
   note: string;

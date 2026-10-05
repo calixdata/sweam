@@ -467,6 +467,8 @@ function SubmissionForm({
   const [adaptationAttested, setAdaptationAttested] = useState(false);
 
   const [rightsConfirmed, setRightsConfirmed] = useState(false);
+  // Optional scheduled release day (YYYY-MM-DD, Eastern); applied when the work is accepted.
+  const [releaseDate, setReleaseDate] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -573,6 +575,7 @@ function SubmissionForm({
         idProofUrl: idProofUrl || null,
         adaptationAttested,
         rightsConfirmed,
+        releaseDate: releaseDate || null,
       });
       setSent(true);
       resetForm();
@@ -940,6 +943,22 @@ function SubmissionForm({
             </>
           )}
         </fieldset>
+
+        <div className="field">
+          <label htmlFor="sub-release-date">Release date (optional)</label>
+          <input
+            id="sub-release-date"
+            type="date"
+            value={releaseDate}
+            onChange={(event) => setReleaseDate(event.target.value)}
+            aria-describedby="sub-release-hint"
+          />
+          <p className="field-hint" id="sub-release-hint">
+            Schedule the premiere. Once accepted, viewers see the cover art, synopsis, and date, can
+            ask to be notified, and the video unlocks at 12:00 AM Eastern on that day. Leave empty
+            to release as soon as it is accepted.
+          </p>
+        </div>
 
         <div className="field field-checkbox">
           <input

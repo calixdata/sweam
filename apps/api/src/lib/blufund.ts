@@ -5,6 +5,7 @@ import {
   evaluateBluFundEligibility,
 } from '@sweam/shared';
 import type { BluFundEligibility, BluOfferGate } from '@sweam/shared';
+import { isOfficialAccount } from './official';
 
 /**
  * Sweam Blu Fund eligibility + the paywall-offer gate, evaluated from live data.
@@ -60,12 +61,17 @@ export async function getBluFundEligibility(
   const ageVerified18 =
     age != null && age >= BLU_FUND_THRESHOLDS.minAgeYears && Boolean(profile?.blu_fund_attested_at);
 
-  return evaluateBluFundEligibility({
+  const evaluated = evaluateBluFundEligibility({
     followers: followersRow?.n ?? 0,
     views: viewsRow?.n ?? 0,
     recentViolations: (strikesRow?.n ?? 0) + (takedownsRow?.n ?? 0),
     ageVerified18,
   });
+  // Official accounts have the bar waived; the real numbers are still reported.
+  if (!evaluated.eligible && (await isOfficialAccount(db, creatorId))) {
+    return { ...evaluated, eligible: true };
+  }
+  return evaluated;
 }
 
 export async function platformUserCount(db: D1Database): Promise<number> {
@@ -78,18 +84,21 @@ export async function getBluOfferGate(
   creatorId: string,
   isAdmin = false,
 ): Promise<BluOfferGate & { eligibility: BluFundEligibility }> {
-  const [eligibility, users] = await Promise.all([
+  const [eligibility, users, official] = await Promise.all([
     getBluFundEligibility(db, creatorId),
     platformUserCount(db),
+    isOfficialAccount(db, creatorId),
   ]);
   const platformOpen = users >= BLU_OPEN_USER_THRESHOLD;
-  // Admins may offer Blu for testing even when the bar is not met.
+  // Admins may offer Blu for testing even when the bar is not met; official
+  // accounts (Sweam's own, flagship creators) have the bar waived outright.
   const adminBypass = isAdmin && !platformOpen && !eligibility.eligible;
   return {
-    canOfferBlu: platformOpen || eligibility.eligible || isAdmin,
+    canOfferBlu: platformOpen || eligibility.eligible || isAdmin || official,
     platformOpen,
     eligible: eligibility.eligible,
     adminBypass,
+    officialBypass: official,
     eligibility,
   };
 }

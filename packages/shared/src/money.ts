@@ -177,6 +177,8 @@ export interface BluOfferGate {
   eligible: boolean;
   /** An admin is allowed to offer Blu for testing even without meeting the bar. */
   adminBypass: boolean;
+  /** An official account (Sweam's own, or a flagship creator) has the bar waived. */
+  officialBypass?: boolean;
 }
 
 /**
@@ -228,6 +230,8 @@ export interface BluFundStatus {
   platformOpen: boolean;
   canOfferBlu: boolean;
   adminBypass: boolean;
+  /** Official account: eligibility requirements are waived. */
+  officialBypass?: boolean;
   /** The Free/Blu default applied to new uploads. */
   contentDefault: 'free' | 'blu';
   dob: string | null;

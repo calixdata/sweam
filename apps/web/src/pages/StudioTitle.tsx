@@ -10,8 +10,21 @@ import {
   CONTENT_KINDS,
   CONTENT_KIND_LABELS,
   GENRES,
+  RELEASE_TIME_ZONE,
+  formatReleaseDate,
 } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
+
+/** The Eastern calendar day (YYYY-MM-DD) a release instant falls on, for the date input. */
+function easternDay(iso: string): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: RELEASE_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(iso));
+  return parts;
+}
 import { ErrorNote, Loading } from '../components/Status';
 import { VerbatiimPanel } from '../components/VerbatiimPanel';
 import { formatDuration, usePageTitle } from '../hooks';
@@ -544,6 +557,11 @@ function EpisodesSection({
                     {formatDuration(episode.durationS)}
                     {episode.captionsUrl ? ' · captions attached' : ' · no captions'}
                     {pipelineLabel(episode) ? ` · ${pipelineLabel(episode)}` : ''}
+                    {episode.releaseAt
+                      ? episode.released
+                        ? ` · released ${formatReleaseDate(episode.releaseAt)}`
+                        : ` · scheduled for ${formatReleaseDate(episode.releaseAt)} at 12:00 AM Eastern`
+                      : ''}
                   </p>
                 </div>
                 <div className="episode-actions">
@@ -680,6 +698,8 @@ function EpisodeForm({
   const [videoUrl, setVideoUrl] = useState(episode?.videoUrl ?? '');
   const [captionsUrl, setCaptionsUrl] = useState(episode?.captionsUrl ?? '');
   const [durationS, setDurationS] = useState(episode?.durationS ?? 0);
+  // Scheduled release day (YYYY-MM-DD, Eastern); empty = available as soon as the title is live.
+  const [releaseDate, setReleaseDate] = useState(episode?.releaseAt ? easternDay(episode.releaseAt) : '');
   const [error, setError] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -737,6 +757,7 @@ function EpisodeForm({
       videoUrl,
       captionsUrl: captionsUrl || null,
       durationS,
+      releaseDate: releaseDate || null,
     };
     try {
       if (isEdit && episode) {
@@ -845,6 +866,21 @@ function EpisodeForm({
           value={captionsUrl}
           onChange={(event) => setCaptionsUrl(event.target.value)}
         />
+      </div>
+      <div className="field">
+        <label htmlFor="ep-release-date">Release date (optional)</label>
+        <input
+          id="ep-release-date"
+          type="date"
+          value={releaseDate}
+          onChange={(event) => setReleaseDate(event.target.value)}
+          aria-describedby="ep-release-hint"
+        />
+        <p className="field-hint" id="ep-release-hint">
+          Viewers see the episode listed with its date and can ask to be notified; it unlocks for
+          streaming at 12:00 AM Eastern on that day. Leave empty to make it available as soon as
+          the title is live.
+        </p>
       </div>
       <div className="field">
         <label htmlFor="ep-captions-file">Upload captions (.vtt)</label>

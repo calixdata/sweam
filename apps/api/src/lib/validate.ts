@@ -9,6 +9,7 @@ import {
   GENRES,
   MIN_AGE,
   RATINGS,
+  RELEASE_DATE_RE,
   REPORT_REASONS,
   SCOUT_OFFER_KINDS,
   SCOUT_PROMO_MAX_PERCENT,
@@ -16,6 +17,7 @@ import {
   USERNAME_HINT,
   USERNAME_RE,
   VERBATIIM_MAX_TEXT,
+  easternMidnightUtc,
   isFreeEmailDomain,
 } from '@sweam/shared';
 
@@ -129,6 +131,24 @@ export const titleUpdateSchema = titleCreateSchema
 
 export const publishSchema = z.object({ published: z.boolean() });
 
+/**
+ * A scheduled release date as a calendar day (YYYY-MM-DD). The server turns it
+ * into the instant of 12:00 AM Eastern on that date; null = release right away.
+ */
+export const releaseDate = z
+  .string()
+  .trim()
+  .regex(RELEASE_DATE_RE, 'Enter the release date as YYYY-MM-DD.')
+  .refine((value) => {
+    try {
+      easternMidnightUtc(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }, 'That is not a real date.')
+  .nullable();
+
 export const episodeCreateSchema = z.object({
   season: z.number().int().min(1).max(100).default(1),
   episode: z.number().int().min(1).max(500).default(1),
@@ -137,6 +157,8 @@ export const episodeCreateSchema = z.object({
   videoUrl: mediaUrl,
   captionsUrl: mediaUrl.nullable().default(null),
   durationS: z.number().int().min(0).max(86_400).default(0),
+  /** Optional scheduled release day; omitted or null releases on publish. */
+  releaseDate: releaseDate.default(null),
 });
 
 export const episodeUpdateSchema = episodeCreateSchema
@@ -314,6 +336,25 @@ export const scoutDecideSchema = z.object({
   approve: z.boolean(),
 });
 
+/** A user's identity verification request: legal name + two uploaded documents. */
+export const verificationRequestSchema = z.object({
+  legalName: z.string().trim().min(2, 'Enter your full legal name.').max(120),
+  idDocUrl: mediaUrl.refine((v) => v.startsWith('/media/verify/'), 'Upload your ID document first.'),
+  addressDocUrl: mediaUrl.refine(
+    (v) => v.startsWith('/media/verify/'),
+    'Upload your proof of address first.',
+  ),
+  consent: z.literal(true, {
+    errorMap: () => ({ message: 'Please confirm you consent to Sweam reviewing these documents.' }),
+  }),
+});
+
+/** An admin's decision on an identity verification request. */
+export const verificationDecideSchema = z.object({
+  approve: z.boolean(),
+  note: z.string().trim().max(500).default(''),
+});
+
 export const takedownCreateSchema = z.object({
   slug: z.string().trim().min(1).max(200),
   kind: takedownKind,
@@ -425,6 +466,8 @@ export const submissionCreateSchema = z
     rightsConfirmed: z.literal(true, {
       errorMap: () => ({ message: 'You must confirm you hold the rights to this work.' }),
     }),
+    /** Optional scheduled release day (YYYY-MM-DD); applied to the episode when accepted. */
+    releaseDate: releaseDate.default(null),
   })
   .refine((value) => Boolean(value.sourceUrl || value.workUrl || value.verbatiimProjectId), {
     message: 'Add your work: upload a file, import from Verbatiim, or paste a screener link.',
@@ -512,6 +555,8 @@ export const clipCreateSchema = z.object({
   bluTierId: z.string().trim().max(32).nullable().default(null),
   /** Attach the clip to one of the creator's series (as the next episode); null = standalone. */
   seriesId: z.string().trim().min(1).max(64).nullable().default(null),
+  /** Optional scheduled release day (YYYY-MM-DD); null posts right away. */
+  releaseDate: releaseDate.default(null),
 });
 
 /** An admin's decision on a clip in the review queue. */

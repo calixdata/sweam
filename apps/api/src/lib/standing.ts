@@ -1,4 +1,5 @@
 import { fail } from './http';
+import { isOfficialAccount } from './official';
 
 /**
  * Creator account standing. Strikes are issued by admins during moderation;
@@ -24,6 +25,8 @@ export async function activeStrikeCount(db: D1Database, creatorId: string): Prom
 }
 
 export async function assertGoodStanding(db: D1Database, creatorId: string): Promise<void> {
+  // Official accounts (Sweam's own, flagship creators) are not suspended by strikes.
+  if (await isOfficialAccount(db, creatorId)) return;
   if ((await activeStrikeCount(db, creatorId)) >= SUSPENSION_STRIKES) {
     fail(
       403,

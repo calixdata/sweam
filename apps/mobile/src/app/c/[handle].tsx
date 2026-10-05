@@ -97,7 +97,9 @@ export default function CreatorScreen() {
         </View>
         <View style={styles.nameRow}>
           <Text style={styles.name}>{page.displayName}</Text>
-          {page.verified && <Ionicons name="checkmark-circle" size={18} color={colors.accent} />}
+          {page.verified && (
+            <Ionicons name="checkmark-circle" size={18} color={colors.pink} accessibilityLabel="Verified account" />
+          )}
         </View>
         <Text style={styles.handle}>@{page.handle}</Text>
         <Text style={styles.followers}>

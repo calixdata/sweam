@@ -1,5 +1,5 @@
 import type { ContentKind, Rating } from '@sweam/shared';
-import { RATING_TO_ADVISORY } from '@sweam/shared';
+import { RATING_TO_ADVISORY, easternMidnightUtc } from '@sweam/shared';
 import type { Env } from '../env';
 import { nowIso } from './http';
 import { makeSlug } from './slug';
@@ -29,6 +29,8 @@ export interface PublishableSubmission {
   captions_url: string | null;
   series_id: string | null;
   poster_url: string | null;
+  /** Optional scheduled release day (YYYY-MM-DD); the episode unlocks at midnight Eastern. */
+  release_date?: string | null;
 }
 
 /** Derive a valid creator handle from a display name, falling back to random. */
@@ -154,12 +156,13 @@ export async function publishSubmission(
     .first<{ m: number }>();
   const episode = (maxRow?.m ?? 0) + 1;
   const episodeId = crypto.randomUUID();
+  const releaseAt = submission.release_date ? easternMidnightUtc(submission.release_date) : null;
   await env.DB.prepare(
     `INSERT INTO episodes
-       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at)
-     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?)`,
+       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at)
+     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
   )
-    .bind(episodeId, titleId, episode, submission.title_name, submission.synopsis, submission.source_url, submission.captions_url, submission.source_url, now)
+    .bind(episodeId, titleId, episode, submission.title_name, submission.synopsis, submission.source_url, submission.captions_url, submission.source_url, now, releaseAt)
     .run();
   await enqueueTranscode(env.DB, episodeId, submission.source_url);
 
@@ -178,6 +181,8 @@ export interface ClipToPublish {
   bluPriceCents: number | null;
   /** Attach to this series (as the next episode) instead of a standalone short; null = standalone. */
   seriesId: string | null;
+  /** Optional scheduled release day (YYYY-MM-DD); the clip unlocks at midnight Eastern. */
+  releaseDate?: string | null;
 }
 
 /** A clip's title name is its caption, trimmed to a display-friendly length. */
@@ -276,12 +281,13 @@ export async function publishClip(
     .first<{ m: number }>();
   const episode = (maxRow?.m ?? 0) + 1;
   const episodeId = crypto.randomUUID();
+  const releaseAt = clip.releaseDate ? easternMidnightUtc(clip.releaseDate) : null;
   await env.DB.prepare(
     `INSERT INTO episodes
-       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at)
-     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?)`,
+       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at)
+     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
   )
-    .bind(episodeId, titleId, episode, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now)
+    .bind(episodeId, titleId, episode, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now, releaseAt)
     .run();
   await enqueueTranscode(env.DB, episodeId, clip.sourceUrl);
 

@@ -6,6 +6,7 @@ import { useAuth } from '../auth';
 import { Avatar } from '../components/Avatar';
 import { TitleCard } from '../components/TitleCard';
 import { ErrorNote, Loading } from '../components/Status';
+import { VerifiedBadge } from '../components/VerifiedBadge';
 import { usePageTitle } from '../hooks';
 
 export function CreatorPage() {
@@ -59,7 +60,7 @@ export function CreatorPage() {
         <div>
           <h1>
             {creator.displayName} (@{creator.handle})
-            {creator.verified && <span className="tag-new"> Verified</span>}
+            {creator.verified && <VerifiedBadge size="0.8em" />}
           </h1>
           <p className="title-meta">
             {creator.followerCount.toLocaleString()} follower

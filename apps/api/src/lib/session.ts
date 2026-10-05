@@ -107,7 +107,22 @@ export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
  */
 const PUBLIC_MEDIA_RE = /\.(png|jpe?g|webp|gif|avif|svg)$/i;
 
+/** Identity documents live here: never public, readable by the owner and admins only. */
+const VERIFY_MEDIA_PREFIX = '/media/verify/';
+
 export const requireContentAccess = createMiddleware<AppEnv>(async (c, next) => {
+  // Identity verification documents are private even when they are images.
+  if (c.req.path.startsWith(VERIFY_MEDIA_PREFIX)) {
+    const token = getCookie(c, SESSION_COOKIE) ?? bearerToken(c);
+    const user = token ? await resolveSession(c.env.DB, token) : null;
+    if (!user) fail(401, 'auth_required', 'Sign in to continue.');
+    const ownerPrefix = `${VERIFY_MEDIA_PREFIX}${user.id}/`;
+    if (!user.isAdmin && !c.req.path.startsWith(ownerPrefix)) {
+      fail(404, 'not_found', 'Not found.');
+    }
+    await next();
+    return;
+  }
   // Images (posters, cover art, the hero) are public so browsing works signed-out.
   if (PUBLIC_MEDIA_RE.test(c.req.path)) {
     await next();

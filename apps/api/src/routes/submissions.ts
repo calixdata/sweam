@@ -17,9 +17,9 @@ import {
 import { copyToR2, getRemoteJob, verbatiimConfigured } from '../lib/verbatiim';
 import {
   MAX_PART_BYTES,
-  MAX_UPLOAD_BYTES,
   MULTIPART_PART_SIZE,
   UPLOAD_CONTENT_TYPES,
+  uploadCapFor,
 } from './studio';
 
 /**
@@ -55,6 +55,7 @@ export interface SubmissionRow {
   rights_proof_url: string | null;
   id_proof_url: string | null;
   adaptation_attested: number;
+  release_date: string | null;
   status: SubmissionItem['status'];
   note: string;
   created_at: string;
@@ -85,6 +86,7 @@ export function mapSubmission(row: SubmissionRow): SubmissionItem {
     rightsProofUrl: row.rights_proof_url,
     idProofUrl: row.id_proof_url,
     adaptationAttested: row.adaptation_attested === 1,
+    releaseDate: row.release_date,
     status: row.status,
     note: row.note,
     createdAt: row.created_at,
@@ -98,7 +100,7 @@ export const SUBMISSION_SELECT = `s.id, s.title_name, s.kind, s.genre, s.audienc
   s.subgenres, s.rating, s.synopsis, s.work_url, s.source_url, s.captions_url,
   s.verbatiim_project_id, s.poster_url, s.series_id, se.name AS series_name,
   s.is_adaptation, s.adaptation_source, s.rights_proof_url, s.id_proof_url, s.adaptation_attested,
-  s.status, s.note, s.created_at, s.updated_at, s.decided_at`;
+  s.release_date, s.status, s.note, s.created_at, s.updated_at, s.decided_at`;
 
 // ---------------------------------------------------------------------------
 // Create, list, withdraw
@@ -135,8 +137,8 @@ submissionRoutes.post('/', async (c) => {
        (id, user_id, title_name, kind, genre, audiences, genres, subgenres, rating, synopsis,
         work_url, source_url, captions_url, verbatiim_project_id, poster_url, series_id,
         is_adaptation, adaptation_source, rights_proof_url, id_proof_url, adaptation_attested,
-        rights_confirmed, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`,
+        release_date, rights_confirmed, status, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'pending', ?, ?)`,
   )
     .bind(
       id,
@@ -160,6 +162,7 @@ submissionRoutes.post('/', async (c) => {
       body.isAdaptation ? body.rightsProofUrl : null,
       body.isAdaptation ? body.idProofUrl : null,
       body.isAdaptation && body.adaptationAttested ? 1 : 0,
+      body.releaseDate,
       now,
       now,
     )
@@ -234,7 +237,7 @@ submissionRoutes.put('/upload/:filename', async (c) => {
   if (!Number.isFinite(contentLength) || contentLength <= 0) {
     fail(411, 'length_required', 'Uploads must include a Content-Length header.');
   }
-  if (contentLength > MAX_UPLOAD_BYTES) {
+  if (contentLength > (await uploadCapFor(c.env.DB, currentUser(c).id))) {
     fail(413, 'too_large', `Video uploads are limited to ${UPLOAD_SPECS.video.maxLabel}.`);
   }
   if (contentType.startsWith('image/') && contentLength > UPLOAD_SPECS.poster.maxBytes) {

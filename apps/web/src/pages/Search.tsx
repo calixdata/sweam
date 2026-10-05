@@ -6,6 +6,7 @@ import { ApiError, apiGet } from '../api';
 import { Avatar } from '../components/Avatar';
 import { TitleCard } from '../components/TitleCard';
 import { ErrorNote, Loading } from '../components/Status';
+import { VerifiedBadge } from '../components/VerifiedBadge';
 import { usePageTitle } from '../hooks';
 
 /**
@@ -135,7 +136,7 @@ function AccountRow({ account }: { account: AccountSearchResult }) {
       <span className="account-row-text">
         <span className="account-row-name">
           {account.displayName}
-          {account.verified && <span className="tag-new"> Verified</span>}
+          {account.verified && <VerifiedBadge />}
         </span>
         <span className="account-row-meta">
           @{account.username} · {followers}

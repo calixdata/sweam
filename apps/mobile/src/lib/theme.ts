@@ -7,6 +7,8 @@ export const colors = {
   text: '#f4f7ff',
   muted: '#a5b5cd',
   accent: '#4de0f3',
+  /** Sweam hot pink: the verified-account check. */
+  pink: '#FF2A8B',
   accentStrong: '#417dff',
   like: '#ff5c8a',
   danger: '#ff9eaa',

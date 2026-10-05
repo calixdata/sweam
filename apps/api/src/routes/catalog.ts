@@ -195,7 +195,8 @@ catalogRoutes.get('/search', async (c) => {
 
   const [accountsResult, titlesResult] = await c.env.DB.batch([
     c.env.DB.prepare(
-      `SELECT u.username, u.display_name, u.avatar_url, cp.handle, cp.verified,
+      `SELECT u.username, u.display_name, u.avatar_url, cp.handle,
+         MAX(u.verified, COALESCE(cp.verified, 0)) AS verified,
          (SELECT COUNT(*) FROM follows f WHERE f.creator_id = u.id) AS follower_count,
          (SELECT COUNT(*) FROM titles t WHERE t.creator_id = u.id AND t.published = 1) AS published_titles
        FROM users u

@@ -101,6 +101,8 @@ export default function RecordScreen() {
   const [bluFund, setBluFund] = useState<BluFundStatus | null>(null);
   const [series, setSeries] = useState<SeriesSummary[]>([]);
   const [seriesId, setSeriesId] = useState('');
+  // Optional scheduled release day, typed as YYYY-MM-DD (Eastern); empty posts right away.
+  const [releaseDate, setReleaseDate] = useState('');
 
   const [posting, setPosting] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -249,6 +251,7 @@ export default function RecordScreen() {
         sourceUrl: url,
         bluTierId: seriesId ? null : bluTierId,
         seriesId: seriesId || null,
+        releaseDate: releaseDate.trim() || null,
       });
       player.pause();
       router.replace(`/watch/${result.episodeId}`);
@@ -329,6 +332,25 @@ export default function RecordScreen() {
               accessibilityLabel="Clip caption"
             />
             <Text style={styles.hint}>{captionLeft} characters left. This becomes the clip's title.</Text>
+
+            <Text style={styles.label}>Release date (optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={releaseDate}
+              onChangeText={setReleaseDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="numbers-and-punctuation"
+              maxLength={10}
+              editable={!posting}
+              accessibilityLabel="Release date, year dash month dash day"
+            />
+            <Text style={styles.hint}>
+              Schedule it: viewers see the cover and caption now and the video unlocks at 12:00 AM
+              Eastern on that day. Leave empty to post right away.
+            </Text>
 
             <Text style={styles.label}>Maturity rating</Text>
             <View style={styles.chipRow}>

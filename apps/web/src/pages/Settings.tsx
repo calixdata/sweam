@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
+import type { MyVerification } from '@sweam/shared';
 import { UPLOAD_SPECS, USERNAME_HINT, USERNAME_RE } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { Avatar } from '../components/Avatar';
+import { VerifiedBadge } from '../components/VerifiedBadge';
 import { usePageTitle } from '../hooks';
 import { uploadMedia } from '../upload';
 
@@ -147,6 +149,8 @@ export function Settings() {
 
       <ProfilePictureSection />
 
+      <VerificationSection />
+
       <ChangeEmailSection />
 
       <ChangePasswordSection />
@@ -262,6 +266,217 @@ function ProfilePictureSection() {
         </p>
       )}
       {notice && (
+        <p className="status status-ok" role="status">
+          {notice}
+        </p>
+      )}
+    </section>
+  );
+}
+
+/**
+ * Identity verification: the free path. The account holder uploads a
+ * government ID and a proof of address; Sweam reviews them by hand and, on
+ * approval, the account carries the pink verified check. The documents are
+ * deleted once the request is decided.
+ */
+function VerificationSection() {
+  const [state, setState] = useState<MyVerification | null>(null);
+  const [legalName, setLegalName] = useState('');
+  const [idDocUrl, setIdDocUrl] = useState('');
+  const [addressDocUrl, setAddressDocUrl] = useState('');
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setState(await apiGet<MyVerification>('/api/me/verification'));
+    } catch {
+      setState(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function upload(file: File | undefined, target: 'id' | 'address') {
+    if (!file) return;
+    setError(null);
+    if (file.size > UPLOAD_SPECS.verification.maxBytes) {
+      setError(`That file is too large. Keep it under ${UPLOAD_SPECS.verification.maxLabel}.`);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { url } = await uploadMedia(file, (p) => setNotice(p.message), '/api/me/verification/upload');
+      if (target === 'id') setIdDocUrl(url);
+      else setAddressDocUrl(url);
+      setNotice(`${target === 'id' ? 'ID document' : 'Proof of address'} uploaded.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not upload that file.');
+      setNotice('');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    if (legalName.trim().length < 2) {
+      setError('Enter your full legal name.');
+      document.getElementById('verify-name')?.focus();
+      return;
+    }
+    if (!idDocUrl) {
+      setError('Upload your ID document.');
+      document.getElementById('verify-id')?.focus();
+      return;
+    }
+    if (!addressDocUrl) {
+      setError('Upload your proof of address.');
+      document.getElementById('verify-address')?.focus();
+      return;
+    }
+    if (!consent) {
+      setError('Please confirm you consent to Sweam reviewing these documents.');
+      document.getElementById('verify-consent')?.focus();
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiSend('POST', '/api/me/verification', {
+        legalName: legalName.trim(),
+        idDocUrl,
+        addressDocUrl,
+        consent: true,
+      });
+      setNotice('Verification request sent. Sweam reviews it by hand; you will get a notification.');
+      setLegalName('');
+      setIdDocUrl('');
+      setAddressDocUrl('');
+      setConsent(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not send the request.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!state) return null;
+
+  const pending = state.request?.status === 'pending';
+  const rejected = state.request?.status === 'rejected';
+
+  return (
+    <section aria-labelledby="verify-heading">
+      <h2 id="verify-heading">
+        Verification {state.verified && <VerifiedBadge size="0.8em" />}
+      </h2>
+      {state.verified ? (
+        <p className="status status-ok" role="status">
+          Your account is verified{state.verifiedAt ? ` (since ${state.verifiedAt.slice(0, 10)})` : ''}.
+          The verified check shows next to your name across Sweam.
+        </p>
+      ) : pending ? (
+        <p className="status" role="status">
+          Your verification request from {state.request?.createdAt.slice(0, 10)} is under review.
+          Sweam checks documents by hand; you will get a notification with the decision.
+        </p>
+      ) : (
+        <>
+          <p className="page-intro">
+            Verified accounts carry a pink check next to their name. To verify, send a photo or
+            scan of a government-issued ID and a proof of your address (a utility bill, bank
+            statement, or lease showing your name and address). A person at Sweam reviews them;
+            the files are deleted as soon as the request is decided, and only the decision is kept.
+            There is no fee.
+          </p>
+          {rejected && (
+            <p className="status status-error" role="alert">
+              Your last request was not approved
+              {state.request?.note ? `: ${state.request.note}` : '.'} You can submit again.
+            </p>
+          )}
+          <form onSubmit={submit} onChange={() => setError(null)} noValidate>
+            <div className="field">
+              <label htmlFor="verify-name">Full legal name (as on your ID)</label>
+              <input
+                id="verify-name"
+                type="text"
+                autoComplete="name"
+                maxLength={120}
+                value={legalName}
+                onChange={(e) => setLegalName(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="verify-id">
+                Government ID ({UPLOAD_SPECS.verification.formats}, up to{' '}
+                {UPLOAD_SPECS.verification.maxLabel})
+              </label>
+              <input
+                id="verify-id"
+                type="file"
+                accept={UPLOAD_SPECS.verification.accept}
+                disabled={busy}
+                onChange={(e) => void upload(e.target.files?.[0], 'id')}
+                aria-describedby="verify-id-status"
+              />
+              <p className="field-hint" id="verify-id-status">
+                {idDocUrl ? 'ID document uploaded.' : 'Not uploaded yet.'}
+              </p>
+            </div>
+            <div className="field">
+              <label htmlFor="verify-address">
+                Proof of address ({UPLOAD_SPECS.verification.formats}, up to{' '}
+                {UPLOAD_SPECS.verification.maxLabel})
+              </label>
+              <input
+                id="verify-address"
+                type="file"
+                accept={UPLOAD_SPECS.verification.accept}
+                disabled={busy}
+                onChange={(e) => void upload(e.target.files?.[0], 'address')}
+                aria-describedby="verify-address-status"
+              />
+              <p className="field-hint" id="verify-address-status">
+                {addressDocUrl ? 'Proof of address uploaded.' : 'Not uploaded yet.'}
+              </p>
+            </div>
+            <div className="field">
+              <label htmlFor="verify-consent">
+                <input
+                  id="verify-consent"
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                />{' '}
+                I consent to Sweam reviewing these documents to verify my identity, and I understand
+                they are deleted once the request is decided.
+              </label>
+            </div>
+            {error && (
+              <p className="status status-error" role="alert">
+                {error}
+              </p>
+            )}
+            {notice && (
+              <p className="status status-ok" role="status">
+                {notice}
+              </p>
+            )}
+            <button type="submit" className="button" disabled={busy}>
+              {busy ? 'Working…' : 'Request verification'}
+            </button>
+          </form>
+        </>
+      )}
+      {state.verified && notice && (
         <p className="status status-ok" role="status">
           {notice}
         </p>

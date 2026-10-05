@@ -722,6 +722,25 @@ h1 .blu-badge {
   font-size: 0.92rem;
 }
 
+/* Verified-account check: inline with the name it follows. */
+.verified-badge {
+  display: inline-block;
+  vertical-align: -0.15em;
+  margin-left: 0.3em;
+}
+
+/* Scheduled episodes on a title page. */
+.episode-release {
+  color: var(--amber);
+  font-size: 0.95rem;
+  margin: 0.15rem 0 0;
+}
+.card-coming {
+  color: var(--amber);
+  font-size: 0.85rem;
+  margin: 0.2rem 0 0;
+}
+
 /* Per-episode view breakdown inside a board row. */
 .episode-breakdown {
   margin-top: 0.35rem;

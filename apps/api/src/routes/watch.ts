@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { WatchPayload } from '@sweam/shared';
+import { formatReleaseDate, isReleased } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
 import type { EpisodeRow } from '../lib/mappers';
@@ -27,6 +28,7 @@ interface WatchRow extends EpisodeRow {
   published: number;
   suppressed: number;
   is_blu: number;
+  release_at: string | null;
   creator_name: string;
   creator_handle: string;
 }
@@ -35,6 +37,7 @@ async function loadEpisode(db: D1Database, episodeId: string): Promise<WatchRow 
   return db
     .prepare(
       `SELECT e.id, e.season, e.episode, e.name, e.synopsis, e.video_url, e.captions_url, e.duration_s, e.ai_credits,
+        e.release_at,
         t.id AS title_id, t.slug AS title_slug, t.name AS title_name, t.kind AS title_kind,
         t.creator_id, t.published, t.suppressed, t.is_blu,
         u.display_name AS creator_name, cp.handle AS creator_handle
@@ -51,7 +54,9 @@ async function loadEpisode(db: D1Database, episodeId: string): Promise<WatchRow 
 /**
  * Who may watch. A suppressed title is on an investigation hold: hidden from
  * everyone but Sweam admins, including its own creator. Otherwise, drafts are
- * only watchable by their creator (Studio preview).
+ * only watchable by their creator (Studio preview), and a scheduled episode
+ * stays locked for viewers until its release instant (midnight Eastern on the
+ * chosen date); the creator and admins can preview it.
  */
 function assertViewable(row: WatchRow, userId: string | null, isAdmin: boolean): void {
   if (row.suppressed === 1) {
@@ -62,6 +67,13 @@ function assertViewable(row: WatchRow, userId: string | null, isAdmin: boolean):
   }
   if (row.published !== 1 && row.creator_id !== userId) {
     fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
+  }
+  if (!isReleased(row.release_at) && row.creator_id !== userId && !isAdmin) {
+    fail(
+      403,
+      'not_released',
+      `This episode releases on ${formatReleaseDate(row.release_at as string)} at 12:00 AM Eastern. You can ask to be notified on release day from the title page.`,
+    );
   }
 }
 
@@ -86,6 +98,7 @@ watchRoutes.get('/:episodeId', async (c) => {
   const nextEpisode = await c.env.DB.prepare(
     `SELECT id, season, episode, name FROM episodes
      WHERE title_id = ? AND (season > ? OR (season = ? AND episode > ?))
+       AND (release_at IS NULL OR release_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
      ORDER BY season, episode LIMIT 1`,
   )
     .bind(row.title_id, row.season, row.season, row.episode)
@@ -103,7 +116,8 @@ watchRoutes.get('/:episodeId', async (c) => {
   }
 
   const payload: WatchPayload = {
-    episode: mapEpisode(row),
+    // assertViewable already admitted this viewer (released, or the creator/admin previewing).
+    episode: mapEpisode(row, { reveal: true }),
     title: {
       id: row.title_id,
       slug: row.title_slug,
@@ -219,7 +233,7 @@ watchRoutes.post('/:episodeId/view', async (c) => {
   await enforceRateLimit(c.env.DB, RATE_LIMITS.anonView, body.viewId);
   const row = await loadEpisode(c.env.DB, c.req.param('episodeId'));
   if (!row) fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
-  if (row.published !== 1) {
+  if (row.published !== 1 || !isReleased(row.release_at)) {
     fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
   }
   if (row.is_blu === 1) {

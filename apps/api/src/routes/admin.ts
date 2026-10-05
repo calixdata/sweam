@@ -14,6 +14,7 @@ import type {
   AdminTakedown,
   AdminTitleEpisodes,
   AdminTranscodeJob,
+  AdminVerificationRequest,
   AdminVideoReplacement,
   AiSubmissionReview,
   MultipartInit,
@@ -27,6 +28,7 @@ import { formatMillicents } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { notify } from '../lib/notify';
+import { announceReleasedEpisodes } from '../lib/release';
 import { applyVideoReplacement } from '../lib/replace';
 import { requireAdmin, currentUser } from '../lib/session';
 import { SUSPENSION_STRIKES, strikeCutoffIso } from '../lib/standing';
@@ -55,6 +57,7 @@ import {
   submissionStatusSchema,
   suppressSchema,
   takedownCreateSchema,
+  verificationDecideSchema,
 } from '../lib/validate';
 import { grantFreeMembership } from '../lib/scoutMembership';
 import { cancelSubscription, stripeConfigured } from '../lib/stripe';
@@ -102,6 +105,7 @@ adminRoutes.get('/overview', async (c) => {
     c.env.DB.prepare('SELECT COALESCE(SUM(revenue_millicents), 0) AS n FROM ad_impressions'),
     c.env.DB.prepare("SELECT COUNT(*) AS n FROM submissions WHERE status = 'pending'"),
     c.env.DB.prepare("SELECT COUNT(*) AS n FROM clip_reviews WHERE state IN ('pending', 'flagged')"),
+    c.env.DB.prepare("SELECT COUNT(*) AS n FROM identity_verifications WHERE status = 'pending'"),
   ]);
 
   const count = (index: number) => (results[index]?.results?.[0] as { n: number } | undefined)?.n ?? 0;
@@ -132,6 +136,7 @@ adminRoutes.get('/overview', async (c) => {
     revenueMillicents: count(11),
     pendingSubmissions: count(12),
     pendingClips: count(13),
+    pendingVerifications: count(14),
   };
   return c.json(payload);
 });
@@ -196,7 +201,8 @@ adminRoutes.post('/submissions/:submissionId/decide', async (c) => {
   const body = await parseBody(c, submissionDecideSchema);
   const submission = await c.env.DB.prepare(
     `SELECT s.id, s.user_id, s.title_name, s.kind, s.genre, s.audiences, s.genres, s.subgenres,
-       s.rating, s.synopsis, s.source_url, s.captions_url, s.series_id, s.poster_url, u.display_name
+       s.rating, s.synopsis, s.source_url, s.captions_url, s.series_id, s.poster_url, s.release_date,
+       u.display_name
      FROM submissions s JOIN users u ON u.id = s.user_id
      WHERE s.id = ? AND s.status IN ('pending', 'under_review')`,
   )
@@ -598,6 +604,87 @@ adminRoutes.post('/scout-applications/:userId/decide', async (c) => {
       : `Your scout application for ${row.org_name} was not approved.`;
   await notify(c.env.DB, userId, 'scout_decision', message, body.approve ? '/scout' : null);
   return c.json({ status, billingWarning, freeUntil });
+});
+
+// ---------------------------------------------------------------------------
+// Identity verification queue
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/verifications', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT v.id, v.user_id, v.legal_name, v.id_doc_key, v.address_doc_key, v.created_at,
+       u.display_name, u.username, u.email
+     FROM identity_verifications v JOIN users u ON u.id = v.user_id
+     WHERE v.status = 'pending'
+     ORDER BY v.created_at`,
+  ).all<{
+    id: string;
+    user_id: string;
+    legal_name: string;
+    id_doc_key: string;
+    address_doc_key: string;
+    created_at: string;
+    display_name: string;
+    username: string | null;
+    email: string;
+  }>();
+  const requests: AdminVerificationRequest[] = results.map((row) => ({
+    id: row.id,
+    userId: row.user_id,
+    displayName: row.display_name,
+    username: row.username,
+    email: row.email,
+    legalName: row.legal_name,
+    idDocUrl: `/media/${row.id_doc_key}`,
+    addressDocUrl: `/media/${row.address_doc_key}`,
+    createdAt: row.created_at,
+  }));
+  return c.json({ requests });
+});
+
+/**
+ * Approve or reject an identity verification. Approval marks the account
+ * verified (the pink check). Either way the documents are deleted from
+ * storage: Sweam keeps the decision, not the papers.
+ */
+adminRoutes.post('/verifications/:id/decide', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, verificationDecideSchema);
+  const row = await c.env.DB.prepare(
+    "SELECT id, user_id, id_doc_key, address_doc_key FROM identity_verifications WHERE id = ? AND status = 'pending'",
+  )
+    .bind(c.req.param('id'))
+    .first<{ id: string; user_id: string; id_doc_key: string; address_doc_key: string }>();
+  if (!row) fail(404, 'verification_not_found', 'No pending verification request with that id.');
+
+  const now = nowIso();
+  const status = body.approve ? 'approved' : 'rejected';
+  const statements = [
+    c.env.DB
+      .prepare(
+        'UPDATE identity_verifications SET status = ?, note = ?, reviewer_id = ?, decided_at = ? WHERE id = ?',
+      )
+      .bind(status, body.note || null, admin.id, now, row.id),
+  ];
+  if (body.approve) {
+    statements.push(
+      c.env.DB.prepare('UPDATE users SET verified = 1, verified_at = ? WHERE id = ?').bind(now, row.user_id),
+      c.env.DB.prepare('UPDATE creator_profiles SET verified = 1 WHERE user_id = ?').bind(row.user_id),
+    );
+  }
+  await c.env.DB.batch(statements);
+  await Promise.allSettled([c.env.MEDIA.delete(row.id_doc_key), c.env.MEDIA.delete(row.address_doc_key)]);
+
+  await notify(
+    c.env.DB,
+    row.user_id,
+    'verification',
+    body.approve
+      ? 'Your identity is verified. Your account now carries the verified check.'
+      : `Your verification request was not approved${body.note ? `: ${body.note}` : '.'} You can submit it again from Settings.`,
+    '/settings',
+  );
+  return c.json({ status });
 });
 
 // ---------------------------------------------------------------------------
@@ -1467,6 +1554,15 @@ const GC_JOBS_PER_RUN = 20;
  * The episode's current job (the newest non-canceled one) is never touched.
  * Bounded per run to stay inside Worker limits; run again while `more`.
  */
+/**
+ * Announce scheduled episodes that have released since the last cron tick
+ * (the same job the 10-minute cron runs), for ops and for testing.
+ */
+adminRoutes.post('/maintenance/announce-releases', async (c) => {
+  const announced = await announceReleasedEpisodes(c.env.DB);
+  return c.json({ announced });
+});
+
 adminRoutes.post('/maintenance/hls-gc', async (c) => {
   const { results: jobs } = await c.env.DB.prepare(
     `SELECT j.id, j.episode_id FROM transcode_jobs j

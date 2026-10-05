@@ -1,4 +1,5 @@
 import { fail } from './http';
+import { isOfficialAccount } from './official';
 
 /**
  * Fixed-window rate limiting backed by D1. One counter row per (bucket,
@@ -126,6 +127,9 @@ export async function enforceRateLimit(
 ): Promise<void> {
   const count = await recordRateLimit(db, rule, subject, nowMs);
   if (count > rule.limit) {
+    // Official accounts (Sweam's own, flagship creators) are never throttled.
+    // Only user-keyed rules can match: an IP or email subject is never a user id.
+    if (await isOfficialAccount(db, subject)) return;
     fail(429, 'rate_limited', 'Too many requests. Wait a bit and try again.');
   }
 }

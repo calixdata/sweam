@@ -44,6 +44,13 @@ const sections: LegalSection[] = [
             submitting work, and payout requests creators make against their earnings.
           </li>
           <li>
+            <strong>Identity verification</strong> (only if you request the verified check): your
+            legal name and the two documents you upload, a government-issued ID and a proof of
+            address. They are used for that review alone, are visible only to the Sweam staff
+            member reviewing them, and are deleted as soon as the request is decided; we keep the
+            decision and date, not the documents.
+          </li>
+          <li>
             <strong>Technical:</strong> standard server logs (such as IP address and request time)
             kept briefly for security and reliability, and the privacy-first analytics described
             below.
@@ -150,7 +157,8 @@ const sections: LegalSection[] = [
     body: (
       <p>
         We keep account and content data while your account is active and as needed to provide the
-        service. Server logs are kept briefly for security. Analytics records are aggregate and hold
+        service. Identity verification documents are deleted the moment the request is approved or
+        rejected. Server logs are kept briefly for security. Analytics records are aggregate and hold
         no identifiers. When you delete content or close your account, we remove or de-identify your
         data within a reasonable period, except where we must keep records to comply with the law,
         resolve disputes, or enforce our agreements.

@@ -368,6 +368,9 @@ function FeedCard({
         >
           <FeedAvatar uri={mediaUrl(item.creator.avatarUrl)} name={item.creator.displayName} />
           <Text style={styles.captionName}>@{item.creator.handle}</Text>
+          {item.creator.verified ? (
+            <Ionicons name="checkmark-circle" size={16} color={colors.pink} accessibilityLabel="Verified account" />
+          ) : null}
         </Pressable>
         <Text style={styles.captionText} numberOfLines={2}>{item.name}</Text>
         {item.promotedBy ? (

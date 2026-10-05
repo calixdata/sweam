@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { AdminOverview, AdminScoutApplication, AdminTranscodeJob } from '@sweam/shared';
+import type {
+  AdminOverview,
+  AdminScoutApplication,
+  AdminTranscodeJob,
+  AdminVerificationRequest,
+} from '@sweam/shared';
 import { formatMillicents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
@@ -27,19 +32,22 @@ function AdminDashboard() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [applications, setApplications] = useState<AdminScoutApplication[] | null>(null);
   const [jobs, setJobs] = useState<AdminTranscodeJob[] | null>(null);
+  const [verifications, setVerifications] = useState<AdminVerificationRequest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const [ov, apps, transcode] = await Promise.all([
+      const [ov, apps, transcode, verifs] = await Promise.all([
         apiGet<AdminOverview>('/api/admin/overview'),
         apiGet<{ applications: AdminScoutApplication[] }>('/api/admin/scout-applications'),
         apiGet<{ jobs: AdminTranscodeJob[] }>('/api/admin/transcode'),
+        apiGet<{ requests: AdminVerificationRequest[] }>('/api/admin/verifications'),
       ]);
       setOverview(ov);
       setApplications(apps.applications);
       setJobs(transcode.jobs);
+      setVerifications(verifs.requests);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not load the admin dashboard.');
     }
@@ -87,6 +95,27 @@ function AdminDashboard() {
     }
   }
 
+  async function decideVerification(request: AdminVerificationRequest, approve: boolean) {
+    let note = '';
+    if (!approve) {
+      const answer = window.prompt(
+        `Reason the request from ${request.legalName} is not approved (shown to them; optional):`,
+        '',
+      );
+      if (answer === null) return;
+      note = answer.trim();
+    } else if (!window.confirm(`Mark ${request.legalName} (@${request.username ?? 'unknown'}) as verified?`)) {
+      return;
+    }
+    try {
+      await apiSend('POST', `/api/admin/verifications/${request.id}/decide`, { approve, note });
+      setNotice(`${approve ? 'Verified' : 'Rejected'} ${request.legalName}. The documents were deleted.`);
+      await load();
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Decision failed.');
+    }
+  }
+
   async function requeue(job: AdminTranscodeJob) {
     try {
       await apiSend('POST', `/api/admin/transcode/${job.id}/requeue`);
@@ -114,7 +143,7 @@ function AdminDashboard() {
   }
 
   if (error) return <ErrorNote message={error} />;
-  if (!overview || !applications || !jobs) {
+  if (!overview || !applications || !jobs || !verifications) {
     return <Loading label="Loading the admin dashboard" />;
   }
 
@@ -282,6 +311,74 @@ function AdminDashboard() {
                     </tr>
                   );
                 })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section aria-labelledby="admin-verifications">
+        <h2 id="admin-verifications">Identity verification</h2>
+        <p className="field-hint">
+          Requests from accounts that uploaded a government ID and a proof of address. Open both
+          documents, check that the name and address match, then verify or reject. Either decision
+          deletes the documents; only the decision is kept.
+        </p>
+        {verifications.length === 0 ? (
+          <p>No verification requests waiting.</p>
+        ) : (
+          <div className="table-scroll">
+            <table className="studio-table">
+              <caption className="visually-hidden">Identity verification requests to review</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Legal name</th>
+                  <th scope="col">Account</th>
+                  <th scope="col">Documents</th>
+                  <th scope="col">Submitted</th>
+                  <th scope="col">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {verifications.map((request) => (
+                  <tr key={request.id}>
+                    <th scope="row">{request.legalName}</th>
+                    <td>
+                      {request.displayName}
+                      {request.username ? ` (@${request.username})` : ''}
+                      <br />
+                      <span className="field-hint">{request.email}</span>
+                    </td>
+                    <td>
+                      <a href={request.idDocUrl} target="_blank" rel="noreferrer">
+                        ID document
+                      </a>
+                      {' · '}
+                      <a href={request.addressDocUrl} target="_blank" rel="noreferrer">
+                        Proof of address
+                      </a>
+                    </td>
+                    <td>{request.createdAt.slice(0, 10)}</td>
+                    <td>
+                      <div className="episode-actions">
+                        <button
+                          type="button"
+                          className="button"
+                          onClick={() => void decideVerification(request, true)}
+                        >
+                          Verify
+                        </button>
+                        <button
+                          type="button"
+                          className="button button-danger"
+                          onClick={() => void decideVerification(request, false)}
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

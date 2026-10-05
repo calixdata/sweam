@@ -309,7 +309,7 @@ async function scoutableTitle(db: D1Database, titleId: string): Promise<OneSheet
   return db
     .prepare(
       `SELECT ${TITLE_SELECT},
-        cp.bio, cp.verified, t.creator_id,
+        cp.bio, MAX(u.verified, cp.verified) AS verified, t.creator_id,
         COALESCE(s.impressions, 0) AS impressions,
         COALESCE(s.plays, 0) AS plays,
         COALESCE(s.completes, 0) AS completes,

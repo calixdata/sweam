@@ -3,6 +3,7 @@ import { bluTierById } from '@sweam/shared';
 import type { AppEnv, Env } from '../env';
 import { BLU_NOT_ELIGIBLE_MESSAGE, getBluOfferGate } from '../lib/blufund';
 import { fail, nowIso, parseBody } from '../lib/http';
+import { isOfficialAccount } from '../lib/official';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
 import { clipCreateSchema } from '../lib/validate';
@@ -115,6 +116,7 @@ clipRoutes.post('/', async (c) => {
       captionsUrl: body.captionsUrl,
       bluPriceCents,
       seriesId: body.seriesId,
+      releaseDate: body.releaseDate,
     },
     user.displayName,
   );
@@ -128,6 +130,8 @@ clipRoutes.post('/', async (c) => {
     .run();
 
   if (aiReviewConfigured(c.env)) {
+    // Official accounts' clips are reviewed like any other but never auto-hidden.
+    const official = await isOfficialAccount(c.env.DB, user.id);
     c.executionCtx.waitUntil(
       runClipAiReview(
         c.env,
@@ -138,7 +142,7 @@ clipRoutes.post('/', async (c) => {
           genre: body.genre,
           caption: body.caption,
         },
-        !published.attachedToSeries,
+        !published.attachedToSeries && !official,
       ),
     );
   }

@@ -41,7 +41,7 @@ titleRoutes.get('/:slug', async (c) => {
   if (!row) fail(404, 'title_not_found', 'That title does not exist or is not published.');
 
   const { results: episodeRows } = await c.env.DB.prepare(
-    `SELECT id, season, episode, name, synopsis, video_url, captions_url, duration_s
+    `SELECT id, season, episode, name, synopsis, video_url, captions_url, duration_s, release_at
      FROM episodes WHERE title_id = ? ORDER BY season, episode`,
   )
     .bind(row.id)
@@ -50,24 +50,36 @@ titleRoutes.get('/:slug', async (c) => {
   const user = c.get('user');
   let likedByMe = false;
   let inMyWatchlist = false;
+  const reminders = new Set<string>();
   if (user) {
-    const [liked, listed] = await c.env.DB.batch([
+    const [liked, listed, reminded] = await c.env.DB.batch([
       c.env.DB.prepare('SELECT 1 AS x FROM likes WHERE user_id = ? AND title_id = ?').bind(user.id, row.id),
       c.env.DB.prepare('SELECT 1 AS x FROM watchlist WHERE user_id = ? AND title_id = ?').bind(
         user.id,
         row.id,
       ),
+      c.env.DB.prepare(
+        `SELECT r.episode_id FROM release_reminders r
+         JOIN episodes e ON e.id = r.episode_id
+         WHERE r.user_id = ? AND e.title_id = ?`,
+      ).bind(user.id, row.id),
     ]);
     likedByMe = (liked?.results?.length ?? 0) > 0;
     inMyWatchlist = (listed?.results?.length ?? 0) > 0;
+    for (const r of (reminded?.results ?? []) as { episode_id: string }[]) reminders.add(r.episode_id);
   }
 
   const bluAccess =
     row.is_blu !== 1 || (await hasBluAccess(c.env.DB, user?.id ?? null, row.creator_id));
+  // The creator and admins can play a scheduled episode before it releases.
+  const reveal = user !== null && (user.id === row.creator_id || user.isAdmin);
 
   const payload: TitleDetail = {
     ...mapTitle(row),
-    episodes: episodeRows.map(mapEpisode),
+    episodes: episodeRows.map((ep) => ({
+      ...mapEpisode(ep, { reveal }),
+      ...(user ? { reminderSet: reminders.has(ep.id) } : {}),
+    })),
     views: row.plays,
     likes: row.likes,
     commentCount: row.comment_count,

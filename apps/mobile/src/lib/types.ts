@@ -17,6 +17,8 @@ export interface CreatorRef {
   handle: string;
   displayName: string;
   avatarUrl?: string | null;
+  /** Identity-verified account (pink check). */
+  verified?: boolean;
 }
 
 export interface FeedItem {
@@ -51,6 +53,10 @@ export interface TitleSummary {
   posterUrl: string | null;
   publishedAt: string | null;
   episodeCount: number;
+  /** Episodes already unlocked for streaming (older payloads omit it). */
+  releasedEpisodeCount?: number;
+  /** The next scheduled release still in the future (ISO), or null. */
+  nextReleaseAt?: string | null;
   creator: CreatorRef;
   isBlu: boolean;
   bluPriceCents: number | null;
@@ -73,9 +79,16 @@ export interface EpisodeSummary {
   episode: number;
   name: string;
   synopsis: string;
+  /** Empty until a scheduled episode releases. */
   videoUrl: string;
   captionsUrl: string | null;
   durationS: number;
+  /** Scheduled release instant (ISO), or null when released on publish. */
+  releaseAt?: string | null;
+  /** False while a scheduled episode is still locked. */
+  released?: boolean;
+  /** Signed-in only: a release-day reminder is set. */
+  reminderSet?: boolean;
 }
 
 export interface TitleDetail extends TitleSummary {

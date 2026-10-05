@@ -1,16 +1,25 @@
 import type { Advisory, ContentKind, EpisodeSummary, Genre, TitleSummary } from '@sweam/shared';
+import { isReleased } from '@sweam/shared';
 
 /**
  * Shared SELECT fragments and row-to-DTO mappers, so every route returns the
  * same title shape from the same SQL instead of drifting copies.
  */
 
+/** SQLite's current time in nowIso() shape, for release comparisons inside SQL. */
+const SQL_NOW_ISO = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+
 export const TITLE_SELECT = `
   t.id, t.slug, t.name, t.kind, t.genre, t.audiences AS audiences, t.hero_url AS hero_url,
   t.synopsis, t.advisory, t.poster_url, t.published_at,
   t.is_blu AS is_blu, t.blu_price_cents AS blu_price_cents, t.promoted_by AS promoted_by,
-  u.display_name AS creator_name, u.avatar_url AS creator_avatar, cp.handle AS creator_handle,
-  (SELECT COUNT(*) FROM episodes e WHERE e.title_id = t.id) AS episode_count
+  u.display_name AS creator_name, u.avatar_url AS creator_avatar, u.verified AS creator_verified,
+  cp.handle AS creator_handle,
+  (SELECT COUNT(*) FROM episodes e WHERE e.title_id = t.id) AS episode_count,
+  (SELECT COUNT(*) FROM episodes e WHERE e.title_id = t.id
+     AND (e.release_at IS NULL OR e.release_at <= ${SQL_NOW_ISO})) AS released_episode_count,
+  (SELECT MIN(e.release_at) FROM episodes e WHERE e.title_id = t.id
+     AND e.release_at > ${SQL_NOW_ISO}) AS next_release_at
 `;
 
 export const TITLE_FROM = `
@@ -36,8 +45,11 @@ export interface TitleRow {
   promoted_by: string | null;
   creator_name: string;
   creator_avatar: string | null;
+  creator_verified: number | null;
   creator_handle: string;
   episode_count: number;
+  released_episode_count: number;
+  next_release_at: string | null;
 }
 
 export interface TitleStatsRow {
@@ -65,10 +77,13 @@ export function mapTitle(row: TitleRow): TitleSummary {
       handle: row.creator_handle,
       displayName: row.creator_name,
       avatarUrl: row.creator_avatar,
+      verified: row.creator_verified === 1,
     },
     isBlu: row.is_blu === 1,
     bluPriceCents: row.blu_price_cents,
     promotedBy: row.promoted_by,
+    releasedEpisodeCount: row.released_episode_count ?? row.episode_count,
+    nextReleaseAt: row.next_release_at ?? null,
   };
 }
 
@@ -83,19 +98,31 @@ export interface EpisodeRow {
   duration_s: number;
   /** Only selected by queries that show credits (the watch page). */
   ai_credits?: string | null;
+  /** Scheduled release instant; queries that do not select it treat the episode as released. */
+  release_at?: string | null;
 }
 
-export function mapEpisode(row: EpisodeRow): EpisodeSummary {
+/**
+ * Map an episode row. Until a scheduled episode releases, viewers get its
+ * details but not its playback URLs; `reveal` keeps them for the creator's own
+ * Studio and for admins.
+ */
+export function mapEpisode(row: EpisodeRow, opts: { reveal?: boolean } = {}): EpisodeSummary {
+  const releaseAt = row.release_at ?? null;
+  const released = isReleased(releaseAt);
+  const hide = !released && !opts.reveal;
   return {
     id: row.id,
     season: row.season,
     episode: row.episode,
     name: row.name,
     synopsis: row.synopsis,
-    videoUrl: row.video_url,
-    captionsUrl: row.captions_url,
+    videoUrl: hide ? '' : row.video_url,
+    captionsUrl: hide ? null : row.captions_url,
     durationS: row.duration_s,
     ...(row.ai_credits !== undefined ? { aiCredits: row.ai_credits } : {}),
+    releaseAt,
+    released,
   };
 }
 

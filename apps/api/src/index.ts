@@ -5,6 +5,7 @@ import type { AppEnv, Env } from './env';
 import { requireContentAccess, withUser } from './lib/session';
 import { setPushEnv } from './lib/fcm';
 import { runBluFund } from './lib/fund';
+import { announceReleasedEpisodes } from './lib/release';
 import { previousMonthPeriod, runScoutRoyalty } from './lib/royalty';
 import { adminRoutes } from './routes/admin';
 import { adRoutes } from './routes/ads';
@@ -27,6 +28,9 @@ import { transcodeRoutes } from './routes/transcode';
 import { titleRoutes } from './routes/titles';
 import { verbatiimStudioRoutes, verbatiimWebhookRoutes } from './routes/verbatiim';
 import { watchRoutes } from './routes/watch';
+
+/** The frequent cron trigger (must match wrangler.toml) that announces scheduled releases. */
+const RELEASE_CRON = '*/10 * * * *';
 
 const app = new Hono<AppEnv>();
 
@@ -104,6 +108,15 @@ export default {
    * configured they record pending allocations as a ledger.
    */
   scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): void {
+    // The frequent trigger announces scheduled releases that have just unlocked;
+    // the monthly one runs the payout distributions.
+    if (event.cron === RELEASE_CRON) {
+      setPushEnv(env);
+      ctx.waitUntil(
+        announceReleasedEpisodes(env.DB).catch((err) => console.error('release_announce_failed', err)),
+      );
+      return;
+    }
     const { periodStart, periodEnd } = previousMonthPeriod(new Date(event.scheduledTime));
     ctx.waitUntil(
       Promise.allSettled([
@@ -117,4 +130,5 @@ export default {
     );
   },
 };
+
 

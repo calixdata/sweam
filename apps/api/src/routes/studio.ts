@@ -14,7 +14,14 @@ import type {
   TitleAnalytics,
   TranscodeStatus,
 } from '@sweam/shared';
-import { CREATOR_REVENUE_SHARE, MIN_PAYOUT_MILLICENTS, ageInYears } from '@sweam/shared';
+import {
+  CREATOR_REVENUE_SHARE,
+  MIN_PAYOUT_MILLICENTS,
+  OFFICIAL_MAX_UPLOAD_BYTES,
+  ageInYears,
+  easternMidnightUtc,
+  isReleased,
+} from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { loadDailySeries, loadEpisodeViews, loadRetention } from '../lib/analytics';
 import { BLU_NOT_ELIGIBLE_MESSAGE, getBluOfferGate } from '../lib/blufund';
@@ -22,6 +29,7 @@ import { creatorFundPayouts } from '../lib/fund';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { getCreatorEligibility } from '../lib/monetize';
 import { notify, notifyFollowers, notifyScoutsOfTitle } from '../lib/notify';
+import { isOfficialAccount } from '../lib/official';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { SUSPENSION_STRIKES, activeStrikeCount, assertGoodStanding } from '../lib/standing';
 import type { EpisodeRow } from '../lib/mappers';
@@ -173,7 +181,7 @@ type StudioEpisodeRow = EpisodeRow & {
 async function titleEpisodes(c: Context<AppEnv>, titleId: string): Promise<StudioEpisode[]> {
   const { results } = await c.env.DB.prepare(
     `SELECT e.id, e.season, e.episode, e.name, e.synopsis, e.video_url, e.captions_url, e.duration_s,
-       e.source_url, e.thumbnail_url,
+       e.source_url, e.thumbnail_url, e.release_at,
        j.status AS t_status, j.error AS t_error, j.updated_at AS t_updated
      FROM episodes e
      LEFT JOIN transcode_jobs j ON j.id = (
@@ -186,7 +194,8 @@ async function titleEpisodes(c: Context<AppEnv>, titleId: string): Promise<Studi
     .bind(titleId)
     .all<StudioEpisodeRow>();
   return results.map((row) => ({
-    ...mapEpisode(row),
+    // The creator always sees their own playback URLs, released or scheduled.
+    ...mapEpisode(row, { reveal: true }),
     sourceUrl: row.source_url,
     thumbnailUrl: row.thumbnail_url,
     transcode:
@@ -328,10 +337,13 @@ studioRoutes.delete('/titles/:titleId', requireCreator, async (c) => {
   if (row.suppressed === 1) {
     fail(403, 'suppressed', 'Sweam has this title under review. It cannot be deleted while the review is open.');
   }
-  if (row.is_blu === 1) {
+  // The Blu delete locks protect paying subscribers from ordinary creators;
+  // Sweam's own and flagship accounts decide for themselves.
+  const official = await isOfficialAccount(c.env.DB, currentUser(c).id);
+  if (row.is_blu === 1 && !official) {
     fail(403, 'blu_no_delete', 'Sweam Blu content cannot be deleted. Send Sweam a removal request with your reason.');
   }
-  if (row.ever_blu === 1) {
+  if (row.ever_blu === 1 && !official) {
     fail(403, 'was_blu_no_delete', 'This title was Sweam Blu before, so it cannot be deleted. You can make it private, or send Sweam a removal request.');
   }
   await c.env.DB.prepare('DELETE FROM titles WHERE id = ?').bind(row.id).run();
@@ -523,11 +535,13 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
   const body = await parseBody(c, episodeCreateSchema);
   const id = crypto.randomUUID();
   const sourceUrl = isPipelineSource(body.videoUrl) ? body.videoUrl : null;
+  // A scheduled episode unlocks at midnight Eastern on the chosen date.
+  const releaseAt = body.releaseDate ? easternMidnightUtc(body.releaseDate) : null;
 
   try {
     await c.env.DB.prepare(
-      `INSERT INTO episodes (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO episodes (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         id,
@@ -541,6 +555,7 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
         body.durationS,
         sourceUrl,
         nowIso(),
+        releaseAt,
       )
       .run();
   } catch (err) {
@@ -550,8 +565,9 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
     throw err;
   }
   if (sourceUrl) await enqueueTranscode(c.env.DB, id, sourceUrl);
-  // New episodes on an already-published title go straight to followers.
-  if (row.published === 1) {
+  // New episodes on an already-published title go straight to followers; a
+  // scheduled one waits for its release (the release cron notifies then).
+  if (row.published === 1 && isReleased(releaseAt)) {
     await notifyFollowers(
       c.env.DB,
       currentUser(c).id,
@@ -560,21 +576,31 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
       `/watch/${id}`,
     );
   }
-  return c.json({ id, transcodeQueued: sourceUrl !== null }, 201);
+  return c.json({ id, transcodeQueued: sourceUrl !== null, releaseAt }, 201);
 });
 
+interface OwnedEpisodeRow {
+  id: string;
+  source_url: string | null;
+  release_at: string | null;
+  season: number;
+  episode: number;
+  name: string;
+  title_name: string;
+  title_published: number;
+}
+
 /** Loads an episode only if its parent title belongs to the signed-in creator. */
-async function ownedEpisode(
-  c: Context<AppEnv>,
-  episodeId: string,
-): Promise<{ id: string; source_url: string | null }> {
+async function ownedEpisode(c: Context<AppEnv>, episodeId: string): Promise<OwnedEpisodeRow> {
   const row = await c.env.DB.prepare(
-    `SELECT e.id, e.source_url FROM episodes e
+    `SELECT e.id, e.source_url, e.release_at, e.season, e.episode, e.name,
+       t.name AS title_name, t.published AS title_published
+     FROM episodes e
      JOIN titles t ON t.id = e.title_id
      WHERE e.id = ? AND t.creator_id = ?`,
   )
     .bind(episodeId, currentUser(c).id)
-    .first<{ id: string; source_url: string | null }>();
+    .first<OwnedEpisodeRow>();
   if (!row) fail(404, 'episode_not_found', 'No such episode in your Studio.');
   return row;
 }
@@ -592,6 +618,17 @@ studioRoutes.patch('/episodes/:episodeId', requireCreator, async (c) => {
       ? body.videoUrl
       : null;
 
+  // Scheduling: a date sets (or moves) the release; null clears it so the
+  // episode is available now. Omitted leaves the schedule alone.
+  const releaseAt =
+    body.releaseDate === undefined
+      ? undefined
+      : body.releaseDate === null
+        ? null
+        : easternMidnightUtc(body.releaseDate);
+  const wasScheduled = !isReleased(episode.release_at);
+  const scheduleChanged = releaseAt !== undefined && releaseAt !== episode.release_at;
+
   const sets: string[] = [];
   const values: unknown[] = [];
   const columns: Record<string, unknown> = {
@@ -603,6 +640,9 @@ studioRoutes.patch('/episodes/:episodeId', requireCreator, async (c) => {
     captions_url: body.captionsUrl,
     duration_s: body.durationS,
     source_url: newSource ?? undefined,
+    release_at: releaseAt,
+    // A moved schedule is announced again when it actually releases.
+    release_notified_at: scheduleChanged ? null : undefined,
   };
   for (const [column, value] of Object.entries(columns)) {
     if (value !== undefined) {
@@ -621,7 +661,23 @@ studioRoutes.patch('/episodes/:episodeId', requireCreator, async (c) => {
     throw err;
   }
   if (newSource) await enqueueTranscode(c.env.DB, episode.id, newSource);
-  return c.json({ ok: true, transcodeQueued: newSource !== null });
+  // Clearing a future schedule on a live title releases the episode right now.
+  if (scheduleChanged && wasScheduled && isReleased(releaseAt ?? null) && episode.title_published === 1) {
+    const season = body.season ?? episode.season;
+    const number = body.episode ?? episode.episode;
+    const name = body.name ?? episode.name;
+    await c.env.DB.prepare('UPDATE episodes SET release_notified_at = ? WHERE id = ?')
+      .bind(nowIso(), episode.id)
+      .run();
+    await notifyFollowers(
+      c.env.DB,
+      currentUser(c).id,
+      'new_episode',
+      `New episode of ${episode.title_name}: S${season} E${number}, ${name}.`,
+      `/watch/${episode.id}`,
+    );
+  }
+  return c.json({ ok: true, transcodeQueued: newSource !== null, releaseAt: releaseAt ?? episode.release_at });
 });
 
 /** Re-run the pipeline for an episode that has an uploaded source. */
@@ -834,6 +890,7 @@ async function bluFundStatus(c: Context<AppEnv>, creatorId: string, isAdmin: boo
     platformOpen: gate.platformOpen,
     canOfferBlu: gate.canOfferBlu,
     adminBypass: gate.adminBypass,
+    officialBypass: gate.officialBypass ?? false,
     contentDefault: profile?.content_default === 'blu' ? ('blu' as const) : ('free' as const),
     dob: profile?.dob ?? null,
     attested: Boolean(profile?.blu_fund_attested_at),
@@ -984,7 +1041,7 @@ studioRoutes.put('/upload/:filename', requireCreator, async (c) => {
   if (!Number.isFinite(contentLength) || contentLength <= 0) {
     fail(411, 'length_required', 'Uploads must include a Content-Length header.');
   }
-  if (contentLength > MAX_UPLOAD_BYTES) {
+  if (contentLength > (await uploadCapFor(c.env.DB, currentUser(c).id))) {
     fail(413, 'too_large', 'Uploads are limited to 512 MB in this release.');
   }
   if (!c.req.raw.body) fail(400, 'empty_body', 'Upload body is empty.');
@@ -993,6 +1050,11 @@ studioRoutes.put('/upload/:filename', requireCreator, async (c) => {
   await c.env.MEDIA.put(key, c.req.raw.body, { httpMetadata: { contentType } });
   return c.json({ url: `/media/${key}` }, 201);
 });
+
+/** The upload size cap for an account: the normal 512 MB, or far more for official accounts. */
+export async function uploadCapFor(db: D1Database, userId: string): Promise<number> {
+  return (await isOfficialAccount(db, userId)) ? OFFICIAL_MAX_UPLOAD_BYTES : MAX_UPLOAD_BYTES;
+}
 
 export function mediaKeyFor(userId: string, filename: string): string {
   const safeName = filename

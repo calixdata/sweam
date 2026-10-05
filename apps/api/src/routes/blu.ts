@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { BLU_SWITCH_COOLDOWN_DAYS, bluTierById } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { BLU_NOT_ELIGIBLE_MESSAGE, getBluOfferGate } from '../lib/blufund';
+import { isOfficialAccount } from '../lib/official';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { notify, notifyFollowers } from '../lib/notify';
 import { requireUser, currentUser } from '../lib/session';
@@ -67,8 +68,9 @@ bluRoutes.put('/titles/:id', async (c) => {
     if (!gate.canOfferBlu) fail(403, 'blu_not_eligible', BLU_NOT_ELIGIBLE_MESSAGE);
   }
 
-  // Smart switch-governance: a Free<->Blu flip is limited to once per cooldown.
-  if (switching && title.blu_changed_at) {
+  // Smart switch-governance: a Free<->Blu flip is limited to once per cooldown
+  // (official accounts excepted).
+  if (switching && title.blu_changed_at && !(await isOfficialAccount(c.env.DB, user.id))) {
     const days = (Date.now() - Date.parse(title.blu_changed_at)) / 86_400_000;
     if (Number.isFinite(days) && days < BLU_SWITCH_COOLDOWN_DAYS) {
       const wait = Math.max(1, Math.ceil(BLU_SWITCH_COOLDOWN_DAYS - days));

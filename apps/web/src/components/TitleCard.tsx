@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { Genre, TitleSummary } from '@sweam/shared';
-import { CONTENT_KIND_LABELS } from '@sweam/shared';
+import { CONTENT_KIND_LABELS, formatReleaseDate } from '@sweam/shared';
 import { BluBadge } from './BluBadge';
 
 /**
@@ -70,6 +70,9 @@ export function TitleCard({ title }: { title: TitleSummary }) {
           {title.kind === 'series' ? ` · ${title.episodeCount} ep` : ''} · @{title.creator.handle}
         </p>
         {title.promotedBy && <p className="card-promoted">Promoted by {title.promotedBy}</p>}
+        {title.releasedEpisodeCount === 0 && title.nextReleaseAt && (
+          <p className="card-coming">Coming {formatReleaseDate(title.nextReleaseAt)}</p>
+        )}
       </Link>
     </article>
   );

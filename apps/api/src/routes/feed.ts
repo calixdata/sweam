@@ -21,6 +21,7 @@ interface FeedRow {
   synopsis: string;
   creator_name: string;
   creator_avatar: string | null;
+  creator_verified: number | null;
   creator_handle: string;
   poster_url: string | null;
   episode_id: string;
@@ -41,7 +42,8 @@ const MAX_PINNED_PROMOS = 10;
 /** The columns + joins every feed row needs (one playable episode per title). */
 const FEED_SELECT = `
   SELECT t.id AS title_id, t.slug, t.name, t.kind, t.synopsis,
-    u.display_name AS creator_name, u.avatar_url AS creator_avatar, cp.handle AS creator_handle, t.poster_url,
+    u.display_name AS creator_name, u.avatar_url AS creator_avatar, u.verified AS creator_verified,
+    cp.handle AS creator_handle, t.poster_url,
     t.is_blu AS is_blu, t.promoted_by AS promoted_by,
     e.id AS episode_id, e.video_url, t.published_at,
     COALESCE(s.plays, 0) AS views, COALESCE(s.likes, 0) AS likes,
@@ -52,7 +54,9 @@ const FEED_SELECT = `
   JOIN creator_profiles cp ON cp.user_id = t.creator_id
   LEFT JOIN title_stats s ON s.title_id = t.id
   JOIN episodes e ON e.id = (
-    SELECT id FROM episodes WHERE title_id = t.id ORDER BY season, episode LIMIT 1
+    SELECT id FROM episodes WHERE title_id = t.id
+      AND (release_at IS NULL OR release_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    ORDER BY season, episode LIMIT 1
   )
 `;
 
@@ -67,6 +71,7 @@ function toFeedItem(row: FeedRow): FeedItem {
       handle: row.creator_handle,
       displayName: row.creator_name,
       avatarUrl: row.creator_avatar,
+      verified: row.creator_verified === 1,
     },
     episodeId: row.episode_id,
     videoUrl: row.video_url,

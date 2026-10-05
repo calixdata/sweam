@@ -28,7 +28,7 @@ async function creatorByHandle(db: D1Database, handle: string): Promise<CreatorR
   const row = await db
     .prepare(
       `SELECT u.id AS user_id, COALESCE(cp.handle, u.username) AS handle,
-         COALESCE(cp.bio, '') AS bio, COALESCE(cp.verified, 0) AS verified,
+         COALESCE(cp.bio, '') AS bio, MAX(u.verified, COALESCE(cp.verified, 0)) AS verified,
          u.display_name, u.avatar_url, (cp.user_id IS NOT NULL) AS is_creator
        FROM users u
        LEFT JOIN creator_profiles cp ON cp.user_id = u.id

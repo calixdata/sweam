@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { EpisodeSummary, TitleDetail } from '@sweam/shared';
-import { CONTENT_KIND_LABELS, formatUsdCents } from '@sweam/shared';
+import { CONTENT_KIND_LABELS, formatReleaseDate, formatUsdCents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { BluBadge } from '../components/BluBadge';
 import { CommentsSection } from '../components/CommentsSection';
 import { ReportControl } from '../components/ReportControl';
 import { ErrorNote, Loading } from '../components/Status';
+import { VerifiedBadge } from '../components/VerifiedBadge';
 import { formatDuration, usePageTitle } from '../hooks';
 
 export function TitlePage() {
@@ -52,7 +53,10 @@ export function TitlePage() {
   if (error) return <ErrorNote message={error} />;
   if (!title) return <Loading label="Loading title" />;
 
-  const firstEpisode = title.episodes[0];
+  // Play starts the first episode viewers can actually stream; a title whose
+  // episodes are all still scheduled shows its release date instead.
+  const firstEpisode = title.episodes.find((ep) => ep.released) ?? null;
+  const firstUpcoming = title.episodes.find((ep) => !ep.released) ?? null;
   const isSeries = title.kind === 'series';
 
   function requireSignIn(): boolean {
@@ -101,6 +105,23 @@ export function TitlePage() {
     }
   }
 
+  async function toggleReminder(episode: EpisodeSummary) {
+    if (!title || requireSignIn()) return;
+    setBusy(true);
+    try {
+      const method = episode.reminderSet ? 'DELETE' : 'PUT';
+      const data = await apiSend<{ reminderSet: boolean }>(method, `/api/me/release-reminders/${episode.id}`);
+      setTitle({
+        ...title,
+        episodes: title.episodes.map((ep) =>
+          ep.id === episode.id ? { ...ep, reminderSet: data.reminderSet } : ep,
+        ),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleLike() {
     if (!title || requireSignIn()) return;
     setBusy(true);
@@ -135,6 +156,7 @@ export function TitlePage() {
           <Link to={`/c/${title.creator.handle}`}>
             {title.creator.displayName} (@{title.creator.handle})
           </Link>
+          {title.creator.verified && <VerifiedBadge />}
         </p>
         {title.promotedBy && <p className="promoted-notice">Promoted by {title.promotedBy}</p>}
         <p className="title-synopsis">{title.synopsis}</p>
@@ -165,7 +187,23 @@ export function TitlePage() {
             </span>
           </p>
         )}
+        {!firstEpisode && firstUpcoming?.releaseAt && (
+          <p className="episode-release" role="status">
+            Releases {formatReleaseDate(firstUpcoming.releaseAt)} at 12:00 AM Eastern.
+          </p>
+        )}
         <div className="title-actions">
+          {!firstEpisode && firstUpcoming && (
+            <button
+              type="button"
+              className="button"
+              onClick={() => void toggleReminder(firstUpcoming)}
+              disabled={busy}
+              aria-pressed={Boolean(firstUpcoming.reminderSet)}
+            >
+              {firstUpcoming.reminderSet ? 'Reminder set for release day' : 'Notify me on release day'}
+            </button>
+          )}
           {firstEpisode &&
             (title.isBlu && !title.bluAccess ? (
               <button type="button" className="button" onClick={subscribeBlu} disabled={bluBusy}>
@@ -229,11 +267,31 @@ export function TitlePage() {
                     <div className="episode-row">
                       <div>
                         <h3>
-                          <Link to={`/watch/${episode.id}`}>
-                            E{episode.episode}: {episode.name}
-                          </Link>
+                          {episode.released ? (
+                            <Link to={`/watch/${episode.id}`}>
+                              E{episode.episode}: {episode.name}
+                            </Link>
+                          ) : (
+                            <>
+                              E{episode.episode}: {episode.name}
+                            </>
+                          )}
                         </h3>
                         {episode.synopsis && <p className="episode-synopsis">{episode.synopsis}</p>}
+                        {!episode.released && episode.releaseAt && (
+                          <p className="episode-release">
+                            Releases {formatReleaseDate(episode.releaseAt)} at 12:00 AM Eastern.{' '}
+                            <button
+                              type="button"
+                              className="button button-quiet"
+                              onClick={() => void toggleReminder(episode)}
+                              disabled={busy}
+                              aria-pressed={Boolean(episode.reminderSet)}
+                            >
+                              {episode.reminderSet ? 'Reminder set' : 'Notify me on release day'}
+                            </button>
+                          </p>
+                        )}
                       </div>
                       <p className="episode-duration">{formatDuration(episode.durationS)}</p>
                     </div>

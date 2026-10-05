@@ -35,7 +35,7 @@ TRANSCODER_TOKEN = "dev-transcoder-token"
 # Scheduled jobs. The scout royalty pool is distributed monthly, at 07:00 UTC on
 # the 1st, for the previous calendar month (the Worker's scheduled handler).
 [triggers]
-crons = ["0 7 1 * *"]
+crons = ["0 7 1 * *", "*/10 * * * *"]
 
 # ---------------------------------------------------------------------------
 # Always-on deploy (workers.dev). Serves the SPA + API from one Worker.
@@ -71,7 +71,7 @@ TRANSCODER_TOKEN = "dev-transcoder-token"
 
 # Monthly scout royalty distribution on the deployed Worker.
 [env.preview.triggers]
-crons = ["0 7 1 * *"]
+crons = ["0 7 1 * *", "*/10 * * * *"]
 
 # The built web app. The Worker runs first (below) and hands non-API requests
 # to this binding; unknown paths fall back to index.html for the SPA router.

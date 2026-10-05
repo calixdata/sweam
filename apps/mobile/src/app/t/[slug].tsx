@@ -21,6 +21,16 @@ import { useAuth } from '../../lib/auth';
 import { colors, radius } from '../../lib/theme';
 import type { CommentItem, TitleDetail } from '../../lib/types';
 
+/** "October 10, 2026" for a release instant, as a date in the Eastern zone. */
+function releaseDay(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+}
+
 export default function TitleScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { user } = useAuth();
@@ -101,7 +111,30 @@ export default function TitleScreen() {
   if (error) return <Center><Text style={styles.muted}>{error}</Text></Center>;
   if (!title) return <Center><ActivityIndicator color={colors.accent} /></Center>;
 
-  const firstEpisode = title.episodes[0];
+  // Play starts the first episode that can actually stream; a fully scheduled
+  // title shows its release date and a reminder button instead.
+  const firstEpisode = title.episodes.find((ep) => ep.released !== false) ?? null;
+  const firstUpcoming = title.episodes.find((ep) => ep.released === false) ?? null;
+  const scheduled = title.episodes.filter((ep) => ep.released === false);
+
+  async function toggleReminder(episodeId: string, current: boolean | undefined) {
+    if (!title) return;
+    if (!user) {
+      router.push('/signin');
+      return;
+    }
+    try {
+      const data = current
+        ? await api.del<{ reminderSet: boolean }>(`/api/me/release-reminders/${episodeId}`)
+        : await api.put<{ reminderSet: boolean }>(`/api/me/release-reminders/${episodeId}`);
+      setTitle({
+        ...title,
+        episodes: title.episodes.map((ep) => (ep.id === episodeId ? { ...ep, reminderSet: data.reminderSet } : ep)),
+      });
+    } catch (e) {
+      Alert.alert('Reminder', e instanceof ApiError ? e.message : 'Could not update the reminder.');
+    }
+  }
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 48 }}>
@@ -130,6 +163,9 @@ export default function TitleScreen() {
         >
           <Ionicons name="person-circle-outline" size={18} color={colors.accent} />
           <Text style={styles.creatorText}>@{title.creator.handle}</Text>
+          {title.creator.verified && (
+            <Ionicons name="checkmark-circle" size={16} color={colors.pink} accessibilityLabel="Verified account" />
+          )}
           <Ionicons name="chevron-forward" size={14} color={colors.muted} />
         </Pressable>
         {title.isBlu && (
@@ -150,6 +186,25 @@ export default function TitleScreen() {
         </Text>
         <Text style={styles.synopsis}>{title.synopsis}</Text>
 
+        {!firstEpisode && firstUpcoming?.releaseAt && (
+          <View>
+            <Text style={styles.releaseLine} accessibilityLiveRegion="polite">
+              Releases {releaseDay(firstUpcoming.releaseAt)} at 12:00 AM Eastern.
+            </Text>
+            <Pressable
+              style={styles.playBtn}
+              onPress={() => void toggleReminder(firstUpcoming.id, firstUpcoming.reminderSet)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: Boolean(firstUpcoming.reminderSet) }}
+            >
+              <Ionicons name={firstUpcoming.reminderSet ? 'notifications' : 'notifications-outline'} size={18} color="#04121a" />
+              <Text style={styles.playText}>
+                {firstUpcoming.reminderSet ? 'Reminder set for release day' : 'Notify me on release day'}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+
         {firstEpisode &&
           (title.isBlu && !title.bluAccess ? (
             <Pressable style={styles.playBtn} onPress={() => void subscribeBlu()}>
@@ -164,6 +219,37 @@ export default function TitleScreen() {
               <Text style={styles.playText}>{title.episodes.length > 1 ? 'Play S1 E1' : 'Play'}</Text>
             </Pressable>
           ))}
+
+        {scheduled.length > 0 && (
+          <View>
+            <Text style={styles.sectionTitle}>Coming up</Text>
+            {scheduled.map((ep) => (
+              <View key={ep.id} style={styles.upcomingRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.upcomingName}>
+                    S{ep.season} E{ep.episode}: {ep.name}
+                  </Text>
+                  <Text style={styles.releaseLine}>
+                    Releases {ep.releaseAt ? releaseDay(ep.releaseAt) : 'soon'} at 12:00 AM Eastern
+                  </Text>
+                </View>
+                <Pressable
+                  onPress={() => void toggleReminder(ep.id, ep.reminderSet)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={ep.reminderSet ? 'Reminder set. Tap to remove.' : 'Notify me on release day'}
+                  accessibilityState={{ selected: Boolean(ep.reminderSet) }}
+                >
+                  <Ionicons
+                    name={ep.reminderSet ? 'notifications' : 'notifications-outline'}
+                    size={24}
+                    color={ep.reminderSet ? colors.pink : colors.text}
+                  />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
 
         <Text style={styles.sectionTitle}>Comments</Text>
         {user ? (
@@ -348,6 +434,16 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   playText: { color: '#04121a', fontSize: 16, fontWeight: '700' },
+  releaseLine: { color: '#f5c47c', fontSize: 14, marginTop: 6 },
+  upcomingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  upcomingName: { color: colors.text, fontSize: 15, fontWeight: '600' },
   sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginTop: 20 },
   composer: { gap: 8 },
   input: {
