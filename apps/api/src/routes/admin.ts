@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type {
   AdminAd,
   AdminCommentReport,
@@ -15,6 +16,7 @@ import type {
   AdminTranscodeJob,
   AdminVideoReplacement,
   AiSubmissionReview,
+  MultipartInit,
   ClipReviewItem,
   CommentReportReason,
   ReportReason,
@@ -28,12 +30,21 @@ import { notify } from '../lib/notify';
 import { applyVideoReplacement } from '../lib/replace';
 import { requireAdmin, currentUser } from '../lib/session';
 import { SUSPENSION_STRIKES, strikeCutoffIso } from '../lib/standing';
-import { MAX_UPLOAD_BYTES, mediaKeyFor, resolveUploadContentType } from './studio';
+import {
+  MAX_PART_BYTES,
+  MAX_UPLOAD_BYTES,
+  MULTIPART_PART_SIZE,
+  mediaKeyFor,
+  resolveUploadContentType,
+} from './studio';
 import {
   adCreateSchema,
   adUpdateSchema,
   clipDecideSchema,
   commentReportResolveSchema,
+  multipartAbortSchema,
+  multipartCompleteSchema,
+  multipartInitSchema,
   payoutDecideSchema,
   removalDecideSchema,
   replaceDecideSchema,
@@ -1106,6 +1117,72 @@ adminRoutes.put('/upload/:filename', async (c) => {
   const key = mediaKeyFor(currentUser(c).id, filename);
   await c.env.MEDIA.put(key, c.req.raw.body, { httpMetadata: { contentType } });
   return c.json({ url: `/media/${key}` }, 201);
+});
+
+// Multipart admin upload — a full episode exceeds the Worker request-body limit,
+// so large replacement videos go up in parts (mirrors the Studio uploader).
+function assertAdminKey(c: Context<AppEnv>, key: string): void {
+  if (!key.startsWith(`u/${currentUser(c).id}/`)) {
+    fail(404, 'upload_not_found', 'No such upload.');
+  }
+}
+
+adminRoutes.post('/upload/multipart', async (c) => {
+  const body = await parseBody(c, multipartInitSchema);
+  const contentType = resolveUploadContentType(body.contentType, body.filename);
+  if (!contentType) {
+    fail(415, 'unsupported_type', 'Upload MP4/WebM video, WebVTT captions, or JPEG/PNG/WebP images.');
+  }
+  const key = mediaKeyFor(currentUser(c).id, body.filename);
+  const upload = await c.env.MEDIA.createMultipartUpload(key, { httpMetadata: { contentType } });
+  const payload: MultipartInit = { key, uploadId: upload.uploadId, partSize: MULTIPART_PART_SIZE };
+  return c.json(payload, 201);
+});
+
+adminRoutes.put('/upload/multipart/part', async (c) => {
+  const key = c.req.query('key') ?? '';
+  const uploadId = c.req.query('uploadId') ?? '';
+  const partNumber = Number(c.req.query('partNumber') ?? '0');
+  assertAdminKey(c, key);
+  if (!uploadId || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10_000) {
+    fail(400, 'bad_part', 'Provide uploadId and a part number between 1 and 10000.');
+  }
+  const contentLength = Number(c.req.header('content-length') ?? '0');
+  if (!Number.isFinite(contentLength) || contentLength <= 0 || contentLength > MAX_PART_BYTES) {
+    fail(400, 'bad_part_size', 'Each part needs a Content-Length up to 64 MB.');
+  }
+  if (!c.req.raw.body) fail(400, 'empty_body', 'Part body is empty.');
+  const upload = c.env.MEDIA.resumeMultipartUpload(key, uploadId);
+  try {
+    const part = await upload.uploadPart(partNumber, c.req.raw.body);
+    return c.json({ partNumber: part.partNumber, etag: part.etag });
+  } catch {
+    fail(409, 'upload_gone', 'That multipart upload no longer exists; start it again.');
+  }
+});
+
+adminRoutes.post('/upload/multipart/complete', async (c) => {
+  const body = await parseBody(c, multipartCompleteSchema);
+  assertAdminKey(c, body.key);
+  const upload = c.env.MEDIA.resumeMultipartUpload(body.key, body.uploadId);
+  try {
+    await upload.complete(body.parts.map((part) => ({ partNumber: part.partNumber, etag: part.etag })));
+  } catch {
+    fail(409, 'upload_gone', 'That multipart upload could not be completed; start it again.');
+  }
+  return c.json({ url: `/media/${body.key}` }, 201);
+});
+
+adminRoutes.post('/upload/multipart/abort', async (c) => {
+  const body = await parseBody(c, multipartAbortSchema);
+  assertAdminKey(c, body.key);
+  const upload = c.env.MEDIA.resumeMultipartUpload(body.key, body.uploadId);
+  try {
+    await upload.abort();
+  } catch {
+    // Aborting an already-gone upload is success from the client's view.
+  }
+  return c.json({ aborted: true });
 });
 
 /** Look up a title's episodes by slug, for the admin video-swap tool. */

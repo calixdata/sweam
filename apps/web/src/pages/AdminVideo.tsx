@@ -2,10 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { AdminTitleEpisodes, AdminVideoReplacement } from '@sweam/shared';
 import { UPLOAD_SPECS } from '@sweam/shared';
-import { ApiError, apiGet, apiSend, apiUpload } from '../api';
+import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { Loading } from '../components/Status';
 import { usePageTitle } from '../hooks';
+import { uploadMedia } from '../upload';
 
 /**
  * Admin video tools: swap any episode's live video for a new file in place (same
@@ -72,7 +73,8 @@ function SwapTool() {
     setNotice('');
     setError(null);
     try {
-      const { url } = await apiUpload(file, '/api/admin/upload');
+      // Large episodes exceed the Worker body limit, so this uploads in parts.
+      const { url } = await uploadMedia(file, (p) => setNotice(p.message), '/api/admin/upload');
       await apiSend('POST', `/api/admin/episodes/${episodeId}/replace-video`, {
         sourceUrl: url,
         captionsUrl: null,
