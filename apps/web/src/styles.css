@@ -276,6 +276,125 @@ nav[aria-label='Workspaces'] {
   font-size: 0.9rem;
 }
 
+/* Round profile picture with an initials fallback, used in the header, on
+   creator pages, and in Settings. Sized by the inline width/height. */
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  line-height: 1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-family: var(--font-ui);
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.avatar-initials {
+  user-select: none;
+}
+
+.creator-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+.creator-head h1 {
+  margin: 0;
+}
+
+.settings-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 0.75rem;
+}
+
+/* Gold Scout account badge. Sized in em so it tracks the text it sits beside,
+   whether that is a heading, a list item, or the header account name. */
+.scout-badge {
+  height: 1.2em;
+  width: auto;
+  vertical-align: -0.2em;
+  flex-shrink: 0;
+}
+
+h1 .scout-badge,
+h2 .scout-badge,
+h3 .scout-badge {
+  vertical-align: -0.12em;
+}
+
+/* Scout new-content alert preferences. */
+.scout-prefs .checkbox-group {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 0.6rem 1rem 1rem;
+  margin: 1rem 0 0;
+}
+.scout-prefs legend {
+  padding: 0 0.4rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+.scout-prefs .checkbox-group[disabled] {
+  opacity: 0.5;
+}
+.checkbox-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.4rem 1rem;
+}
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Scout promotion: the "Promoted by X" labels and the creator's offer inbox. */
+.card-promoted {
+  color: var(--amber);
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin: 0.15rem 0 0;
+}
+.promoted-notice {
+  color: var(--amber);
+  font-weight: 600;
+  margin: 0.2rem 0 0;
+}
+.offer-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: grid;
+  gap: 1rem;
+}
+.offer-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 1rem 1.1rem;
+}
+.offer-item h3 {
+  margin: 0 0 0.3rem;
+}
+.offer-item blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.8rem;
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+}
+
 @media (max-width: 1120px) {
   .header-inner {
     gap: 1.1rem;
@@ -565,6 +684,55 @@ h1 .blu-badge {
 }
 .scout-all-access {
   margin-top: 1.25rem;
+}
+
+/* Account results in search: avatar, name, then @username and counts. */
+.account-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: 0.75rem;
+  text-decoration: none;
+  color: inherit;
+}
+.account-row:hover,
+.account-row:focus-visible {
+  background: var(--surface);
+}
+.account-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.account-row-name {
+  font-weight: 600;
+}
+.account-row-meta {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+/* Per-episode view breakdown inside a board row. */
+.episode-breakdown {
+  margin-top: 0.35rem;
+  font-weight: 400;
+  font-size: 0.92rem;
+}
+.episode-breakdown summary {
+  cursor: pointer;
+}
+.episode-breakdown .table-scroll {
+  margin-top: 0.5rem;
 }
 .replace-request {
   margin-top: 0.6rem;

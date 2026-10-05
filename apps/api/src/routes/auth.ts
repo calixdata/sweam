@@ -22,6 +22,7 @@ import {
 } from '../lib/ratelimit';
 import { SESSION_COOKIE, createSession, destroySession } from '../lib/session';
 import {
+  confirmEmailChangeSchema,
   forgotPasswordSchema,
   resendVerificationSchema,
   resetPasswordSchema,
@@ -160,6 +161,7 @@ authRoutes.post('/verify', async (c) => {
     id: row.id,
     email: row.email,
     displayName: row.display_name,
+    avatarUrl: null,
     username: row.username,
     handle: null,
     scout: null,
@@ -239,6 +241,49 @@ authRoutes.post('/reset-password', async (c) => {
   return c.json({ ok: true });
 });
 
+/**
+ * Confirm a requested email change from the emailed link's token. The account's
+ * email only changes here, once the owner proves control of the new address.
+ */
+authRoutes.post('/confirm-email-change', async (c) => {
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.emailChangeConfirmIp, clientIp(c.req.raw));
+  const body = await parseBody(c, confirmEmailChangeSchema);
+  const tokenHash = await sha256Hex(body.token);
+  const row = await c.env.DB.prepare(
+    'SELECT id, pending_email, pending_email_expires_at FROM users WHERE pending_email_token_hash = ?',
+  )
+    .bind(tokenHash)
+    .first<{ id: string; pending_email: string | null; pending_email_expires_at: string | null }>();
+  if (
+    !row ||
+    !row.pending_email ||
+    !row.pending_email_expires_at ||
+    row.pending_email_expires_at < nowIso()
+  ) {
+    fail(400, 'invalid_token', 'This email-change link is invalid or has expired. Request a new one from Settings.');
+  }
+  // The address could have been claimed by another account since the request.
+  const taken = await c.env.DB.prepare('SELECT 1 AS x FROM users WHERE email = ? AND id <> ?')
+    .bind(row.pending_email, row.id)
+    .first();
+  if (taken) {
+    await c.env.DB.prepare(
+      'UPDATE users SET pending_email = NULL, pending_email_token_hash = NULL, pending_email_expires_at = NULL WHERE id = ?',
+    )
+      .bind(row.id)
+      .run();
+    fail(409, 'email_taken', 'That email is now in use by another account. Request a different one.');
+  }
+  await c.env.DB.prepare(
+    `UPDATE users SET email = ?, email_verified = 1,
+       pending_email = NULL, pending_email_token_hash = NULL, pending_email_expires_at = NULL
+     WHERE id = ?`,
+  )
+    .bind(row.pending_email, row.id)
+    .run();
+  return c.json({ ok: true });
+});
+
 authRoutes.post('/signin', async (c) => {
   const body = await parseBody(c, signInSchema);
   await enforceRateLimit(c.env.DB, RATE_LIMITS.signinIp, clientIp(c.req.raw));
@@ -248,7 +293,7 @@ authRoutes.post('/signin', async (c) => {
   await enforceGlobalLoginCap(c.env.DB);
 
   const row = await c.env.DB.prepare(
-    `SELECT u.id, u.email, u.display_name, u.username, u.password_hash, u.email_verified, cp.handle,
+    `SELECT u.id, u.email, u.display_name, u.avatar_url, u.username, u.password_hash, u.email_verified, cp.handle,
        sp.status AS scout_status, sp.org_name AS scout_org,
        (a.user_id IS NOT NULL) AS is_admin
      FROM users u
@@ -262,6 +307,7 @@ authRoutes.post('/signin', async (c) => {
       id: string;
       email: string;
       display_name: string;
+      avatar_url: string | null;
       username: string | null;
       password_hash: string;
       email_verified: number;
@@ -292,6 +338,7 @@ authRoutes.post('/signin', async (c) => {
     id: row.id,
     email: row.email,
     displayName: row.display_name,
+    avatarUrl: row.avatar_url,
     username: row.username,
     handle: row.handle,
     scout:

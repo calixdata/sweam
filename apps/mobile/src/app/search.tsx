@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Pressable,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -15,12 +15,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, mediaUrl } from '../lib/api';
 import { BluBadge } from '../components/BluBadge';
 import { colors, radius } from '../lib/theme';
-import type { TitleSummary } from '../lib/types';
+import type { AccountSearchResult, SearchResults, TitleSummary } from '../lib/types';
 
+type Row = { kind: 'account'; account: AccountSearchResult } | { kind: 'title'; title: TitleSummary };
+type Section = { title: string; data: Row[] };
+
+/**
+ * Search: accounts first (a username such as "@scionsaga" or a name finds the
+ * account itself, creator or not), then titles.
+ */
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const [q, setQ] = useState('');
-  const [results, setResults] = useState<TitleSummary[] | null>(null);
+  const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -35,12 +42,12 @@ export default function SearchScreen() {
     setLoading(true);
     timer.current = setTimeout(async () => {
       try {
-        const data = await api.get<{ query: string; results: TitleSummary[] }>(
+        const data = await api.get<SearchResults>(
           `/api/catalog/search?q=${encodeURIComponent(term)}`,
         );
-        setResults(data.results);
+        setResults({ ...data, accounts: data.accounts ?? [] });
       } catch {
-        setResults([]);
+        setResults({ query: term, accounts: [], results: [] });
       } finally {
         setLoading(false);
       }
@@ -49,6 +56,18 @@ export default function SearchScreen() {
       if (timer.current) clearTimeout(timer.current);
     };
   }, [q]);
+
+  const sections: Section[] = [];
+  if (results && results.accounts.length > 0) {
+    sections.push({
+      title: 'Accounts',
+      data: results.accounts.map((account) => ({ kind: 'account', account })),
+    });
+  }
+  if (results && results.results.length > 0) {
+    sections.push({ title: 'Titles', data: results.results.map((title) => ({ kind: 'title', title })) });
+  }
+  const empty = !loading && results !== null && sections.length === 0;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
@@ -62,10 +81,11 @@ export default function SearchScreen() {
             style={styles.input}
             value={q}
             onChangeText={setQ}
-            placeholder="Search titles and creators"
+            placeholder="Search @usernames, titles, and creators"
             placeholderTextColor={colors.muted}
             autoFocus
             autoCorrect={false}
+            autoCapitalize="none"
             returnKeyType="search"
             accessibilityLabel="Search Sweam"
           />
@@ -79,24 +99,74 @@ export default function SearchScreen() {
 
       {loading && <ActivityIndicator color={colors.accent} style={{ marginTop: 28 }} />}
 
-      {!loading && results !== null && results.length === 0 && (
-        <Text style={styles.empty}>No results for “{q.trim()}”.</Text>
+      {empty && (
+        <Text style={styles.empty} accessibilityLiveRegion="polite">
+          No accounts or titles for “{q.trim()}”.
+        </Text>
       )}
 
-      {!loading && results !== null && results.length > 0 && (
-        <FlatList
-          data={results}
-          keyExtractor={(t) => t.id}
+      {!loading && sections.length > 0 && (
+        <SectionList
+          sections={sections}
+          keyExtractor={(row) => (row.kind === 'account' ? `a:${row.account.username}` : `t:${row.title.id}`)}
           keyboardShouldPersistTaps="handled"
+          stickySectionHeadersEnabled={false}
           contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
-          renderItem={({ item }) => <ResultRow title={item} />}
+          renderSectionHeader={({ section }) => (
+            <Text style={styles.sectionHeading} accessibilityRole="header">
+              {section.title}
+            </Text>
+          )}
+          renderItem={({ item }) =>
+            item.kind === 'account' ? <AccountRow account={item.account} /> : <ResultRow title={item.title} />
+          }
         />
       )}
 
       {results === null && !loading && (
-        <Text style={styles.hint}>Find films, series, skits, and creators across Sweam.</Text>
+        <Text style={styles.hint}>Find accounts by @username, plus films, series, skits, and creators.</Text>
       )}
     </View>
+  );
+}
+
+function AccountRow({ account }: { account: AccountSearchResult }) {
+  const avatar = mediaUrl(account.avatarUrl);
+  const followers = `${account.followerCount.toLocaleString()} ${
+    account.followerCount === 1 ? 'follower' : 'followers'
+  }`;
+  const meta = account.isCreator
+    ? `@${account.username} · ${followers} · ${account.publishedTitles} ${
+        account.publishedTitles === 1 ? 'title' : 'titles'
+      }`
+    : `@${account.username} · ${followers}`;
+  return (
+    <Pressable
+      style={styles.row}
+      onPress={() => router.push(`/c/${account.username}`)}
+      accessibilityRole="button"
+      accessibilityLabel={`${account.displayName}, ${meta}`}
+    >
+      {avatar ? (
+        <Image source={{ uri: avatar }} style={styles.avatar} contentFit="cover" transition={120} />
+      ) : (
+        <View style={[styles.avatar, styles.placeholder]}>
+          <Text style={styles.avatarInitial}>{account.displayName.slice(0, 1).toUpperCase()}</Text>
+        </View>
+      )}
+      <View style={styles.rowBody}>
+        <View style={styles.rowNameWrap}>
+          <Text style={styles.rowName} numberOfLines={1}>
+            {account.displayName}
+          </Text>
+          {account.verified && <Ionicons name="checkmark-circle" size={16} color={colors.accent} />}
+        </View>
+        <Text style={styles.rowMeta} numberOfLines={1}>
+          {meta}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+    </Pressable>
   );
 }
 
@@ -145,6 +215,16 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: colors.text, fontSize: 15, padding: 0 },
   empty: { color: colors.muted, fontSize: 15, textAlign: 'center', marginTop: 28, paddingHorizontal: 24 },
   hint: { color: colors.muted, fontSize: 14, textAlign: 'center', marginTop: 28, paddingHorizontal: 32, lineHeight: 20 },
+  sectionHeading: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 6,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -154,6 +234,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  avatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.surface2 },
+  avatarInitial: { color: colors.accent, fontSize: 20, fontWeight: '800' },
   thumb: { width: 54, height: 81, borderRadius: radius.sm, backgroundColor: colors.surface2 },
   placeholder: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface2 },
   thumbInitial: { color: colors.accent, fontSize: 24, fontWeight: '800' },

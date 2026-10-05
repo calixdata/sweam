@@ -20,6 +20,7 @@ titleRoutes.get('/:slug', async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT ${TITLE_SELECT}, COALESCE(s.likes, 0) AS likes, COALESCE(s.plays, 0) AS plays,
        t.genres AS genres, t.subgenres AS subgenres, t.creator_id AS creator_id,
+       t.allow_download AS allow_download,
        (SELECT COUNT(*) FROM comments co WHERE co.title_id = t.id AND co.status = 'visible') AS comment_count
      ${TITLE_FROM}
      LEFT JOIN title_stats s ON s.title_id = t.id
@@ -34,6 +35,7 @@ titleRoutes.get('/:slug', async (c) => {
         subgenres: string;
         comment_count: number;
         creator_id: string;
+        allow_download: number;
       }
     >();
   if (!row) fail(404, 'title_not_found', 'That title does not exist or is not published.');
@@ -74,6 +76,8 @@ titleRoutes.get('/:slug', async (c) => {
     genres: parseJsonArray(row.genres) as TitleDetail['genres'],
     subgenres: parseJsonArray(row.subgenres),
     bluAccess,
+    // Downloads are a free-title opt-in; Blu is never downloadable.
+    allowDownload: row.is_blu !== 1 && row.allow_download === 1,
   };
   return c.json(payload);
 });

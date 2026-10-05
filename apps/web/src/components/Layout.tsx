@@ -5,7 +5,9 @@ import { trackPageView } from '../analytics';
 import { apiGet } from '../api';
 import { useAuth } from '../auth';
 import { resetConsent } from '../consent';
+import { Avatar } from './Avatar';
 import { CookieConsent } from './CookieConsent';
+import { ScoutBadge } from './ScoutBadge';
 
 export function Layout() {
   const { user, signOut } = useAuth();
@@ -158,7 +160,9 @@ export function Layout() {
           <div className="header-account">
             {user ? (
               <>
+                <Avatar src={user.avatarUrl} name={user.displayName} size={32} />
                 <span className="nav-user">{user.displayName}</span>
+                {user.scout?.status === 'approved' && <ScoutBadge />}
                 <button type="button" className="button button-quiet" onClick={handleSignOut}>
                   Sign out
                 </button>

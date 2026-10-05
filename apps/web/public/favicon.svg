@@ -1,4 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sweam">
-  <rect width="64" height="64" rx="14" fill="#0b0d12"/>
-  <path d="M24 18v28l24-14z" fill="#2f7df6"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="Sweam favicon"><rect x="0" y="0" width="64" height="64" rx="12" fill="#1759F5"/><g transform="translate(32 32) scale(0.46) translate(-42.24 -50) scale(.88 1) matrix(1 0 -.212556 1 10.6278 0)"><path fill="#FFFFFF" d="M96 0H36C15 0 0 14 0 35C0 53 11 62 29 62H58L0 82V100H60C81 100 96 86 96 65C96 47 85 38 67 38H38L96 18Z"/><path fill="#FF2A8B" d="M0 82L58 62H95.9C95.9667 63 96 64 96 65C96 86 81 100 60 100H0Z"/></g></svg>

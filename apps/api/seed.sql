@@ -98,6 +98,12 @@ INSERT INTO scout_profiles (user_id, org_name, org_url, contact_email, status, c
   ('usr_scout', 'Northlight Studios', 'https://northlight.example', 'scouting@northlight.example', 'approved', '2026-08-15T10:05:00.000Z', '2026-08-16T09:00:00.000Z'),
   ('usr_scout2', 'Westgate Media', NULL, 'content@westgate.example', 'pending', '2026-08-24T09:10:00.000Z', NULL);
 
+-- Scout access needs a membership in good standing (it includes Blu all-access).
+-- The demo scout holds a complimentary one that never ends.
+DELETE FROM scout_all_access;
+INSERT INTO scout_all_access (user_id, status, current_period_end, created_at) VALUES
+  ('usr_scout', 'active', NULL, '2026-08-16T09:00:00.000Z');
+
 -- Elephants Dream deliberately stays scoutable = 0 to demonstrate the opt-in
 -- gate: it appears in the public catalog but in no scout surface.
 INSERT INTO titles (id, creator_id, kind, name, slug, synopsis, genre, advisory, poster_url, published, scoutable, published_at, created_at) VALUES

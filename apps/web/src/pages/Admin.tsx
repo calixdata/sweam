@@ -50,9 +50,37 @@ function AdminDashboard() {
   }, [load]);
 
   async function decide(application: AdminScoutApplication, approve: boolean) {
+    const awaitingCard = application.status === 'pending';
+    if (
+      !approve &&
+      !window.confirm(
+        awaitingCard
+          ? `Reject the scout application from ${application.orgName}?`
+          : `Revoke scout access for ${application.orgName}? Their membership will be canceled so they are not billed again.`,
+      )
+    ) {
+      return;
+    }
     try {
-      await apiSend('POST', `/api/admin/scout-applications/${application.userId}/decide`, { approve });
-      setNotice(`${approve ? 'Approved' : 'Rejected'} ${application.orgName}.`);
+      const res = await apiSend<{ status: string; billingWarning: string | null }>(
+        'POST',
+        `/api/admin/scout-applications/${application.userId}/decide`,
+        { approve },
+      );
+      const verb = approve
+        ? awaitingCard
+          ? 'Approved'
+          : 'Confirmed'
+        : awaitingCard
+          ? 'Rejected'
+          : 'Revoked';
+      setNotice(
+        `${verb} ${application.orgName}.${
+          res.billingWarning
+            ? ` Billing warning: the Stripe subscription could not be canceled automatically (${res.billingWarning}). Cancel it in the Stripe dashboard.`
+            : ''
+        }`,
+      );
       await load();
     } catch (err) {
       setNotice(err instanceof ApiError ? err.message : 'Decision failed.');
@@ -159,7 +187,7 @@ function AdminDashboard() {
               </tr>
               <tr>
                 <th scope="row">Scout applications</th>
-                <td>{overview.pendingScoutApplications} pending</td>
+                <td>{overview.pendingScoutApplications} to review</td>
               </tr>
               <tr>
                 <th scope="row">Content submissions</th>
@@ -182,58 +210,78 @@ function AdminDashboard() {
 
       <section aria-labelledby="admin-scout-apps">
         <h2 id="admin-scout-apps">Scout applications</h2>
+        <p className="field-hint">
+          Scouts are approved automatically, and provisionally, once they accept the Scout Program
+          terms and put a card on file. Confirm a provisional scout to clear the flag, or revoke to
+          remove access and cancel their billing. <em>Awaiting card</em> means the applicant has not
+          finished checkout.
+        </p>
         {applications.length === 0 ? (
-          <p>No pending applications.</p>
+          <p>No scout applications to review.</p>
         ) : (
           <div className="table-scroll">
             <table className="studio-table">
-              <caption className="visually-hidden">Pending scout applications</caption>
+              <caption className="visually-hidden">Scout applications to review</caption>
               <thead>
                 <tr>
                   <th scope="col">Organization</th>
                   <th scope="col">Applicant</th>
-                  <th scope="col">Contact</th>
+                  <th scope="col">Work email</th>
+                  <th scope="col">Status</th>
                   <th scope="col">Applied</th>
                   <th scope="col">Decision</th>
                 </tr>
               </thead>
               <tbody>
-                {applications.map((application) => (
-                  <tr key={application.userId}>
-                    <th scope="row">
-                      {application.orgName}
-                      {application.orgUrl && (
-                        <>
-                          {' '}
-                          (<a href={application.orgUrl}>website</a>)
-                        </>
-                      )}
-                    </th>
-                    <td>
-                      {application.displayName} ({application.email})
-                    </td>
-                    <td>{application.contactEmail}</td>
-                    <td>{application.createdAt.slice(0, 10)}</td>
-                    <td>
-                      <div className="episode-actions">
-                        <button
-                          type="button"
-                          className="button"
-                          onClick={() => decide(application, true)}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          className="button button-danger"
-                          onClick={() => decide(application, false)}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {applications.map((application) => {
+                  const awaitingCard = application.status === 'pending';
+                  const fullName =
+                    [application.firstName, application.lastName].filter(Boolean).join(' ') ||
+                    application.displayName;
+                  return (
+                    <tr key={application.userId}>
+                      <th scope="row">
+                        {application.orgName}
+                        {application.orgUrl && (
+                          <>
+                            {' '}
+                            (<a href={application.orgUrl}>website</a>)
+                          </>
+                        )}
+                      </th>
+                      <td>
+                        {fullName}
+                        {application.position ? `, ${application.position}` : ''}
+                        <br />
+                        <span className="field-hint">Account: {application.email}</span>
+                      </td>
+                      <td>{application.workEmail ?? application.contactEmail}</td>
+                      <td>
+                        {awaitingCard ? 'Awaiting card' : 'Provisional'}
+                        {application.betaFree ? ' · first 50, free trial' : ''}
+                      </td>
+                      <td>{application.createdAt.slice(0, 10)}</td>
+                      <td>
+                        <div className="episode-actions">
+                          <button
+                            type="button"
+                            className="button"
+                            onClick={() => decide(application, true)}
+                          >
+                            {awaitingCard ? 'Approve' : 'Confirm'}
+                          </button>
+                          <button
+                            type="button"
+                            className="button button-danger"
+                            onClick={() => decide(application, false)}
+                          >
+                            {awaitingCard ? 'Reject' : 'Revoke'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

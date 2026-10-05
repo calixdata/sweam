@@ -53,8 +53,11 @@ import {
   scoutDecideSchema,
   submissionDecideSchema,
   submissionStatusSchema,
+  suppressSchema,
   takedownCreateSchema,
 } from '../lib/validate';
+import { grantFreeMembership } from '../lib/scoutMembership';
+import { cancelSubscription, stripeConfigured } from '../lib/stripe';
 import { AiReviewError, aiReviewConfigured, reviewSubmission } from '../lib/aiReview';
 import { PublishError, publishSubmission, type PublishableSubmission } from '../lib/publish';
 import { SUBMISSION_SELECT, mapSubmission, type SubmissionRow } from './submissions';
@@ -77,7 +80,10 @@ adminRoutes.get('/overview', async (c) => {
     c.env.DB.prepare('SELECT COUNT(*) AS n FROM users'),
     c.env.DB.prepare('SELECT COUNT(*) AS n FROM creator_profiles'),
     c.env.DB.prepare("SELECT COUNT(*) AS n FROM scout_profiles WHERE status = 'approved'"),
-    c.env.DB.prepare("SELECT COUNT(*) AS n FROM scout_profiles WHERE status = 'pending'"),
+    // Scout applications needing an admin look: unpaid (pending) + auto-approved (provisional).
+    c.env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM scout_profiles WHERE status = 'pending' OR (status = 'approved' AND provisional = 1)",
+    ),
     c.env.DB.prepare('SELECT COUNT(*) AS n FROM titles WHERE published = 1'),
     c.env.DB.prepare('SELECT COUNT(*) AS n FROM titles WHERE published = 0'),
     c.env.DB.prepare("SELECT COUNT(*) AS n FROM reports WHERE status = 'open'"),
@@ -476,12 +482,19 @@ adminRoutes.post('/submissions/:submissionId/ai-review', async (c) => {
 // Scout applications
 // ---------------------------------------------------------------------------
 
+/**
+ * Scout applications that need an admin look. Approval is automatic and
+ * provisional once an applicant accepts the terms and puts a card on file, so
+ * this lists (a) provisional scouts to confirm or revoke and (b) applications
+ * still waiting on a card.
+ */
 adminRoutes.get('/scout-applications', async (c) => {
   const { results } = await c.env.DB.prepare(
-    `SELECT sp.user_id, u.display_name, u.email, sp.org_name, sp.org_url, sp.contact_email, sp.created_at
+    `SELECT sp.user_id, u.display_name, u.email, sp.org_name, sp.org_url, sp.contact_email, sp.created_at,
+       sp.first_name, sp.last_name, sp.position, sp.work_email, sp.status, sp.provisional, sp.beta_free
      FROM scout_profiles sp
      JOIN users u ON u.id = sp.user_id
-     WHERE sp.status = 'pending'
+     WHERE sp.status = 'pending' OR (sp.status = 'approved' AND sp.provisional = 1)
      ORDER BY sp.created_at`,
   ).all<{
     user_id: string;
@@ -491,6 +504,13 @@ adminRoutes.get('/scout-applications', async (c) => {
     org_url: string | null;
     contact_email: string;
     created_at: string;
+    first_name: string | null;
+    last_name: string | null;
+    position: string | null;
+    work_email: string | null;
+    status: 'pending' | 'approved';
+    provisional: number;
+    beta_free: number;
   }>();
 
   const applications: AdminScoutApplication[] = results.map((row) => ({
@@ -501,34 +521,83 @@ adminRoutes.get('/scout-applications', async (c) => {
     orgUrl: row.org_url,
     contactEmail: row.contact_email,
     createdAt: row.created_at,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    position: row.position,
+    workEmail: row.work_email,
+    status: row.status,
+    provisional: row.provisional === 1,
+    betaFree: row.beta_free === 1,
   }));
   return c.json({ applications });
 });
 
+/**
+ * Confirm or revoke a scout. Approving clears the provisional flag, or manually
+ * approves an application that never added a card: that scout's membership
+ * (which includes Blu all-access) starts as a first-50 free period when seats
+ * remain, otherwise it needs a card. Rejecting revokes access and cancels any
+ * live Stripe subscription so a revoked scout is not billed.
+ */
 adminRoutes.post('/scout-applications/:userId/decide', async (c) => {
   const body = await parseBody(c, scoutDecideSchema);
   const userId = c.req.param('userId');
   const row = await c.env.DB.prepare(
-    "SELECT org_name FROM scout_profiles WHERE user_id = ? AND status = 'pending'",
+    `SELECT org_name, status FROM scout_profiles
+     WHERE user_id = ? AND (status = 'pending' OR (status = 'approved' AND provisional = 1))`,
   )
     .bind(userId)
-    .first<{ org_name: string }>();
-  if (!row) fail(404, 'application_not_found', 'No pending application for that user.');
+    .first<{ org_name: string; status: 'pending' | 'approved' }>();
+  if (!row) fail(404, 'application_not_found', 'No scout application awaiting review for that user.');
+
+  // Approval without a card on file: start the free membership so access is real.
+  let freeUntil: string | null = null;
+  if (body.approve && row.status === 'pending') {
+    freeUntil = await grantFreeMembership(c.env.DB, userId);
+  }
+
+  const now = nowIso();
+  let billingWarning: string | null = null;
+  if (!body.approve) {
+    const access = await c.env.DB.prepare(
+      "SELECT stripe_subscription_id FROM scout_all_access WHERE user_id = ? AND status IN ('active', 'past_due')",
+    )
+      .bind(userId)
+      .first<{ stripe_subscription_id: string | null }>();
+    if (access?.stripe_subscription_id && stripeConfigured(c.env)) {
+      try {
+        await cancelSubscription(c.env, access.stripe_subscription_id);
+      } catch (err) {
+        // Revoking is a safety action, so it still goes through; the admin is told to cancel in Stripe.
+        billingWarning = err instanceof Error ? err.message : 'Stripe cancellation failed.';
+      }
+    }
+    await c.env.DB.prepare(
+      "UPDATE scout_all_access SET status = 'canceled', canceled_at = ? WHERE user_id = ? AND status != 'canceled'",
+    )
+      .bind(now, userId)
+      .run();
+  }
 
   const status = body.approve ? 'approved' : 'rejected';
-  await c.env.DB.prepare('UPDATE scout_profiles SET status = ?, decided_at = ? WHERE user_id = ?')
-    .bind(status, nowIso(), userId)
+  await c.env.DB.prepare(
+    'UPDATE scout_profiles SET status = ?, provisional = 0, decided_at = ? WHERE user_id = ?',
+  )
+    .bind(status, now, userId)
     .run();
-  await notify(
-    c.env.DB,
-    userId,
-    'scout_decision',
-    body.approve
-      ? `Your scout application for ${row.org_name} was approved. The boards are open.`
-      : `Your scout application for ${row.org_name} was not approved.`,
-    body.approve ? '/scout' : null,
-  );
-  return c.json({ status });
+
+  const wasProvisional = row.status === 'approved';
+  const message = body.approve
+    ? wasProvisional
+      ? `Your scout access for ${row.org_name} has been confirmed.`
+      : freeUntil
+        ? `Your scout application for ${row.org_name} was approved. As one of the first 50 Scouts your membership, including all Blu content, is free until ${freeUntil.slice(0, 10)}.`
+        : `Your scout application for ${row.org_name} was approved. Add a card in the scout portal to start your membership.`
+    : wasProvisional
+      ? `Your scout access for ${row.org_name} was revoked and your membership canceled.`
+      : `Your scout application for ${row.org_name} was not approved.`;
+  await notify(c.env.DB, userId, 'scout_decision', message, body.approve ? '/scout' : null);
+  return c.json({ status, billingWarning, freeUntil });
 });
 
 // ---------------------------------------------------------------------------
@@ -1188,11 +1257,11 @@ adminRoutes.post('/upload/multipart/abort', async (c) => {
 /** Look up a title's episodes by slug, for the admin video-swap tool. */
 adminRoutes.get('/titles/:slug/episodes', async (c) => {
   const title = await c.env.DB.prepare(
-    `SELECT t.id, t.name, t.slug, cp.handle FROM titles t
+    `SELECT t.id, t.name, t.slug, t.published, t.suppressed, cp.handle FROM titles t
      LEFT JOIN creator_profiles cp ON cp.user_id = t.creator_id WHERE t.slug = ?`,
   )
     .bind(c.req.param('slug'))
-    .first<{ id: string; name: string; slug: string; handle: string | null }>();
+    .first<{ id: string; name: string; slug: string; published: number; suppressed: number; handle: string | null }>();
   if (!title) fail(404, 'title_not_found', 'No title with that slug.');
   const { results } = await c.env.DB.prepare(
     'SELECT id, season, episode, name, duration_s FROM episodes WHERE title_id = ? ORDER BY season, episode',
@@ -1200,7 +1269,14 @@ adminRoutes.get('/titles/:slug/episodes', async (c) => {
     .bind(title.id)
     .all<{ id: string; season: number; episode: number; name: string; duration_s: number }>();
   const payload: AdminTitleEpisodes = {
-    title: { id: title.id, name: title.name, slug: title.slug, creatorHandle: title.handle },
+    title: {
+      id: title.id,
+      name: title.name,
+      slug: title.slug,
+      creatorHandle: title.handle,
+      published: title.published === 1,
+      suppressed: title.suppressed === 1,
+    },
     episodes: results.map((e) => ({
       id: e.id,
       season: e.season,
@@ -1210,6 +1286,43 @@ adminRoutes.get('/titles/:slug/episodes', async (c) => {
     })),
   };
   return c.json(payload);
+});
+
+/**
+ * Suppress or unsuppress a title (investigation hold). Suppressing hides it
+ * from every public surface (all of which filter published = 1) and freezes the
+ * creator out of changing its visibility or deleting it, without issuing a
+ * takedown or strike. Unsuppressing republishes it. Silent: no creator notice.
+ */
+adminRoutes.post('/titles/:slug/suppress', async (c) => {
+  const body = await parseBody(c, suppressSchema);
+  const title = await c.env.DB.prepare(
+    'SELECT id, published, suppressed FROM titles WHERE slug = ?',
+  )
+    .bind(c.req.param('slug'))
+    .first<{ id: string; published: number; suppressed: number }>();
+  if (!title) fail(404, 'title_not_found', 'No title with that slug.');
+
+  if (body.suppress) {
+    if (title.suppressed === 1) {
+      return c.json({ suppressed: true, published: title.published === 1 });
+    }
+    if (title.published !== 1) {
+      fail(409, 'not_live', 'Only a currently-live title can be suppressed.');
+    }
+    await c.env.DB.prepare('UPDATE titles SET suppressed = 1, published = 0 WHERE id = ?')
+      .bind(title.id)
+      .run();
+    return c.json({ suppressed: true, published: false });
+  }
+
+  if (title.suppressed !== 1) {
+    return c.json({ suppressed: false, published: title.published === 1 });
+  }
+  await c.env.DB.prepare('UPDATE titles SET suppressed = 0, published = 1 WHERE id = ?')
+    .bind(title.id)
+    .run();
+  return c.json({ suppressed: false, published: true });
 });
 
 /** Swap an episode's live video directly (admin), then notify the creator. */

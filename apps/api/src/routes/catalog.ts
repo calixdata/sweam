@@ -1,5 +1,12 @@
 import { Hono } from 'hono';
-import type { ContinueWatchingItem, HomePayload, Rail, TitleSummary } from '@sweam/shared';
+import type {
+  AccountSearchResult,
+  ContinueWatchingItem,
+  HomePayload,
+  Rail,
+  SearchResults,
+  TitleSummary,
+} from '@sweam/shared';
 import { CONTENT_KINDS, GENRES } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { fail } from '../lib/http';
@@ -37,8 +44,13 @@ catalogRoutes.get('/home', async (c) => {
   const nowMs = Date.now();
   const catalogImpressions = results.reduce((sum, row) => sum + row.impressions, 0);
 
+  // Clips are the feed experience; the catalog rails below are longer-form only,
+  // with clips gathered into their own rail.
+  const longform = results.filter((row) => row.kind !== 'short');
+  const clipRows = results.filter((row) => row.kind === 'short');
+
   const ranked = rankTitles(
-    results,
+    longform,
     (row) => ({
       publishedAtMs: row.published_at ? Date.parse(row.published_at) : nowMs,
       impressions: row.impressions,
@@ -51,18 +63,18 @@ catalogRoutes.get('/home', async (c) => {
 
   // Editorially featured titles are pinned to the front of the spotlight so the
   // home hero shows them; the rest follow in ranked order.
-  const featured = results.filter((row) => row.featured === 1).map(mapTitle);
+  const featured = longform.filter((row) => row.featured === 1).map(mapTitle);
   const seen = new Set(featured.map((t) => t.id));
   const spotlight = [...featured, ...ranked.filter((t) => !seen.has(t.id))].slice(0, SPOTLIGHT_SIZE);
 
   const weekAgoIso = new Date(nowMs - 7 * 86_400_000).toISOString();
-  const newThisWeek = results
+  const newThisWeek = longform
     .filter((row) => row.published_at !== null && row.published_at >= weekAgoIso)
     .slice(0, RAIL_SIZE)
     .map(mapTitle);
 
   const byGenre = new Map<string, TitleSummary[]>();
-  for (const row of results) {
+  for (const row of longform) {
     const rail = byGenre.get(row.genre) ?? [];
     if (rail.length < RAIL_SIZE) rail.push(mapTitle(row));
     byGenre.set(row.genre, rail);
@@ -93,6 +105,13 @@ catalogRoutes.get('/home', async (c) => {
   if (newThisWeek.length > 0) {
     rails.push({ key: 'new', heading: 'New this week', titles: newThisWeek });
   }
+  const clips = [...clipRows]
+    .sort((a, b) => (b.published_at ?? '').localeCompare(a.published_at ?? ''))
+    .slice(0, RAIL_SIZE)
+    .map(mapTitle);
+  if (clips.length > 0) {
+    rails.push({ key: 'clips', heading: 'Clips', titles: clips });
+  }
   for (const [genre, titles] of byGenre) {
     rails.push({ key: `genre-${genre.toLowerCase()}`, heading: genre, titles });
   }
@@ -121,7 +140,8 @@ catalogRoutes.get('/browse', async (c) => {
   }
   if (sort !== 'new' && sort !== 'popular') fail(400, 'bad_sort', 'Sort is new or popular.');
 
-  const conditions = ['t.published = 1'];
+  // Clips live in the For You feed, not the catalog — Browse is longer-form only.
+  const conditions = ['t.published = 1', "t.kind != 'short'"];
   const bindings: string[] = [];
   if (genre) {
     conditions.push('t.genre = ?');
@@ -146,26 +166,77 @@ catalogRoutes.get('/browse', async (c) => {
   return c.json({ titles: results.map(mapTitle) });
 });
 
+interface AccountRow {
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  handle: string | null;
+  verified: number | null;
+  follower_count: number;
+  published_titles: number;
+}
+
+/**
+ * Search returns accounts and titles. A username search ("@scionsaga" or
+ * "scionsaga") finds the account itself, creator or not, with exact username
+ * matches first; titles match on name, synopsis, or creator. Seed viewer
+ * accounts and accounts that never finished sign-up are not listed.
+ */
 catalogRoutes.get('/search', async (c) => {
   const parsed = searchQuerySchema.safeParse({ q: c.req.query('q') ?? '' });
   if (!parsed.success) fail(400, 'validation_failed', parsed.error.issues[0]?.message ?? 'Invalid search.');
-  const pattern = `%${likeEscape(parsed.data.q)}%`;
+  const query = parsed.data.q;
+  // A leading @ means "find this username"; it is not part of the name.
+  const term = query.replace(/^@+/, '').trim();
+  const pattern = `%${likeEscape(term)}%`;
+  const prefix = `${likeEscape(term)}%`;
 
-  const { results } = await c.env.DB.prepare(
-    `SELECT ${TITLE_SELECT}
-     ${TITLE_FROM}
-     WHERE t.published = 1
-       AND (t.name LIKE ? ESCAPE '\\'
-            OR t.synopsis LIKE ? ESCAPE '\\'
-            OR cp.handle LIKE ? ESCAPE '\\'
-            OR u.display_name LIKE ? ESCAPE '\\')
-     ORDER BY t.published_at DESC
-     LIMIT 25`,
-  )
-    .bind(pattern, pattern, pattern, pattern)
-    .all<TitleRow>();
+  if (term === '') return c.json({ query, accounts: [], results: [] });
 
-  return c.json({ query: parsed.data.q, results: results.map(mapTitle) });
+  const [accountsResult, titlesResult] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `SELECT u.username, u.display_name, u.avatar_url, cp.handle, cp.verified,
+         (SELECT COUNT(*) FROM follows f WHERE f.creator_id = u.id) AS follower_count,
+         (SELECT COUNT(*) FROM titles t WHERE t.creator_id = u.id AND t.published = 1) AS published_titles
+       FROM users u
+       LEFT JOIN creator_profiles cp ON cp.user_id = u.id
+       WHERE u.email_verified = 1 AND u.username IS NOT NULL
+         AND (cp.user_id IS NOT NULL OR u.is_demo = 0)
+         AND (u.username LIKE ? ESCAPE '\\'
+              OR u.display_name LIKE ? ESCAPE '\\'
+              OR cp.handle LIKE ? ESCAPE '\\')
+       ORDER BY (lower(u.username) = lower(?)) DESC,
+         (u.username LIKE ? ESCAPE '\\') DESC,
+         follower_count DESC, u.username
+       LIMIT 20`,
+    ).bind(pattern, pattern, pattern, term, prefix),
+    c.env.DB.prepare(
+      `SELECT ${TITLE_SELECT}
+       ${TITLE_FROM}
+       WHERE t.published = 1
+         AND (t.name LIKE ? ESCAPE '\\'
+              OR t.synopsis LIKE ? ESCAPE '\\'
+              OR cp.handle LIKE ? ESCAPE '\\'
+              OR u.display_name LIKE ? ESCAPE '\\')
+       ORDER BY t.published_at DESC
+       LIMIT 25`,
+    ).bind(pattern, pattern, pattern, pattern),
+  ]);
+
+  const accounts: AccountSearchResult[] = ((accountsResult?.results ?? []) as AccountRow[]).map(
+    (row) => ({
+      username: row.username,
+      displayName: row.display_name,
+      avatarUrl: row.avatar_url,
+      isCreator: row.handle !== null,
+      verified: row.verified === 1,
+      followerCount: row.follower_count,
+      publishedTitles: row.published_titles,
+    }),
+  );
+  const results = ((titlesResult?.results ?? []) as TitleRow[]).map(mapTitle);
+  const payload: SearchResults = { query, accounts, results };
+  return c.json(payload);
 });
 
 async function continueWatching(db: D1Database, userId: string | null): Promise<ContinueWatchingItem[]> {

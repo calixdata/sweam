@@ -10,10 +10,13 @@ import {
   MIN_AGE,
   RATINGS,
   REPORT_REASONS,
+  SCOUT_OFFER_KINDS,
+  SCOUT_PROMO_MAX_PERCENT,
   SUBGENRES,
   USERNAME_HINT,
   USERNAME_RE,
   VERBATIIM_MAX_TEXT,
+  isFreeEmailDomain,
 } from '@sweam/shared';
 
 /**
@@ -63,6 +66,21 @@ export const resetPasswordSchema = z.object({
   password,
 });
 
+/** Change the password from inside the app (proving the current one). */
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password.').max(128),
+  newPassword: password,
+});
+
+/** Request an email change from inside the app (proving the password). */
+export const changeEmailSchema = z.object({
+  password: z.string().min(1, 'Enter your password.').max(128),
+  newEmail: email,
+});
+
+/** Confirm an email change from the emailed link's token. */
+export const confirmEmailChangeSchema = z.object({ token: z.string().trim().min(1).max(256) });
+
 export const creatorProfileSchema = z.object({
   handle: z
     .string()
@@ -72,7 +90,9 @@ export const creatorProfileSchema = z.object({
   bio: z.string().trim().max(500).default(''),
 });
 
-const kind = z.enum(CONTENT_KINDS as [string, ...string[]] as ['film', 'series', 'short', 'documentary']);
+const kind = z.enum(
+  CONTENT_KINDS as [string, ...string[]] as ['film', 'series', 'short', 'documentary', 'reality'],
+);
 const genre = z.enum(GENRES);
 const audience = z.enum(AUDIENCES);
 const subgenre = z.enum(SUBGENRES);
@@ -101,6 +121,8 @@ export const titleUpdateSchema = titleCreateSchema
   .extend({
     /** Creator opt-in to the scout portal; only meaningful on update. */
     scoutable: z.boolean(),
+    /** Per free title: allow viewers to download/share the video off Sweam. */
+    allowDownload: z.boolean(),
   })
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Provide at least one field to update.');
@@ -164,20 +186,44 @@ export const bluFundSettingsSchema = z
   );
 
 export const scoutApplySchema = z.object({
+  firstName: z.string().trim().min(1, 'First name is required.').max(80),
+  lastName: z.string().trim().min(1, 'Last name is required.').max(80),
   orgName: z.string().trim().min(2, 'Organization name is required.').max(120),
-  orgUrl: z
-    .string()
-    .trim()
-    .url('Enter a full https URL, or leave it blank.')
-    .max(2048)
-    .nullable()
-    .default(null),
-  contactEmail: email,
+  position: z.string().trim().min(2, 'Your position at the organization is required.').max(120),
+  workEmail: email.refine(
+    (value) => !isFreeEmailDomain(value),
+    'Use your work email. Free providers such as Gmail and Yahoo are not accepted.',
+  ),
+  termsAccepted: z.literal(true, {
+    errorMap: () => ({ message: 'You must read and accept the Scout Program terms.' }),
+  }),
 });
 
 export const scoutInterestSchema = z.object({
   note: z.string().trim().max(500).default(''),
 });
+
+/** A scout's new-content alert preferences. Empty arrays mean "all". */
+export const scoutPreferencesSchema = z.object({
+  notifyEnabled: z.boolean(),
+  genres: z.array(genre).max(GENRES.length).default([]),
+  kinds: z.array(kind).max(CONTENT_KINDS.length).default([]),
+});
+
+/** A scout's offer on a title: sign externally, or a Sweam promotion deal. */
+export const scoutOfferSchema = z
+  .object({
+    kind: z.enum(SCOUT_OFFER_KINDS as unknown as ['external_sign', 'sweam_promo']),
+    message: z.string().trim().max(1000).default(''),
+    promoPercent: z.number().int().min(1).max(SCOUT_PROMO_MAX_PERCENT).optional(),
+  })
+  .refine((v) => v.kind !== 'sweam_promo' || v.promoPercent !== undefined, {
+    message: 'A promotion deal needs a percentage of earnings.',
+    path: ['promoPercent'],
+  });
+
+/** A creator's decision on an offer. */
+export const offerDecideSchema = z.object({ accept: z.boolean() });
 
 // ---------------------------------------------------------------------------
 // Media pipeline
@@ -505,6 +551,9 @@ export const replaceVideoSchema = z.object({
   sourceUrl: replacementSource,
   captionsUrl: replacementCaptions,
 });
+
+/** Admin investigation hold: suppress (hide) or unsuppress (restore) a title. */
+export const suppressSchema = z.object({ suppress: z.boolean() });
 
 /** An admin's decision on a pending replacement request. */
 export const replaceDecideSchema = z.object({ apply: z.boolean() });

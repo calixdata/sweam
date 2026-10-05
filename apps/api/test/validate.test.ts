@@ -103,27 +103,38 @@ describe('titleUpdateSchema', () => {
 });
 
 describe('scoutApplySchema', () => {
-  it('accepts a full application and normalizes the contact email', () => {
-    const parsed = scoutApplySchema.parse({
-      orgName: 'Northlight Studios',
-      orgUrl: 'https://northlight.example',
-      contactEmail: 'Scouting@Northlight.example',
-    });
-    expect(parsed.contactEmail).toBe('scouting@northlight.example');
+  const valid = {
+    firstName: 'Riley',
+    lastName: 'Okafor',
+    orgName: 'Northlight Studios',
+    position: 'Head of Acquisitions',
+    workEmail: 'Riley@Northlight.example',
+    termsAccepted: true,
+  };
+
+  it('accepts a full application and normalizes the work email', () => {
+    const parsed = scoutApplySchema.parse(valid);
+    expect(parsed.workEmail).toBe('riley@northlight.example');
   });
 
-  it('defaults a missing website to null but rejects a malformed one', () => {
-    expect(
-      scoutApplySchema.parse({ orgName: 'Northlight', contactEmail: 'a@b.co' }).orgUrl,
-    ).toBeNull();
-    expect(
-      scoutApplySchema.safeParse({ orgName: 'Northlight', orgUrl: 'not a url', contactEmail: 'a@b.co' })
-        .success,
-    ).toBe(false);
+  it('rejects free email providers, whatever the casing', () => {
+    for (const workEmail of ['a@gmail.com', 'b@yahoo.com', 'c@Outlook.com', 'd@iCloud.com', 'e@proton.me']) {
+      expect(scoutApplySchema.safeParse({ ...valid, workEmail }).success).toBe(false);
+    }
   });
 
-  it('rejects one-character organization names', () => {
-    expect(scoutApplySchema.safeParse({ orgName: 'X', contactEmail: 'a@b.co' }).success).toBe(false);
+  it('requires the Scout Program terms to be accepted', () => {
+    expect(scoutApplySchema.safeParse({ ...valid, termsAccepted: false }).success).toBe(false);
+    const withoutTerms: Record<string, unknown> = { ...valid };
+    delete withoutTerms.termsAccepted;
+    expect(scoutApplySchema.safeParse(withoutTerms).success).toBe(false);
+  });
+
+  it('requires a name, an organization, and a position', () => {
+    expect(scoutApplySchema.safeParse({ ...valid, firstName: '' }).success).toBe(false);
+    expect(scoutApplySchema.safeParse({ ...valid, lastName: '  ' }).success).toBe(false);
+    expect(scoutApplySchema.safeParse({ ...valid, orgName: 'X' }).success).toBe(false);
+    expect(scoutApplySchema.safeParse({ ...valid, position: '' }).success).toBe(false);
   });
 });
 

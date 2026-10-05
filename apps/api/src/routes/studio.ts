@@ -4,6 +4,9 @@ import type {
   EarningsSummary,
   MultipartInit,
   PayoutEntry,
+  ScoutOfferForCreator,
+  ScoutOfferKind,
+  ScoutOfferStatus,
   StudioEpisode,
   StudioStanding,
   StudioTitleDetail,
@@ -13,12 +16,12 @@ import type {
 } from '@sweam/shared';
 import { CREATOR_REVENUE_SHARE, MIN_PAYOUT_MILLICENTS, ageInYears } from '@sweam/shared';
 import type { AppEnv } from '../env';
-import { loadDailySeries, loadRetention } from '../lib/analytics';
+import { loadDailySeries, loadEpisodeViews, loadRetention } from '../lib/analytics';
 import { BLU_NOT_ELIGIBLE_MESSAGE, getBluOfferGate } from '../lib/blufund';
 import { creatorFundPayouts } from '../lib/fund';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { getCreatorEligibility } from '../lib/monetize';
-import { notifyFollowers } from '../lib/notify';
+import { notify, notifyFollowers, notifyScoutsOfTitle } from '../lib/notify';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { SUSPENSION_STRIKES, activeStrikeCount, assertGoodStanding } from '../lib/standing';
 import type { EpisodeRow } from '../lib/mappers';
@@ -33,6 +36,7 @@ import {
   multipartCompleteSchema,
   multipartInitSchema,
   bluFundSettingsSchema,
+  offerDecideSchema,
   publishSchema,
   removalRequestSchema,
   replaceRequestSchema,
@@ -101,6 +105,10 @@ interface StudioTitleRow {
   published: number;
   scoutable: number;
   admin_locked: number;
+  is_blu: number;
+  ever_blu: number;
+  allow_download: number;
+  suppressed: number;
   episode_count: number;
   impressions: number;
   plays: number;
@@ -117,6 +125,8 @@ function mapStudioSummary(row: StudioTitleRow): StudioTitleSummary {
     genre: row.genre,
     published: row.published === 1,
     episodeCount: row.episode_count,
+    isBlu: row.is_blu === 1,
+    everBlu: row.ever_blu === 1,
     stats: {
       impressions: row.impressions,
       plays: row.plays,
@@ -128,6 +138,7 @@ function mapStudioSummary(row: StudioTitleRow): StudioTitleSummary {
 
 const STUDIO_TITLE_QUERY = `
   SELECT t.id, t.slug, t.name, t.kind, t.genre, t.synopsis, t.advisory, t.poster_url, t.published, t.scoutable, t.admin_locked,
+    t.is_blu, t.ever_blu, t.allow_download, t.suppressed,
     (SELECT COUNT(*) FROM episodes e WHERE e.title_id = t.id) AS episode_count,
     COALESCE(s.impressions, 0) AS impressions,
     COALESCE(s.plays, 0) AS plays,
@@ -270,6 +281,10 @@ studioRoutes.get('/titles/:titleId', requireCreator, async (c) => {
     scoutable: row.scoutable === 1,
     adminLocked: row.admin_locked === 1,
     removalRequested: Boolean(openRemoval),
+    isBlu: row.is_blu === 1,
+    everBlu: row.ever_blu === 1,
+    allowDownload: row.allow_download === 1,
+    suppressed: row.suppressed === 1,
     episodes: await titleEpisodes(c, row.id),
   };
   return c.json(payload);
@@ -289,6 +304,9 @@ studioRoutes.patch('/titles/:titleId', requireCreator, async (c) => {
     advisory: body.advisory,
     poster_url: body.posterUrl,
     scoutable: body.scoutable === undefined ? undefined : body.scoutable ? 1 : 0,
+    // Downloads can only be enabled on free titles; Blu is always forced off.
+    allow_download:
+      body.allowDownload === undefined ? undefined : body.allowDownload && row.is_blu !== 1 ? 1 : 0,
   };
   for (const [column, value] of Object.entries(columns)) {
     if (value !== undefined) {
@@ -299,13 +317,22 @@ studioRoutes.patch('/titles/:titleId', requireCreator, async (c) => {
   await c.env.DB.prepare(`UPDATE titles SET ${sets.join(', ')} WHERE id = ?`)
     .bind(...values, row.id)
     .run();
+  // Opting a live title into scouting is a moment matching scouts want to know
+  // about; the helper no-ops unless it is now published AND scoutable (once only).
+  if (body.scoutable) await notifyScoutsOfTitle(c.env.DB, row.id);
   return c.json({ ok: true });
 });
 
 studioRoutes.delete('/titles/:titleId', requireCreator, async (c) => {
   const row = await ownedTitle(c, c.req.param('titleId'));
-  if (row.admin_locked === 1) {
-    fail(403, 'admin_locked', 'Sweam published this title; you cannot delete it. Request removal instead.');
+  if (row.suppressed === 1) {
+    fail(403, 'suppressed', 'Sweam has this title under review. It cannot be deleted while the review is open.');
+  }
+  if (row.is_blu === 1) {
+    fail(403, 'blu_no_delete', 'Sweam Blu content cannot be deleted. Send Sweam a removal request with your reason.');
+  }
+  if (row.ever_blu === 1) {
+    fail(403, 'was_blu_no_delete', 'This title was Sweam Blu before, so it cannot be deleted. You can make it private, or send Sweam a removal request.');
   }
   await c.env.DB.prepare('DELETE FROM titles WHERE id = ?').bind(row.id).run();
   return c.json({ ok: true });
@@ -334,8 +361,10 @@ studioRoutes.post('/titles/:titleId/publish', requireCreator, async (c) => {
   const row = await ownedTitle(c, c.req.param('titleId'));
   const body = await parseBody(c, publishSchema);
 
-  if (row.admin_locked === 1 && !body.published) {
-    fail(403, 'admin_locked', 'Sweam published this title; you cannot unpublish it. Request removal instead.');
+  // A suppressed title is on an investigation hold: its visibility is frozen
+  // until Sweam lifts the hold, so the creator cannot publish or unpublish it.
+  if (row.suppressed === 1) {
+    fail(403, 'suppressed', 'Sweam has this title under review. You cannot change its visibility right now.');
   }
   if (body.published && row.episode_count === 0) {
     fail(400, 'no_episodes', 'Add at least one episode before publishing.');
@@ -372,10 +401,116 @@ studioRoutes.post('/titles/:titleId/publish', requireCreator, async (c) => {
         `/t/${row.slug}`,
       );
     }
+    // Alert matching scouts if this title is opted into scouting (once only).
+    await notifyScoutsOfTitle(c.env.DB, row.id);
   } else {
     await c.env.DB.prepare('UPDATE titles SET published = 0 WHERE id = ?').bind(row.id).run();
   }
   return c.json({ published: body.published });
+});
+
+// ---------------------------------------------------------------------------
+// Scout offers received by the creator
+// ---------------------------------------------------------------------------
+
+/** Offers a creator has received, pending first then newest. */
+studioRoutes.get('/offers', requireCreator, async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT o.id, o.kind, o.status, o.message, o.promo_percent, o.created_at,
+       sp.org_name, sp.org_url, sp.contact_email,
+       t.id AS title_id, t.name AS title_name, t.slug AS title_slug
+     FROM scout_offers o
+     JOIN scout_profiles sp ON sp.user_id = o.scout_user_id
+     JOIN titles t ON t.id = o.title_id
+     WHERE o.creator_id = ?
+     ORDER BY (o.status = 'pending') DESC, o.created_at DESC
+     LIMIT 100`,
+  )
+    .bind(currentUser(c).id)
+    .all<{
+      id: string;
+      kind: ScoutOfferKind;
+      status: ScoutOfferStatus;
+      message: string;
+      promo_percent: number | null;
+      created_at: string;
+      org_name: string;
+      org_url: string | null;
+      contact_email: string;
+      title_id: string;
+      title_name: string;
+      title_slug: string;
+    }>();
+  const offers: ScoutOfferForCreator[] = results.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    status: r.status,
+    orgName: r.org_name,
+    orgUrl: r.org_url,
+    contactEmail: r.contact_email,
+    message: r.message,
+    promoPercent: r.promo_percent,
+    title: { id: r.title_id, name: r.title_name, slug: r.title_slug },
+    createdAt: r.created_at,
+  }));
+  return c.json({ offers });
+});
+
+/** Accept or decline a received offer. Accepting a promotion deal promotes the title. */
+studioRoutes.post('/offers/:id/decide', requireCreator, async (c) => {
+  const user = currentUser(c);
+  const body = await parseBody(c, offerDecideSchema);
+  const offer = await c.env.DB.prepare(
+    `SELECT o.id, o.scout_user_id, o.title_id, o.kind, o.promo_percent, o.status,
+       t.name AS title_name, sp.org_name
+     FROM scout_offers o
+     JOIN titles t ON t.id = o.title_id
+     JOIN scout_profiles sp ON sp.user_id = o.scout_user_id
+     WHERE o.id = ? AND o.creator_id = ?`,
+  )
+    .bind(c.req.param('id'), user.id)
+    .first<{
+      id: string;
+      scout_user_id: string;
+      title_id: string;
+      kind: ScoutOfferKind;
+      promo_percent: number | null;
+      status: ScoutOfferStatus;
+      title_name: string;
+      org_name: string;
+    }>();
+  if (!offer) fail(404, 'offer_not_found', 'That offer does not exist.');
+  if (offer.status !== 'pending') fail(409, 'offer_decided', 'That offer has already been decided.');
+
+  const status: ScoutOfferStatus = body.accept ? 'accepted' : 'declined';
+  const statements = [
+    c.env.DB.prepare('UPDATE scout_offers SET status = ?, decided_at = ? WHERE id = ?').bind(
+      status,
+      nowIso(),
+      offer.id,
+    ),
+  ];
+  // Accepting a Sweam promotion deal labels the title "Promoted by [company]"
+  // and boosts it. Signing offers are handled off Sweam, so they just resolve.
+  if (body.accept && offer.kind === 'sweam_promo') {
+    statements.push(
+      c.env.DB.prepare(
+        'UPDATE titles SET promoted_by = ?, promoted_scout_id = ?, promoted_percent = ?, promoted_at = ? WHERE id = ?',
+      ).bind(offer.org_name, offer.scout_user_id, offer.promo_percent, nowIso(), offer.title_id),
+    );
+  }
+  await c.env.DB.batch(statements);
+
+  await notify(
+    c.env.DB,
+    offer.scout_user_id,
+    'scout_offer',
+    body.accept
+      ? `${user.displayName} accepted your ${offer.kind === 'sweam_promo' ? 'promotion deal' : 'offer'} for ${offer.title_name}.`
+      : `${user.displayName} declined your offer for ${offer.title_name}.`,
+    '/scout',
+  );
+  return c.json({ status });
 });
 
 // ---------------------------------------------------------------------------
@@ -776,9 +911,10 @@ const ANALYTICS_LIST_LIMIT = 50;
 studioRoutes.get('/titles/:titleId/analytics', requireCreator, async (c) => {
   const row = await ownedTitle(c, c.req.param('titleId'));
 
-  const [daily, retention, viewsResult, interestsResult] = await Promise.all([
+  const [daily, retention, episodeViews, viewsResult, interestsResult] = await Promise.all([
     loadDailySeries(c.env.DB, row.id, ANALYTICS_DAILY_DAYS),
     loadRetention(c.env.DB, row.id),
+    loadEpisodeViews(c.env.DB, [row.id]),
     c.env.DB.prepare(
       `SELECT sp.org_name, v.viewed_at
        FROM onesheet_views v
@@ -811,6 +947,7 @@ studioRoutes.get('/titles/:titleId/analytics', requireCreator, async (c) => {
     scoutable: row.scoutable === 1,
     daily,
     retention,
+    episodes: episodeViews.get(row.id) ?? [],
     oneSheetViews: viewsResult.results.map((view) => ({
       orgName: view.org_name,
       viewedAt: view.viewed_at,

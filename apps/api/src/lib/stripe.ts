@@ -13,6 +13,17 @@ import type { Env } from '../env';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 
+/**
+ * Pinned API version: the same one the webhook endpoint is registered with, so
+ * requests and events share one shape, and new enough for Checkout
+ * `branding_settings` (added in 2025-09-30.clover).
+ */
+const STRIPE_VERSION = '2025-10-29.clover';
+
+/** Sweam brand colors used to dress Checkout per product (ink navy, Scout gold, Blu blue). */
+const INK = '#0B1424';
+const BLU_BLUE = '#1759F5';
+
 export function stripeConfigured(env: Env): boolean {
   return Boolean(env.STRIPE_SECRET_KEY);
 }
@@ -46,7 +57,7 @@ function toForm(obj: Record<string, unknown>, prefix = ''): string[] {
 
 async function stripeRequest<T>(
   env: Env,
-  method: 'POST' | 'GET',
+  method: 'POST' | 'GET' | 'DELETE',
   path: string,
   body?: Record<string, unknown>,
 ): Promise<T> {
@@ -56,6 +67,7 @@ async function stripeRequest<T>(
     headers: {
       authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
       'content-type': 'application/x-www-form-urlencoded',
+      'stripe-version': STRIPE_VERSION,
     },
     body: body ? toForm(body).join('&') : undefined,
   });
@@ -70,6 +82,23 @@ async function stripeRequest<T>(
 export interface CheckoutSession {
   id: string;
   url: string;
+}
+
+/**
+ * Per-session Checkout branding: Sweam's own product identity from the brand
+ * kit instead of the shared Stripe account's default branding. Checkout shows
+ * the `logo` (the SWEAM + product-badge lockup) at the top of the page and uses
+ * the square `icon` as the favicon; both must be set, or the account's logo
+ * would still show.
+ */
+function checkoutBranding(env: Env, product: 'blu' | 'scout'): Record<string, unknown> {
+  return {
+    display_name: 'Sweam',
+    logo: { type: 'url', url: `${webUrl(env)}/brand/${product}-logo.png` },
+    icon: { type: 'url', url: `${webUrl(env)}/brand/${product}-icon.png` },
+    button_color: product === 'scout' ? INK : BLU_BLUE,
+    border_style: 'rounded',
+  };
 }
 
 /** A Checkout subscription for a creator's Blu, with a Connect destination + 20% fee. */
@@ -97,7 +126,10 @@ export function createBluCheckout(
           currency: 'usd',
           unit_amount: opts.priceCents,
           recurring: { interval: 'month' },
-          product_data: { name: `Sweam Blu — ${opts.creatorName}` },
+          product_data: {
+            name: `Sweam Blu: ${opts.creatorName}`,
+            images: [`${webUrl(env)}/brand/blu-checkout.png`],
+          },
         },
       },
     ],
@@ -107,19 +139,54 @@ export function createBluCheckout(
       metadata: { kind: 'blu', subscriberId: opts.subscriberId, creatorId: opts.creatorId, priceCents: opts.priceCents },
     },
     metadata: { kind: 'blu', subscriberId: opts.subscriberId, creatorId: opts.creatorId },
+    branding_settings: checkoutBranding(env, 'blu'),
   });
 }
 
-/** A Checkout subscription for scout all-access (kept by Sweam, no destination). */
+/** Stripe needs a fixed trial end at least 48 hours out; shorter remainders use whole days. */
+const TRIAL_END_MIN_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * A Checkout subscription for the Scout membership (kept by Sweam, no
+ * destination). The free period is expressed either as `trialDays` (a brand-new
+ * first-50 trial) or `trialEndsAt` (the remainder of a free period that already
+ * started without a card), so adding a card never shortens it.
+ */
 export function createScoutCheckout(
   env: Env,
-  opts: { customerEmail: string; priceCents: number; userId: string },
+  opts: {
+    customerEmail: string;
+    priceCents: number;
+    userId: string;
+    trialDays?: number;
+    /** ISO end of a free period already running; carried over as the trial end. */
+    trialEndsAt?: string | null;
+  },
 ): Promise<CheckoutSession> {
+  const nowMs = Date.now();
+  const remainingMs = opts.trialEndsAt ? Date.parse(opts.trialEndsAt) - nowMs : 0;
+  let trial: Record<string, unknown> = {};
+  if (remainingMs >= TRIAL_END_MIN_MS) {
+    trial = { trial_end: Math.floor(Date.parse(opts.trialEndsAt as string) / 1000) };
+  } else if (remainingMs > 0) {
+    trial = { trial_period_days: Math.max(1, Math.ceil(remainingMs / 86_400_000)) };
+  } else if (opts.trialDays && opts.trialDays > 0) {
+    trial = { trial_period_days: opts.trialDays };
+  }
+  const newTrial = Boolean(opts.trialDays && opts.trialDays > 0) && remainingMs <= 0;
+  // Echoed back by the webhook: a first-50 seat is only claimed when a NEW trial
+  // really starts, and a carried-over free period keeps its original end date.
+  const metadata = {
+    kind: 'scout',
+    userId: opts.userId,
+    betaFree: newTrial ? '1' : '0',
+    ...(remainingMs > 0 && opts.trialEndsAt ? { trialEnd: opts.trialEndsAt } : {}),
+  };
   return stripeRequest<CheckoutSession>(env, 'POST', '/checkout/sessions', {
     mode: 'subscription',
     customer_email: opts.customerEmail,
-    success_url: `${webUrl(env)}/scout?access=success`,
-    cancel_url: `${webUrl(env)}/scout?access=cancel`,
+    success_url: `${webUrl(env)}/scout?welcome=1`,
+    cancel_url: `${webUrl(env)}/scout?canceled=1`,
     line_items: [
       {
         quantity: 1,
@@ -127,13 +194,48 @@ export function createScoutCheckout(
           currency: 'usd',
           unit_amount: opts.priceCents,
           recurring: { interval: 'month' },
-          product_data: { name: 'Sweam Scout All-Access' },
+          product_data: {
+            name: 'Sweam Scout membership',
+            description: 'Scout portal plus all-access to every creator’s Sweam Blu content.',
+            images: [`${webUrl(env)}/brand/scout-checkout.png`],
+          },
         },
       },
     ],
-    subscription_data: { metadata: { kind: 'scout', userId: opts.userId } },
-    metadata: { kind: 'scout', userId: opts.userId },
+    subscription_data: {
+      // The card is on file but not charged until the free period ends.
+      ...trial,
+      metadata,
+    },
+    metadata,
+    branding_settings: checkoutBranding(env, 'scout'),
   });
+}
+
+/** The subscription dates the webhook needs after checkout (trial end, current period end). */
+export function getSubscription(
+  env: Env,
+  subscriptionId: string,
+): Promise<{
+  id: string;
+  status: string;
+  trial_end: number | null;
+  current_period_end?: number;
+  items?: { data?: Array<{ current_period_end?: number }> };
+}> {
+  return stripeRequest(env, 'GET', `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+}
+
+/** Cancel a subscription immediately (used when an admin revokes scout access). */
+export function cancelSubscription(
+  env: Env,
+  subscriptionId: string,
+): Promise<{ id: string; status: string }> {
+  return stripeRequest<{ id: string; status: string }>(
+    env,
+    'DELETE',
+    `/subscriptions/${encodeURIComponent(subscriptionId)}`,
+  );
 }
 
 /**

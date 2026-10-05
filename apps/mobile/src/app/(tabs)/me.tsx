@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { api } from '../../lib/api';
+import { router, type Href } from 'expo-router';
+import { api, mediaUrl } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { colors } from '../../lib/theme';
 
@@ -42,11 +43,19 @@ export default function MeScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {(user.username ?? user.displayName).slice(0, 1).toUpperCase()}
-          </Text>
-        </View>
+        {user.avatarUrl ? (
+          <Image
+            source={{ uri: mediaUrl(user.avatarUrl) ?? undefined }}
+            style={styles.avatar}
+            contentFit="cover"
+          />
+        ) : (
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
+              {(user.username ?? user.displayName).slice(0, 1).toUpperCase()}
+            </Text>
+          </View>
+        )}
         <Text style={styles.handle}>@{user.username ?? '—'}</Text>
         <Text style={styles.name}>{user.displayName}</Text>
         <Text style={styles.muted}>{user.email}</Text>
@@ -67,6 +76,32 @@ export default function MeScreen() {
         ) : (
           <Ionicons name="chevron-forward" size={18} color={colors.muted} />
         )}
+      </Pressable>
+
+      <Pressable
+        style={styles.row}
+        // '/settings' is a new route; Expo Router regenerates its typed-routes
+        // union on the next build, after which this cast is a no-op.
+        onPress={() => router.push('/settings' as unknown as Href)}
+        accessibilityRole="button"
+        accessibilityLabel="Profile and account settings"
+      >
+        <Ionicons name="settings-outline" size={22} color={colors.text} />
+        <Text style={styles.rowLabel}>Profile & account</Text>
+        <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+      </Pressable>
+
+      <Pressable
+        style={styles.row}
+        // '/my-content' is a new route; Expo Router regenerates its typed-routes
+        // union on the next build, after which this cast is a no-op.
+        onPress={() => router.push('/my-content' as unknown as Href)}
+        accessibilityRole="button"
+        accessibilityLabel="Your content"
+      >
+        <Ionicons name="albums-outline" size={22} color={colors.text} />
+        <Text style={styles.rowLabel}>Your content</Text>
+        <Ionicons name="chevron-forward" size={18} color={colors.muted} />
       </Pressable>
 
       <Pressable

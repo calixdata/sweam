@@ -1,10 +1,20 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { CREATOR_REVENUE_SHARE, MIN_AGE, MIN_PAYOUT_MILLICENTS, formatMillicents } from '@sweam/shared';
+import {
+  CREATOR_REVENUE_SHARE,
+  MIN_AGE,
+  MIN_PAYOUT_MILLICENTS,
+  SCOUT_ALL_ACCESS_CENTS,
+  SCOUT_BETA_FREE_LIMIT,
+  UPLOAD_SPECS,
+  formatMillicents,
+  formatUsdCents,
+} from '@sweam/shared';
 import { usePageTitle } from '../hooks';
 
 const SHARE_PERCENT = Math.round(CREATOR_REVENUE_SHARE * 100);
 const MIN_PAYOUT = formatMillicents(MIN_PAYOUT_MILLICENTS);
+const SCOUT_PRICE = formatUsdCents(SCOUT_ALL_ACCESS_CENTS);
 
 interface QA {
   q: string;
@@ -62,6 +72,21 @@ const groups: FaqGroup[] = [
         ),
       },
       {
+        q: 'What video size should I film and upload in?',
+        a: (
+          <>
+            For the full-screen For You feed, film and export <strong>vertical 9:16</strong> —{' '}
+            <strong>1080 × 1920</strong> (or 2160 × 3840 for 4K). That fills the width and nearly all
+            of the height. Today's tall phones fill edge-to-edge best at <strong>9:19.5</strong>{' '}
+            (1080 × 2340), but 9:16 is the safe, universal target. Keep the important action in the
+            centre, since the like and comment controls and the caption overlay the edges. Wider
+            clips (for example a 16:9 cinematic episode) still play <strong>in full</strong>, centred
+            over a soft blurred backdrop — never cropped or stretched. Files can be{' '}
+            {UPLOAD_SPECS.video.formats}, up to {UPLOAD_SPECS.video.maxLabel}.
+          </>
+        ),
+      },
+      {
         q: 'How do creators earn?',
         a: (
           <>
@@ -111,8 +136,26 @@ const groups: FaqGroup[] = [
         q: 'How do I get scout access?',
         a: (
           <>
-            Request it from the <Link to="/scout">Scout</Link> page with your organization details.
-            Access is reviewed before it is granted.
+            Apply on the <Link to="/scout">Scout</Link> page with your name, organization, position,
+            and a work email on your organization&apos;s domain. Free email providers such as Gmail
+            and Yahoo are not accepted. You then read and accept the{' '}
+            <Link to="/legal/scout-terms">Scout Program Terms</Link> and add a card. Access starts
+            automatically once your card is on file. Approval is provisional, and Sweam may review
+            or revoke any scout account.
+          </>
+        ),
+      },
+      {
+        q: 'What does Scout membership cost?',
+        a: (
+          <>
+            {SCOUT_PRICE} per month, which covers the scout portal and all-access to every
+            creator&apos;s Sweam Blu content; scouts never pay for Blu separately. The first{' '}
+            {SCOUT_BETA_FREE_LIMIT} scouts get their first 3 months free, applied automatically:
+            a card on file is not charged until the free period ends, and a scout Sweam approved
+            without a card simply adds one before the free period ends to keep access. You can
+            cancel any time; to avoid the next charge, cancel at least 24 business hours before
+            your renewal date.
           </>
         ),
       },

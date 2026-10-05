@@ -4,6 +4,7 @@ import type { Context } from 'hono';
 import type { SessionUser } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { generateToken, sha256Hex } from './auth';
+import { isActiveScout } from './blu';
 import { fail, nowIso } from './http';
 
 export const SESSION_COOKIE = 'sweam_session';
@@ -30,6 +31,7 @@ interface SessionRow {
   id: string;
   email: string;
   display_name: string;
+  avatar_url: string | null;
   username: string | null;
   handle: string | null;
   scout_status: 'pending' | 'approved' | 'rejected' | null;
@@ -41,7 +43,7 @@ export async function resolveSession(db: D1Database, token: string): Promise<Ses
   const tokenHash = await sha256Hex(token);
   const row = await db
     .prepare(
-      `SELECT s.expires_at, s.token_hash, u.id, u.email, u.display_name, u.username, cp.handle,
+      `SELECT s.expires_at, s.token_hash, u.id, u.email, u.display_name, u.avatar_url, u.username, cp.handle,
         sp.status AS scout_status, sp.org_name AS scout_org,
         (a.user_id IS NOT NULL) AS is_admin
        FROM sessions s
@@ -62,6 +64,7 @@ export async function resolveSession(db: D1Database, token: string): Promise<Ses
     id: row.id,
     email: row.email,
     displayName: row.display_name,
+    avatarUrl: row.avatar_url,
     username: row.username,
     handle: row.handle,
     scout:
@@ -143,7 +146,17 @@ export const requireScout = createMiddleware<AppEnv>(async (c, next) => {
     fail(403, 'scout_rejected', 'Your scout application was not approved.');
   }
   if (user.scout.status !== 'approved') {
-    fail(403, 'scout_pending', 'Your scout application is pending review.');
+    // 'pending' now means the application has no active card on file (never added, or lapsed).
+    fail(403, 'scout_pending', 'Add a card to your scout application to activate access.');
+  }
+  if (!(await isActiveScout(c.env.DB, user.id))) {
+    // Approved, but the membership lapsed: free period over without a card, a failed
+    // payment, or a cancellation. The portal and Blu all-access pause together.
+    fail(
+      403,
+      'scout_membership_required',
+      'Your Scout membership is not active. Start or renew it to use the scout portal.',
+    );
   }
   await next();
 });

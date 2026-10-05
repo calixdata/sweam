@@ -38,10 +38,17 @@ export const RATE_LIMITS = {
   pwResetEmail: { name: 'pwreset-email', limit: 5, windowS: 60 * 60 },
   /** Reset-token submissions per IP (token-guessing brake). */
   pwResetSubmitIp: { name: 'pwreset-submit-ip', limit: 20, windowS: 15 * 60 },
+  /** In-app password changes per account (abuse brake; each proves the old one). */
+  pwChange: { name: 'pwchange', limit: 5, windowS: 15 * 60 },
+  /** In-app email-change requests per account (email-bombing brake on the new address). */
+  emailChange: { name: 'emailchange', limit: 5, windowS: 60 * 60 },
+  /** Email-change confirmations per IP (token-guessing brake). */
+  emailChangeConfirmIp: { name: 'emailchange-confirm-ip', limit: 20, windowS: 15 * 60 },
   report: { name: 'report', limit: 10, windowS: 24 * 60 * 60 },
   /** Anonymous beacons arrive at most every 10s; 60 per 5 minutes is 2x headroom. */
   anonView: { name: 'view', limit: 60, windowS: 5 * 60 },
-  scoutApply: { name: 'scout-apply', limit: 3, windowS: 24 * 60 * 60 },
+  /** Each attempt may open a Stripe Checkout; leave room to fix a typo or resume an abandoned one. */
+  scoutApply: { name: 'scout-apply', limit: 10, windowS: 24 * 60 * 60 },
   /** Single-PUT uploads and multipart inits; parts are bounded by their init. */
   upload: { name: 'upload', limit: 30, windowS: 60 * 60 },
   /** Pre-roll impression beacons; a human watches far fewer prerolls than this. */

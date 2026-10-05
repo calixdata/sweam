@@ -35,7 +35,7 @@ export default function BrowseScreen() {
         accessibilityLabel="Search Sweam"
       >
         <Ionicons name="search" size={18} color={colors.muted} />
-        <Text style={styles.searchText}>Search titles and creators</Text>
+        <Text style={styles.searchText}>Search @usernames, titles, and creators</Text>
       </Pressable>
       {feature && (
         <Pressable style={styles.hero} onPress={() => router.push(`/t/${feature.slug}`)}>

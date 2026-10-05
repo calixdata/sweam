@@ -36,6 +36,8 @@ export default function RootLayout() {
           <Stack.Screen name="c/[handle]" />
           <Stack.Screen name="search" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="notifications" />
+          <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="my-content" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="signin" options={{ presentation: 'modal' }} />
           <Stack.Screen name="signup" options={{ presentation: 'modal' }} />
         </Stack>

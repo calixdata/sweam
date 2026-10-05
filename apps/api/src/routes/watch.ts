@@ -4,7 +4,7 @@ import type { AppEnv } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
 import type { EpisodeRow } from '../lib/mappers';
 import { mapEpisode } from '../lib/mappers';
-import { hasBluAccess } from '../lib/blu';
+import { hasBluAccess, isActiveScout } from '../lib/blu';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { requireUser, currentUser } from '../lib/session';
 import { progressSchema, viewBeaconSchema } from '../lib/validate';
@@ -25,6 +25,7 @@ interface WatchRow extends EpisodeRow {
   title_kind: WatchPayload['title']['kind'];
   creator_id: string;
   published: number;
+  suppressed: number;
   is_blu: number;
   creator_name: string;
   creator_handle: string;
@@ -35,7 +36,7 @@ async function loadEpisode(db: D1Database, episodeId: string): Promise<WatchRow 
     .prepare(
       `SELECT e.id, e.season, e.episode, e.name, e.synopsis, e.video_url, e.captions_url, e.duration_s, e.ai_credits,
         t.id AS title_id, t.slug AS title_slug, t.name AS title_name, t.kind AS title_kind,
-        t.creator_id, t.published, t.is_blu,
+        t.creator_id, t.published, t.suppressed, t.is_blu,
         u.display_name AS creator_name, cp.handle AS creator_handle
        FROM episodes e
        JOIN titles t ON t.id = e.title_id
@@ -47,8 +48,18 @@ async function loadEpisode(db: D1Database, episodeId: string): Promise<WatchRow 
     .first<WatchRow>();
 }
 
-/** Drafts are only watchable by their creator (Studio preview). */
-function assertViewable(row: WatchRow, userId: string | null): void {
+/**
+ * Who may watch. A suppressed title is on an investigation hold: hidden from
+ * everyone but Sweam admins, including its own creator. Otherwise, drafts are
+ * only watchable by their creator (Studio preview).
+ */
+function assertViewable(row: WatchRow, userId: string | null, isAdmin: boolean): void {
+  if (row.suppressed === 1) {
+    if (!isAdmin) {
+      fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
+    }
+    return;
+  }
   if (row.published !== 1 && row.creator_id !== userId) {
     fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
   }
@@ -58,7 +69,7 @@ watchRoutes.get('/:episodeId', async (c) => {
   const row = await loadEpisode(c.env.DB, c.req.param('episodeId'));
   if (!row) fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
   const user = c.get('user');
-  assertViewable(row, user?.id ?? null);
+  assertViewable(row, user?.id ?? null, user?.isAdmin ?? false);
 
   if (
     row.is_blu === 1 &&
@@ -116,7 +127,7 @@ watchRoutes.post('/:episodeId/progress', requireUser, async (c) => {
   const body = await parseBody(c, progressSchema);
   const row = await loadEpisode(c.env.DB, c.req.param('episodeId'));
   if (!row) fail(404, 'episode_not_found', 'That episode does not exist or is not published.');
-  assertViewable(row, user.id);
+  assertViewable(row, user.id, user.isAdmin);
   if (
     row.is_blu === 1 &&
     row.creator_id !== user.id &&
@@ -147,17 +158,12 @@ watchRoutes.post('/:episodeId/progress', requireUser, async (c) => {
     Math.min(maxPositionS - (existing?.max_position_s ?? 0), MAX_WATCH_DELTA_S),
   );
 
-  // Scout royalty attribution: when a viewer holding active scout all-access
-  // (and who is not the creator) watches Blu content, credit the creator's
-  // scout watch-time. This feeds the royalty-pool distribution.
+  // Scout royalty attribution: when a scout with an active membership (and who
+  // is not the creator) watches Blu content, credit the creator's scout
+  // watch-time. This feeds the royalty-pool distribution.
   let scoutWatch = false;
   if (row.is_blu === 1 && row.creator_id !== user.id && watchDelta > 0) {
-    const scout = await c.env.DB.prepare(
-      "SELECT 1 AS x FROM scout_all_access WHERE user_id = ? AND status = 'active'",
-    )
-      .bind(user.id)
-      .first();
-    scoutWatch = scout !== null;
+    scoutWatch = await isActiveScout(c.env.DB, user.id);
   }
 
   const statements = [

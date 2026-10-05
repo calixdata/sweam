@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import type { OneSheet } from '@sweam/shared';
-import { CONTENT_KIND_LABELS } from '@sweam/shared';
+import type { OneSheet, ScoutOfferKind } from '@sweam/shared';
+import {
+  CONTENT_KIND_LABELS,
+  SCOUT_OFFER_KINDS,
+  SCOUT_OFFER_KIND_LABELS,
+  SCOUT_PROMO_MAX_PERCENT,
+} from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { DailyTable } from '../components/DailyTable';
+import { EpisodeViewsTable } from '../components/EpisodeViewsTable';
 import { RetentionTable } from '../components/RetentionTable';
 import { ErrorNote, Loading } from '../components/Status';
 import { usePageTitle } from '../hooks';
@@ -84,6 +90,16 @@ export function ScoutOneSheet() {
         </div>
       </section>
 
+      {(title.kind === 'series' || title.kind === 'reality' || sheet.episodes.length > 1) && (
+        <section aria-labelledby="onesheet-episodes">
+          <h2 id="onesheet-episodes">Views by episode</h2>
+          <p className="page-intro">
+            Viewers who started each episode and how many of them reached the end.
+          </p>
+          <EpisodeViewsTable episodes={sheet.episodes} />
+        </section>
+      )}
+
       <section aria-labelledby="onesheet-daily">
         <h2 id="onesheet-daily">Last 14 days</h2>
         <DailyTable daily={sheet.daily} />
@@ -103,7 +119,109 @@ export function ScoutOneSheet() {
         titleName={title.name}
         alreadyInterested={sheet.myInterest}
       />
+
+      <OfferSection titleId={title.id} titleName={title.name} />
     </div>
+  );
+}
+
+/** Make the creator an offer: sign externally, or a Sweam promotion deal. */
+function OfferSection({ titleId, titleName }: { titleId: string; titleName: string }) {
+  const [kind, setKind] = useState<ScoutOfferKind>('external_sign');
+  const [message, setMessage] = useState('');
+  const [percent, setPercent] = useState('20');
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      const payload: Record<string, unknown> = { kind, message };
+      if (kind === 'sweam_promo') payload.promoPercent = Number(percent);
+      await apiSend('POST', `/api/scout/titles/${titleId}/offer`, payload);
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not send your offer.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (sent) {
+    return (
+      <section aria-labelledby="onesheet-offer">
+        <h2 id="onesheet-offer">Make an offer</h2>
+        <p className="status status-ok" role="status">
+          Offer sent to the creator of {titleName}. You'll be notified when they accept or decline.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section aria-labelledby="onesheet-offer">
+      <h2 id="onesheet-offer">Make an offer</h2>
+      <p className="page-intro">
+        Offer to sign this work to your own network (handled off Sweam), or propose a Sweam promotion
+        deal: you promote it for a share of its earnings and it is labelled "Promoted by your
+        organization".
+      </p>
+      <form onSubmit={handleSubmit} noValidate className="studio-form">
+        <div className="field">
+          <label htmlFor="offer-kind">Offer type</label>
+          <select
+            id="offer-kind"
+            value={kind}
+            onChange={(event) => setKind(event.target.value as ScoutOfferKind)}
+          >
+            {SCOUT_OFFER_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {SCOUT_OFFER_KIND_LABELS[k]}
+              </option>
+            ))}
+          </select>
+        </div>
+        {kind === 'sweam_promo' && (
+          <div className="field">
+            <label htmlFor="offer-percent">Your share of this title's earnings (%)</label>
+            <input
+              id="offer-percent"
+              type="number"
+              min={1}
+              max={SCOUT_PROMO_MAX_PERCENT}
+              value={percent}
+              onChange={(event) => setPercent(event.target.value)}
+              aria-describedby="offer-percent-hint"
+            />
+            <p className="field-hint" id="offer-percent-hint">
+              Up to {SCOUT_PROMO_MAX_PERCENT}%. This comes from the creator's own earnings on this
+              title; they have to accept it.
+            </p>
+          </div>
+        )}
+        <div className="field">
+          <label htmlFor="offer-message">Message to the creator</label>
+          <textarea
+            id="offer-message"
+            rows={3}
+            maxLength={1000}
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+          />
+        </div>
+        {error && (
+          <p className="status status-error" role="alert">
+            {error}
+          </p>
+        )}
+        <button type="submit" className="button" disabled={submitting}>
+          {submitting ? 'Sending…' : 'Send offer'}
+        </button>
+      </form>
+    </section>
   );
 }
 

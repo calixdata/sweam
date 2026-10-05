@@ -310,6 +310,10 @@ export default function RecordScreen() {
           </View>
 
           <VideoView player={player} style={styles.preview} contentFit="contain" nativeControls />
+          <Text style={[styles.hint, styles.previewHint]}>
+            Vertical 9:16 (1080 × 1920) fills the feed. Wider clips play in full, letterboxed — never
+            cropped.
+          </Text>
 
           <View style={styles.form}>
             <Text style={styles.label}>Caption</Text>
@@ -745,6 +749,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   hint: { color: colors.muted, fontSize: 12 },
+  previewHint: { textAlign: 'center', paddingHorizontal: 16, marginTop: 8, lineHeight: 17 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chipRowScroll: { flexDirection: 'row', gap: 8, paddingVertical: 2, paddingRight: 8 },
   chip: {

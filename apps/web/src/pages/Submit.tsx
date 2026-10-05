@@ -597,7 +597,7 @@ function SubmissionForm({
           </li>
           <li>
             <strong>Video:</strong> {UPLOAD_SPECS.video.formats}, up to {UPLOAD_SPECS.video.maxLabel}.
-            Larger files upload in resumable parts.
+            Larger files upload in resumable parts. {UPLOAD_SPECS.video.recommended}
           </li>
           <li>
             <strong>Captions (optional):</strong> {UPLOAD_SPECS.captions.formats}, up to{' '}
@@ -784,7 +784,7 @@ function SubmissionForm({
             id="sub-video"
             label="Upload the film"
             accept={UPLOAD_SPECS.video.accept}
-            hint={`${UPLOAD_SPECS.video.formats}, up to ${UPLOAD_SPECS.video.maxLabel}. Large files upload in resumable parts.`}
+            hint={`${UPLOAD_SPECS.video.formats}, up to ${UPLOAD_SPECS.video.maxLabel}. Large files upload in resumable parts. ${UPLOAD_SPECS.video.recommended}`}
             maxBytes={UPLOAD_SPECS.video.maxBytes}
             currentName={sourceName}
             onUploaded={(url, name) => {

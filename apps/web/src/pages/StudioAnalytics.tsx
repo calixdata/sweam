@@ -3,7 +3,9 @@ import { Link, useParams } from 'react-router-dom';
 import type { StudioTitleDetail, TitleAnalytics } from '@sweam/shared';
 import { ApiError, apiGet } from '../api';
 import { DailyTable } from '../components/DailyTable';
+import { EpisodeViewsTable } from '../components/EpisodeViewsTable';
 import { RetentionTable } from '../components/RetentionTable';
+import { ScoutBadge } from '../components/ScoutBadge';
 import { ErrorNote, Loading } from '../components/Status';
 import { usePageTitle } from '../hooks';
 
@@ -50,6 +52,17 @@ export function StudioAnalytics() {
           : 'Not visible in the scout portal. Turn on scout visibility in the title editor to appear on the boards.'}
       </p>
 
+      {(title.kind === 'series' || title.kind === 'reality' || analytics.episodes.length > 1) && (
+        <section aria-labelledby="analytics-episodes">
+          <h2 id="analytics-episodes">Views by episode</h2>
+          <p className="page-intro">
+            Viewers who started each episode and how many of them reached the end. Scouts see
+            the same breakdown.
+          </p>
+          <EpisodeViewsTable episodes={analytics.episodes} />
+        </section>
+      )}
+
       <section aria-labelledby="analytics-daily">
         <h2 id="analytics-daily">Last 14 days</h2>
         <DailyTable daily={analytics.daily} />
@@ -72,7 +85,7 @@ export function StudioAnalytics() {
           <ul>
             {analytics.oneSheetViews.map((view, index) => (
               <li key={`${view.orgName}-${view.viewedAt}-${index}`}>
-                {view.orgName} viewed your one-sheet on {view.viewedAt.slice(0, 10)}
+                {view.orgName} <ScoutBadge /> viewed your one-sheet on {view.viewedAt.slice(0, 10)}
               </li>
             ))}
           </ul>
@@ -87,7 +100,9 @@ export function StudioAnalytics() {
           <ul className="interest-list">
             {analytics.interests.map((interest) => (
               <li key={`${interest.orgName}-${interest.createdAt}`}>
-                <h3>{interest.orgName}</h3>
+                <h3>
+                  {interest.orgName} <ScoutBadge />
+                </h3>
                 <p>
                   {interest.createdAt.slice(0, 10)} · contact:{' '}
                   <a href={`mailto:${interest.contactEmail}`}>{interest.contactEmail}</a>

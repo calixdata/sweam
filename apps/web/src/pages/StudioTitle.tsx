@@ -90,23 +90,33 @@ export function StudioTitle() {
         </p>
       )}
 
+      {title.suppressed && (
+        <p className="status status-error" role="status">
+          Sweam has this title under review. It is hidden from Sweam while the review is open, and
+          its visibility is frozen — you cannot publish, unpublish, or delete it right now.
+        </p>
+      )}
+
       <div className="title-actions">
-        {!title.adminLocked && (
+        {!title.suppressed && (
           <button type="button" className="button" onClick={togglePublish}>
-            {title.published ? 'Unpublish' : 'Publish'}
+            {title.published ? (title.everBlu ? 'Make private' : 'Unpublish') : 'Publish'}
           </button>
         )}
         <Link className="button button-quiet" to={`/studio/t/${title.id}/analytics`}>
           Analytics and scout activity
         </Link>
-        {!title.adminLocked && (
+        {/* Deletion is governed by Blu history only: free titles that have never been Blu
+            can be deleted outright. Blu or ex-Blu titles use removal/make-private instead,
+            and an investigation hold blocks deletion. */}
+        {!title.isBlu && !title.everBlu && !title.suppressed && (
           <button type="button" className="button button-danger" onClick={deleteTitle}>
             Delete title
           </button>
         )}
       </div>
 
-      {title.adminLocked && (
+      {(title.isBlu || title.everBlu) && (
         <RemovalRequestPanel title={title} onRequested={load} setNotice={setNotice} />
       )}
 
@@ -118,7 +128,7 @@ export function StudioTitle() {
   );
 }
 
-/** For Sweam-published (admin-locked) titles: request removal instead of unpublishing. */
+/** For Blu or ex-Blu titles: request removal (or make private) instead of deleting. */
 function RemovalRequestPanel({
   title,
   onRequested,
@@ -136,8 +146,7 @@ function RemovalRequestPanel({
   if (title.removalRequested) {
     return (
       <aside className="notice" role="note">
-        Sweam published this title, so only Sweam can remove it. Your removal request is open and
-        under review.
+        Your removal request for this title is open and under review by Sweam.
       </aside>
     );
   }
@@ -162,8 +171,12 @@ function RemovalRequestPanel({
   return (
     <aside className="notice" role="note">
       <p>
-        <strong>Sweam published this title, so only Sweam can remove it.</strong> To take it down,
-        send a removal request with a reason.
+        <strong>
+          {title.isBlu
+            ? 'This is Sweam Blu content, so it cannot be deleted.'
+            : 'This title was Sweam Blu before, so it cannot be deleted. You can make it private using Unpublish above.'}
+        </strong>{' '}
+        To take it down, send Sweam a removal request with a reason.
       </p>
       {open ? (
         <form onSubmit={submit} className="studio-form">
@@ -209,6 +222,7 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
   const [advisory, setAdvisory] = useState<string>(title.advisory);
   const [synopsis, setSynopsis] = useState(title.synopsis);
   const [scoutable, setScoutable] = useState(title.scoutable);
+  const [allowDownload, setAllowDownload] = useState(title.allowDownload);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -226,6 +240,7 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
         advisory,
         synopsis,
         scoutable,
+        allowDownload: title.isBlu ? false : allowDownload,
       });
       setSaved(true);
       await onSaved();
@@ -309,6 +324,22 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
           <p className="field-hint" id="edit-scoutable-hint">
             Opt in to let vetted network and studio scouts see this title's momentum stats and
             retention curves. You will see every one-sheet view and interest in Analytics.
+          </p>
+        </div>
+        <div className="field field-checkbox">
+          <input
+            id="edit-download"
+            type="checkbox"
+            checked={allowDownload && !title.isBlu}
+            disabled={title.isBlu}
+            aria-describedby="edit-download-hint"
+            onChange={(event) => setAllowDownload(event.target.checked)}
+          />
+          <label htmlFor="edit-download">Allow viewers to download and share this video off Sweam</label>
+          <p className="field-hint" id="edit-download-hint">
+            {title.isBlu
+              ? 'Sweam Blu content can’t be downloaded or shared off the platform.'
+              : 'Lets viewers download the video file and share it off Sweam. Off by default — sharing the Sweam link is always available.'}
           </p>
         </div>
         {error && (

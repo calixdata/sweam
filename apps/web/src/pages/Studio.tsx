@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { StudioStanding, StudioTitleSummary } from '@sweam/shared';
-import { ADVISORIES, CONTENT_KINDS, CONTENT_KIND_LABELS, GENRES } from '@sweam/shared';
+import type { ScoutOfferForCreator, StudioStanding, StudioTitleSummary } from '@sweam/shared';
+import {
+  ADVISORIES,
+  CONTENT_KINDS,
+  CONTENT_KIND_LABELS,
+  GENRES,
+  SCOUT_OFFER_KIND_LABELS,
+} from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { ErrorNote, Loading } from '../components/Status';
@@ -164,47 +170,67 @@ function StudioDashboard({ handle }: { handle: string }) {
         </section>
       )}
 
+      <OffersInbox />
+
       <NewTitleForm onCreated={load} />
 
-      <section aria-labelledby="studio-titles-heading">
-        <h2 id="studio-titles-heading">Your titles</h2>
-        {titles.length === 0 ? (
+      {titles.length === 0 ? (
+        <section aria-labelledby="studio-titles-heading">
+          <h2 id="studio-titles-heading">Your titles</h2>
           <p>No titles yet. Create one above, add episodes, then publish.</p>
-        ) : (
-          <table className="studio-table">
-            <caption className="visually-hidden">
-              Your titles with status and performance counters
-            </caption>
-            <thead>
-              <tr>
-                <th scope="col">Title</th>
-                <th scope="col">Kind</th>
-                <th scope="col">Status</th>
-                <th scope="col">Episodes</th>
-                <th scope="col">Plays</th>
-                <th scope="col">Finishes</th>
-                <th scope="col">Likes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {titles.map((title) => (
-                <tr key={title.id}>
-                  <th scope="row">
-                    <Link to={`/studio/t/${title.id}`}>{title.name}</Link>
-                  </th>
-                  <td>{CONTENT_KIND_LABELS[title.kind]}</td>
-                  <td>{title.published ? 'Published' : 'Draft'}</td>
-                  <td>{title.episodeCount}</td>
-                  <td>{title.stats.plays.toLocaleString()}</td>
-                  <td>{title.stats.completes.toLocaleString()}</td>
-                  <td>{title.stats.likes.toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+        </section>
+      ) : (
+        <>
+          {titles.some((t) => t.kind !== 'short') && (
+            <section aria-labelledby="studio-shows-heading">
+              <h2 id="studio-shows-heading">Shows &amp; films</h2>
+              <StudioTitlesTable titles={titles.filter((t) => t.kind !== 'short')} />
+            </section>
+          )}
+          {titles.some((t) => t.kind === 'short') && (
+            <section aria-labelledby="studio-clips-heading">
+              <h2 id="studio-clips-heading">Clips</h2>
+              <StudioTitlesTable titles={titles.filter((t) => t.kind === 'short')} />
+            </section>
+          )}
+        </>
+      )}
     </div>
+  );
+}
+
+/** One table of the creator's titles (used for the Shows & films and Clips groups). */
+function StudioTitlesTable({ titles }: { titles: StudioTitleSummary[] }) {
+  return (
+    <table className="studio-table">
+      <caption className="visually-hidden">Titles with status and performance counters</caption>
+      <thead>
+        <tr>
+          <th scope="col">Title</th>
+          <th scope="col">Kind</th>
+          <th scope="col">Status</th>
+          <th scope="col">Episodes</th>
+          <th scope="col">Plays</th>
+          <th scope="col">Finishes</th>
+          <th scope="col">Likes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {titles.map((title) => (
+          <tr key={title.id}>
+            <th scope="row">
+              <Link to={`/studio/t/${title.id}`}>{title.name}</Link>
+            </th>
+            <td>{CONTENT_KIND_LABELS[title.kind]}</td>
+            <td>{title.published ? 'Published' : 'Draft'}</td>
+            <td>{title.episodeCount}</td>
+            <td>{title.stats.plays.toLocaleString()}</td>
+            <td>{title.stats.completes.toLocaleString()}</td>
+            <td>{title.stats.likes.toLocaleString()}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -310,6 +336,116 @@ function NewTitleForm({ onCreated }: { onCreated: () => Promise<void> }) {
           {submitting ? 'Creating…' : 'Create draft'}
         </button>
       </form>
+    </section>
+  );
+}
+
+/**
+ * Offers scouts have made on the creator's titles. Accepting a Sweam promotion
+ * deal labels the title "Promoted by [company]" and boosts it in discovery.
+ */
+function OffersInbox() {
+  const [offers, setOffers] = useState<ScoutOfferForCreator[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const data = await apiGet<{ offers: ScoutOfferForCreator[] }>('/api/studio/offers');
+      setOffers(data.offers);
+    } catch {
+      setOffers([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function decide(offer: ScoutOfferForCreator, accept: boolean) {
+    setBusy(offer.id);
+    setNotice('');
+    try {
+      await apiSend('POST', `/api/studio/offers/${offer.id}/decide`, { accept });
+      setNotice(
+        accept
+          ? offer.kind === 'sweam_promo'
+            ? `Accepted. “${offer.title.name}” is now promoted by ${offer.orgName}.`
+            : `Accepted ${offer.orgName}'s offer for “${offer.title.name}”.`
+          : `Declined ${offer.orgName}'s offer for “${offer.title.name}”.`,
+      );
+      await load();
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : 'Could not update the offer.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Quiet unless there is something to show.
+  if (!offers || offers.length === 0) return null;
+
+  return (
+    <section aria-labelledby="studio-offers-heading">
+      <h2 id="studio-offers-heading">Scout offers</h2>
+      <p className="page-intro">
+        Offers from scouts on your titles. A Sweam promotion deal, once you accept it, labels your
+        title “Promoted by [company]” and boosts it in discovery. The percentage comes from your
+        earnings on that title.
+      </p>
+      {notice && (
+        <p className="status" role="status">
+          {notice}
+        </p>
+      )}
+      <ul className="offer-list">
+        {offers.map((offer) => (
+          <li key={offer.id} className="offer-item">
+            <h3>
+              {SCOUT_OFFER_KIND_LABELS[offer.kind]} · {offer.title.name}
+            </h3>
+            <p>
+              From <strong>{offer.orgName}</strong>
+              {offer.kind === 'sweam_promo' && offer.promoPercent != null
+                ? ` · ${offer.promoPercent}% of this title's earnings`
+                : ''}{' '}
+              · contact: <a href={`mailto:${offer.contactEmail}`}>{offer.contactEmail}</a>
+              {offer.orgUrl && (
+                <>
+                  {' '}
+                  · <a href={offer.orgUrl}>website</a>
+                </>
+              )}
+            </p>
+            {offer.message && <blockquote>{offer.message}</blockquote>}
+            {offer.status === 'pending' ? (
+              <div className="title-actions">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={busy === offer.id}
+                  onClick={() => void decide(offer, true)}
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  className="button button-quiet"
+                  disabled={busy === offer.id}
+                  onClick={() => void decide(offer, false)}
+                >
+                  Decline
+                </button>
+              </div>
+            ) : (
+              <p className="status">
+                {offer.status === 'accepted' ? 'Accepted' : 'Declined'} ·{' '}
+                {offer.createdAt.slice(0, 10)}
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

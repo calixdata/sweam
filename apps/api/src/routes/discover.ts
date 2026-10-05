@@ -33,7 +33,7 @@ discoverRoutes.get('/', async (c) => {
   const nowMs = Date.now();
   const catalogImpressions = results.reduce((sum, row) => sum + row.impressions, 0);
 
-  const ranked = rankTitles(
+  const scored = rankTitles(
     results,
     (row) => ({
       publishedAtMs: row.published_at ? Date.parse(row.published_at) : nowMs,
@@ -43,11 +43,18 @@ discoverRoutes.get('/', async (c) => {
       likes: row.likes,
     }),
     { nowMs, catalogImpressions },
-  ).slice(0, FEED_SIZE);
+  );
+  // Scout promotion deals get a placement boost: promoted titles float to the
+  // top. A stable sort keeps the glass-box score order within each group.
+  const ranked = scored
+    .slice()
+    .sort((a, b) => (b.item.promoted_by ? 1 : 0) - (a.item.promoted_by ? 1 : 0))
+    .slice(0, FEED_SIZE);
 
   const items: DiscoverItem[] = ranked.map(({ item, ranked: score }) => ({
     title: mapTitle(item),
-    reason: score.reason,
+    // Promotion is disclosed as the reason, keeping discovery glass-box.
+    reason: item.promoted_by ? `Promoted by ${item.promoted_by}` : score.reason,
     stats: {
       plays: item.plays,
       finishRate: Number(smoothedFinishRate(item).toFixed(2)),

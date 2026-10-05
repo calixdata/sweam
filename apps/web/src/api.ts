@@ -57,7 +57,9 @@ export async function apiUpload(file: File, base = '/api/studio/upload'): Promis
     headers: { 'content-type': file.type },
     body: file,
   });
-  const data = (await res.json().catch(() => null)) as ({ url: string } & ApiErrorBody) | null;
+  const data = (await res.json().catch(() => null)) as
+    | ({ url?: string; avatarUrl?: string } & ApiErrorBody)
+    | null;
   if (!res.ok) {
     throw new ApiError(
       res.status,
@@ -65,6 +67,8 @@ export async function apiUpload(file: File, base = '/api/studio/upload'): Promis
       data?.error?.message ?? `Upload failed (${res.status}).`,
     );
   }
-  if (!data?.url) throw new ApiError(500, 'bad_response', 'Upload succeeded but returned no URL.');
-  return { url: data.url };
+  // Uploaders answer with `url`; the profile-picture uploader also names it `avatarUrl`.
+  const url = data?.url ?? data?.avatarUrl;
+  if (!url) throw new ApiError(500, 'bad_response', 'Upload succeeded but returned no URL.');
+  return { url };
 }

@@ -12,6 +12,7 @@ import { AdminMonetization } from './pages/AdminMonetization';
 import { AdminSubmissions } from './pages/AdminSubmissions';
 import { AdminVideo } from './pages/AdminVideo';
 import { Browse } from './pages/Browse';
+import { ConfirmEmailChange } from './pages/ConfirmEmailChange';
 import { Contact } from './pages/Contact';
 import { CreatorPage } from './pages/CreatorPage';
 import { Faq } from './pages/Faq';
@@ -21,6 +22,7 @@ import { AiDisclosure } from './pages/legal/AiDisclosure';
 import { CommunityGuidelines } from './pages/legal/CommunityGuidelines';
 import { Cookies } from './pages/legal/Cookies';
 import { CreatorAgreement } from './pages/legal/CreatorAgreement';
+import { ScoutTerms } from './pages/legal/ScoutTerms';
 import { Privacy } from './pages/legal/Privacy';
 import { Terms } from './pages/legal/Terms';
 import { MeSubscriptions } from './pages/MeSubscriptions';
@@ -140,6 +142,7 @@ export function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/confirm-email-change" element={<ConfirmEmailChange />} />
         <Route path="/verify" element={<Verify />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/faq" element={<Faq />} />
@@ -149,6 +152,7 @@ export function App() {
         <Route path="/legal/ai" element={<AiDisclosure />} />
         <Route path="/legal/community-guidelines" element={<CommunityGuidelines />} />
         <Route path="/legal/creator-agreement" element={<CreatorAgreement />} />
+        <Route path="/legal/scout-terms" element={<ScoutTerms />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

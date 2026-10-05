@@ -1,12 +1,28 @@
 import { Hono } from 'hono';
+import { getCookie } from 'hono/cookie';
 import type { NotificationItem } from '@sweam/shared';
+import { UPLOAD_SPECS } from '@sweam/shared';
 import type { AppEnv } from '../env';
+import { generateToken, hashPassword, sha256Hex, verifyPassword } from '../lib/auth';
+import { emailChangeVerification, emailConfigured, sendEmail } from '../lib/email';
 import { fail, nowIso, parseBody } from '../lib/http';
 import type { TitleRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
-import { requireUser, currentUser } from '../lib/session';
-import { pushTokenDeleteSchema, pushTokenSchema, reportCreateSchema, usernameSchema } from '../lib/validate';
+import { loadScoutMembership } from '../lib/scoutMembership';
+import { SESSION_COOKIE, bearerToken, requireUser, currentUser } from '../lib/session';
+import {
+  changeEmailSchema,
+  changePasswordSchema,
+  pushTokenDeleteSchema,
+  pushTokenSchema,
+  reportCreateSchema,
+  usernameSchema,
+} from '../lib/validate';
+import { mediaKeyFor, resolveUploadContentType } from './studio';
+
+/** In-app email-change links are good for 24 hours. */
+const EMAIL_CHANGE_TTL_MS = 24 * 60 * 60 * 1000;
 
 /** Signed-in viewer state: watchlist, likes, reports, and notifications. */
 export const meRoutes = new Hono<AppEnv>();
@@ -35,6 +51,141 @@ meRoutes.post('/username', async (c) => {
   }
   await c.env.DB.batch(statements);
   return c.json({ username });
+});
+
+// ---------------------------------------------------------------------------
+// Profile picture
+// ---------------------------------------------------------------------------
+
+/** Upload (or replace) the account's profile picture. Single PUT; images only. */
+meRoutes.put('/avatar/:filename', async (c) => {
+  const user = currentUser(c);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.upload, user.id);
+  const filename = c.req.param('filename');
+  const contentType = resolveUploadContentType(c.req.header('content-type'), filename);
+  if (!contentType || !contentType.startsWith('image/')) {
+    fail(415, 'unsupported_type', 'Upload a JPEG, PNG, or WebP image.');
+  }
+  const contentLength = Number(c.req.header('content-length') ?? '0');
+  if (!Number.isFinite(contentLength) || contentLength <= 0) {
+    fail(411, 'length_required', 'Uploads must include a Content-Length header.');
+  }
+  if (contentLength > UPLOAD_SPECS.avatar.maxBytes) {
+    fail(413, 'too_large', `Profile pictures are limited to ${UPLOAD_SPECS.avatar.maxLabel}.`);
+  }
+  if (!c.req.raw.body) fail(400, 'empty_body', 'Upload body is empty.');
+
+  const key = mediaKeyFor(user.id, filename);
+  await c.env.MEDIA.put(key, c.req.raw.body, { httpMetadata: { contentType } });
+  const url = `/media/${key}`;
+  await c.env.DB.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').bind(url, user.id).run();
+  // The replaced picture is no longer referenced anywhere; free the storage.
+  await deleteOwnMediaObject(c.env.MEDIA, user.id, user.avatarUrl);
+  // `url` is what every uploader returns; `avatarUrl` is kept for the mobile app.
+  return c.json({ url, avatarUrl: url }, 201);
+});
+
+/** Remove the account's profile picture (reverts to the initials fallback). */
+meRoutes.delete('/avatar', async (c) => {
+  const user = currentUser(c);
+  await c.env.DB.prepare('UPDATE users SET avatar_url = NULL WHERE id = ?').bind(user.id).run();
+  await deleteOwnMediaObject(c.env.MEDIA, user.id, user.avatarUrl);
+  return c.json({ url: null, avatarUrl: null });
+});
+
+/**
+ * Delete a /media object the user uploaded under their own prefix (a previous
+ * profile picture). Anything else, including absolute URLs, is left alone, and
+ * a failed delete never fails the request that replaced the picture.
+ */
+async function deleteOwnMediaObject(
+  media: R2Bucket,
+  userId: string,
+  mediaUrl: string | null,
+): Promise<void> {
+  const prefix = `/media/u/${userId}/`;
+  if (!mediaUrl || !mediaUrl.startsWith(prefix)) return;
+  try {
+    await media.delete(mediaUrl.slice('/media/'.length));
+  } catch {
+    // Orphaned objects are harmless; the new picture is already in place.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Account security: change password, change email
+// ---------------------------------------------------------------------------
+
+/** Change the password, proving the current one, then sign out other sessions. */
+meRoutes.post('/change-password', async (c) => {
+  const user = currentUser(c);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.pwChange, user.id);
+  const body = await parseBody(c, changePasswordSchema);
+  const row = await c.env.DB.prepare('SELECT password_hash FROM users WHERE id = ?')
+    .bind(user.id)
+    .first<{ password_hash: string }>();
+  if (!row || !(await verifyPassword(body.currentPassword, row.password_hash))) {
+    fail(400, 'invalid_password', 'Your current password is incorrect.');
+  }
+  // Keep this session, but sign out every other device for safety.
+  const token = getCookie(c, SESSION_COOKIE) ?? bearerToken(c);
+  const currentHash = token ? await sha256Hex(token) : '';
+  await c.env.DB.batch([
+    c.env.DB
+      .prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+      .bind(await hashPassword(body.newPassword), user.id),
+    c.env.DB
+      .prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?')
+      .bind(user.id, currentHash),
+  ]);
+  return c.json({ ok: true });
+});
+
+/**
+ * Request an email change. The new address must be confirmed from an emailed
+ * link before it becomes the account email; nothing changes until then.
+ */
+meRoutes.post('/change-email', async (c) => {
+  const user = currentUser(c);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.emailChange, user.id);
+  const body = await parseBody(c, changeEmailSchema);
+  if (!emailConfigured(c.env)) {
+    fail(503, 'email_unavailable', 'Email changes are paused while email delivery is being set up.');
+  }
+  if (body.newEmail === user.email) {
+    fail(400, 'same_email', 'That is already your account email.');
+  }
+  const row = await c.env.DB.prepare('SELECT password_hash FROM users WHERE id = ?')
+    .bind(user.id)
+    .first<{ password_hash: string }>();
+  if (!row || !(await verifyPassword(body.password, row.password_hash))) {
+    fail(400, 'invalid_password', 'Your password is incorrect.');
+  }
+  const taken = await c.env.DB.prepare('SELECT 1 AS x FROM users WHERE email = ? AND id <> ?')
+    .bind(body.newEmail, user.id)
+    .first();
+  if (taken) fail(409, 'email_taken', 'An account with that email already exists.');
+
+  const token = generateToken();
+  const expiresAt = new Date(Date.now() + EMAIL_CHANGE_TTL_MS).toISOString();
+  await c.env.DB.prepare(
+    'UPDATE users SET pending_email = ?, pending_email_token_hash = ?, pending_email_expires_at = ? WHERE id = ?',
+  )
+    .bind(body.newEmail, await sha256Hex(token), expiresAt, user.id)
+    .run();
+  const link = `${new URL(c.req.url).origin}/confirm-email-change?token=${encodeURIComponent(token)}`;
+  try {
+    await sendEmail(c.env, { to: body.newEmail, ...emailChangeVerification(link, user.displayName) });
+  } catch {
+    // Roll back the pending change so they can retry cleanly.
+    await c.env.DB.prepare(
+      'UPDATE users SET pending_email = NULL, pending_email_token_hash = NULL, pending_email_expires_at = NULL WHERE id = ?',
+    )
+      .bind(user.id)
+      .run();
+    fail(502, 'email_send_failed', 'We could not send the confirmation email. Please try again in a minute.');
+  }
+  return c.json({ pending: true, email: body.newEmail });
 });
 
 meRoutes.get('/watchlist', async (c) => {
@@ -198,7 +349,7 @@ meRoutes.delete('/push-tokens', async (c) => {
   return c.json({ ok: true });
 });
 
-// The viewer's active Sweam Blu subscriptions and scout all-access (for the manage screen).
+// The viewer's active Sweam Blu subscriptions and scout membership (for the manage screen).
 meRoutes.get('/subscriptions', async (c) => {
   const user = currentUser(c);
   const { results } = await c.env.DB.prepare(
@@ -217,11 +368,9 @@ meRoutes.get('/subscriptions', async (c) => {
       price_cents: number;
       current_period_end: string | null;
     }>();
-  const scout = await c.env.DB.prepare(
-    "SELECT current_period_end FROM scout_all_access WHERE user_id = ? AND status = 'active'",
-  )
-    .bind(user.id)
-    .first<{ current_period_end: string | null }>();
+  // Scout membership includes Blu all-access, so an approved scout's standing is
+  // reported here next to their creator subscriptions.
+  const scoutMembership = await loadScoutMembership(c.env.DB, user.id);
   return c.json({
     blu: results.map((r) => ({
       creatorId: r.creator_id,
@@ -230,7 +379,12 @@ meRoutes.get('/subscriptions', async (c) => {
       priceCents: r.price_cents,
       currentPeriodEnd: r.current_period_end,
     })),
-    scoutAllAccess: { active: scout !== null, currentPeriodEnd: scout?.current_period_end ?? null },
+    scoutMembership,
+    // Older cached bundles still read this shape.
+    scoutAllAccess: {
+      active: scoutMembership?.active ?? false,
+      currentPeriodEnd: scoutMembership?.currentPeriodEnd ?? null,
+    },
   });
 });
 

@@ -1,4 +1,4 @@
-import type { DailyPoint, EpisodeRetention } from '@sweam/shared';
+import type { DailyPoint, EpisodeRetention, EpisodeViews } from '@sweam/shared';
 import { buildRetentionCurve } from './momentum';
 
 /**
@@ -81,4 +81,55 @@ export async function loadRetention(db: D1Database, titleId: string): Promise<Ep
       curve: buildRetentionCurve(viewers),
     };
   });
+}
+
+interface EpisodeViewsRow {
+  id: string;
+  title_id: string;
+  season: number;
+  episode: number;
+  name: string;
+  views: number;
+  finishes: number;
+}
+
+/**
+ * Views per episode for the given titles, keyed by title id. A view is a
+ * tracked viewing session that started the episode (signed-in progress rows
+ * and anonymous view sessions alike, the same events that count as plays); a
+ * finish is one that reached the completion threshold.
+ */
+export async function loadEpisodeViews(
+  db: D1Database,
+  titleIds: string[],
+): Promise<Map<string, EpisodeViews[]>> {
+  const byTitle = new Map<string, EpisodeViews[]>();
+  if (titleIds.length === 0) return byTitle;
+  const placeholders = titleIds.map(() => '?').join(', ');
+  const { results } = await db
+    .prepare(
+      `SELECT e.id, e.title_id, e.season, e.episode, e.name,
+         (SELECT COUNT(*) FROM progress p WHERE p.episode_id = e.id)
+           + (SELECT COUNT(*) FROM anonymous_views a WHERE a.episode_id = e.id) AS views,
+         (SELECT COALESCE(SUM(p.completed), 0) FROM progress p WHERE p.episode_id = e.id)
+           + (SELECT COALESCE(SUM(a.completed), 0) FROM anonymous_views a WHERE a.episode_id = e.id) AS finishes
+       FROM episodes e
+       WHERE e.title_id IN (${placeholders})
+       ORDER BY e.title_id, e.season, e.episode`,
+    )
+    .bind(...titleIds)
+    .all<EpisodeViewsRow>();
+  for (const row of results) {
+    const list = byTitle.get(row.title_id) ?? [];
+    list.push({
+      episodeId: row.id,
+      season: row.season,
+      episode: row.episode,
+      name: row.name,
+      views: row.views,
+      finishes: row.finishes,
+    });
+    byTitle.set(row.title_id, list);
+  }
+  return byTitle;
 }

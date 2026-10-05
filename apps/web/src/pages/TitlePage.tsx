@@ -19,6 +19,7 @@ export function TitlePage() {
   const [busy, setBusy] = useState(false);
   const [bluBusy, setBluBusy] = useState(false);
   const [bluError, setBluError] = useState<string | null>(null);
+  const [shareNote, setShareNote] = useState('');
 
   usePageTitle(title?.name ?? 'Title');
 
@@ -85,6 +86,21 @@ export function TitlePage() {
     }
   }
 
+  async function shareTitle() {
+    if (!title) return;
+    const url = `${window.location.origin}/t/${title.slug}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: title.name, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        setShareNote('Link copied to your clipboard.');
+      }
+    } catch {
+      // Share sheet dismissed, or clipboard blocked; nothing to do.
+    }
+  }
+
   async function toggleLike() {
     if (!title || requireSignIn()) return;
     setBusy(true);
@@ -120,6 +136,7 @@ export function TitlePage() {
             {title.creator.displayName} (@{title.creator.handle})
           </Link>
         </p>
+        {title.promotedBy && <p className="promoted-notice">Promoted by {title.promotedBy}</p>}
         <p className="title-synopsis">{title.synopsis}</p>
         {(title.audiences.length > 0 || title.genres.length > 0 || title.subgenres.length > 0) && (
           <ul className="title-tags" aria-label="Audience, genres, and sub-genres">
@@ -179,8 +196,21 @@ export function TitlePage() {
           >
             {title.likedByMe ? 'Liked' : 'Like'} ({title.likes})
           </button>
+          <button type="button" className="button button-quiet" onClick={() => void shareTitle()}>
+            Share
+          </button>
+          {title.allowDownload && firstEpisode && (
+            <a className="button button-quiet" href={firstEpisode.videoUrl} download>
+              Download
+            </a>
+          )}
           <ReportControl titleId={title.id} titleSlug={title.slug} signedIn={user !== null} />
         </div>
+        {shareNote && (
+          <p className="status" role="status">
+            {shareNote}
+          </p>
+        )}
         {bluError && (
           <p className="status status-error" role="alert">
             {bluError}

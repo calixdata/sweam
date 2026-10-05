@@ -265,6 +265,7 @@ export function Record() {
         <ul>
           <li>Up to {CLIP_SPEC.maxSeconds} seconds, {CLIP_SPEC.maxLabel} maximum.</li>
           <li>Recorded here, or upload a {UPLOAD_SPECS.video.formats} file.</li>
+          <li>{UPLOAD_SPECS.video.recommended}</li>
           <li>A caption and a maturity rating are required.</li>
         </ul>
       </aside>

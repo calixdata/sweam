@@ -205,6 +205,9 @@ function FeedCard({
   const [likeCount, setLikeCount] = useState(item.likes);
   const [paused, setPaused] = useState(false);
   const [showPoster, setShowPoster] = useState(true);
+  // How the video sits in the cell: 'cover' fills the screen (vertical clips),
+  // 'contain' shows the whole frame over the blurred backdrop (wider clips).
+  const [fit, setFit] = useState<'cover' | 'contain'>('contain');
   const heart = useSharedValue(0);
   const poster = mediaUrl(item.posterUrl);
 
@@ -231,6 +234,19 @@ function FeedCard({
     if (isActive && !paused && screenFocused) player.play();
     else player.pause();
   }, [isActive, paused, screenFocused, player]);
+
+  // Choose the fit from the video's real shape once its source metadata loads:
+  // portrait clips fill the screen; landscape clips show the whole frame. Falls
+  // back to 'contain' (never crops a cinematic frame) until the size is known.
+  useEffect(() => {
+    const sub = player.addListener('sourceLoad', ({ availableVideoTracks }) => {
+      const size = availableVideoTracks?.find(
+        (t) => t.size && t.size.width > 0 && t.size.height > 0,
+      )?.size;
+      if (size) setFit(size.width < size.height ? 'cover' : 'contain');
+    });
+    return () => sub.remove();
+  }, [player]);
 
   // Hide the poster once the active video is actually playing.
   useEffect(() => {
@@ -274,16 +290,34 @@ function FeedCard({
 
   return (
     <View style={{ height, backgroundColor: '#000' }}>
+      {/* A heavily blurred, darkened copy fills the cell as ambient backdrop, so
+          a non-vertical video (e.g. a 16:9 cinematic episode) reads as a full
+          frame over soft darkness instead of hard black bars — and never over
+          recognizable cover art. */}
       {poster && (
-        <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <Image
+          source={{ uri: poster }}
+          style={[StyleSheet.absoluteFill, styles.backdrop]}
+          contentFit="cover"
+          blurRadius={40}
+        />
+      )}
+      {/* The sharp poster (full frame, contain) ONLY while the video has not
+          started. Once it plays, this is removed so the letterbox gaps show the
+          blurred backdrop above — not the artwork sitting behind the video. */}
+      {poster && showPoster && (
+        <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="contain" />
       )}
       <GestureDetector gesture={gesture}>
         <View style={StyleSheet.absoluteFill}>
           {isNear && (
             <VideoView
+              // Vertical clips fill the screen (cover); wider clips show the
+              // whole frame (contain) over the blurred backdrop — chosen per
+              // clip from its real dimensions, so nothing is cropped or stretched.
               style={[StyleSheet.absoluteFill, showPoster && isActive ? styles.hidden : null]}
               player={player}
-              contentFit="cover"
+              contentFit={fit}
               nativeControls={false}
             />
           )}
@@ -330,11 +364,29 @@ function FeedCard({
           onPress={() => router.push(`/c/${item.creator.handle}`)}
           accessibilityRole="button"
           accessibilityLabel={`View @${item.creator.handle}'s profile`}
+          style={styles.captionCreator}
         >
+          <FeedAvatar uri={mediaUrl(item.creator.avatarUrl)} name={item.creator.displayName} />
           <Text style={styles.captionName}>@{item.creator.handle}</Text>
         </Pressable>
         <Text style={styles.captionText} numberOfLines={2}>{item.name}</Text>
+        {item.promotedBy ? (
+          <Text style={styles.captionPromoted}>Promoted by {item.promotedBy}</Text>
+        ) : null}
       </View>
+    </View>
+  );
+}
+
+/** The creator's round profile picture in the feed caption, with an initials fallback. */
+function FeedAvatar({ uri, name }: { uri: string | null; name: string }) {
+  if (uri) {
+    return <Image source={{ uri }} style={styles.feedAvatar} contentFit="cover" />;
+  }
+  const initial = (name.trim()[0] ?? '?').toUpperCase();
+  return (
+    <View style={[styles.feedAvatar, styles.feedAvatarFallback]}>
+      <Text style={styles.feedAvatarText}>{initial}</Text>
     </View>
   );
 }
@@ -348,6 +400,8 @@ const styles = StyleSheet.create({
   centered: { alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
   centeredOverlay: { alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
   hidden: { opacity: 0 },
+  // Darkens the blurred backdrop so it reads as ambient darkness, not artwork.
+  backdrop: { opacity: 0.45 },
   gateTitle: { color: colors.text, fontSize: 24, fontWeight: '700' },
   gateBody: { color: colors.muted, fontSize: 16, textAlign: 'center' },
   primaryBtn: { backgroundColor: colors.accent, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 10, marginTop: 8 },
@@ -383,6 +437,21 @@ const styles = StyleSheet.create({
   railBtn: { alignItems: 'center', gap: 3 },
   railText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   caption: { position: 'absolute', left: 16, right: 80, bottom: 96 },
-  captionName: { color: '#fff', fontSize: 16, fontWeight: '700', marginBottom: 4 },
+  captionCreator: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  captionName: { color: '#fff', fontSize: 16, fontWeight: '700' },
   captionText: { color: 'rgba(255,255,255,0.9)', fontSize: 14 },
+  captionPromoted: { color: '#f5c47c', fontSize: 12, fontWeight: '700', marginTop: 3 },
+  feedAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+  },
+  feedAvatarFallback: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedAvatarText: { color: '#fff', fontWeight: '800', fontSize: 14 },
 });

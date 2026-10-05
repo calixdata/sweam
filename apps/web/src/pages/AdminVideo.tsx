@@ -51,6 +51,7 @@ function SwapTool() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const [suppressing, setSuppressing] = useState(false);
 
   async function loadEpisodes() {
     setError(null);
@@ -85,6 +86,35 @@ function SwapTool() {
       setError(err instanceof ApiError ? err.message : 'Could not swap the video.');
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function toggleSuppress() {
+    if (!data) return;
+    const suppress = !data.title.suppressed;
+    const prompt = suppress
+      ? `Suppress "${data.title.name}"? It will be hidden from Sweam immediately and the creator will not be able to publish, unpublish, or delete it until you lift the hold.`
+      : `Unsuppress "${data.title.name}"? It will be republished and visible on Sweam again.`;
+    if (!window.confirm(prompt)) return;
+    setSuppressing(true);
+    setNotice('');
+    setError(null);
+    try {
+      const res = await apiSend<{ suppressed: boolean; published: boolean }>(
+        'POST',
+        `/api/admin/titles/${encodeURIComponent(data.title.slug)}/suppress`,
+        { suppress },
+      );
+      setData({ ...data, title: { ...data.title, suppressed: res.suppressed, published: res.published } });
+      setNotice(
+        res.suppressed
+          ? 'Suppressed. This title is now hidden from Sweam and frozen for the creator.'
+          : 'Unsuppressed. This title is live again.',
+      );
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not change suppression.');
+    } finally {
+      setSuppressing(false);
     }
   }
 
@@ -124,6 +154,46 @@ function SwapTool() {
             {data.title.name}{' '}
             {data.title.creatorHandle ? `(@${data.title.creatorHandle})` : ''}
           </h3>
+
+          <div className="admin-suppress">
+            <p>
+              Status:{' '}
+              <strong>
+                {data.title.suppressed ? 'Suppressed (investigation hold)' : data.title.published ? 'Live' : 'Draft'}
+              </strong>
+            </p>
+            {data.title.suppressed ? (
+              <>
+                <p className="field-hint">
+                  Hidden from every Sweam surface and from playback. The creator cannot publish,
+                  unpublish, or delete it. Admins can still watch it to investigate.
+                </p>
+                <button type="button" className="button" onClick={() => void toggleSuppress()} disabled={suppressing}>
+                  {suppressing ? 'Working…' : 'Unsuppress & republish'}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="field-hint">
+                  Suppressing hides this title everywhere and freezes it for the creator while you
+                  investigate. It issues no takedown or strike, and is reversible.
+                </p>
+                <button
+                  type="button"
+                  className="button button-danger"
+                  onClick={() => void toggleSuppress()}
+                  disabled={suppressing || !data.title.published}
+                  title={data.title.published ? undefined : 'Only a live title can be suppressed.'}
+                >
+                  {suppressing ? 'Working…' : 'Suppress (investigation hold)'}
+                </button>
+                {!data.title.published && (
+                  <p className="field-hint">Only a live title can be suppressed.</p>
+                )}
+              </>
+            )}
+          </div>
+
           {data.episodes.length === 0 ? (
             <p>This title has no episodes.</p>
           ) : (

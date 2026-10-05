@@ -44,24 +44,44 @@ export function Discover() {
       {error && <ErrorNote message={error} />}
       {!items && !error && <Loading label="Ranking the catalog" />}
       {items && (
-        <ol className="discover-list">
-          {items.map((item, index) => (
-            <li key={item.title.id}>
-              <div className="discover-rank" aria-hidden="true">
-                {index + 1}
-              </div>
-              <TitleCard title={item.title} />
-              <div className="discover-why">
-                <p className="discover-reason">{item.reason}</p>
-                <p className="discover-stats">
-                  {item.stats.plays.toLocaleString()} plays · {Math.round(item.stats.finishRate * 100)}%
-                  finish it
-                </p>
-              </div>
-            </li>
-          ))}
-        </ol>
+        <>
+          {items.some((it) => it.title.kind !== 'short') && (
+            <section aria-labelledby="discover-shows-heading">
+              <h2 id="discover-shows-heading">Shows &amp; films</h2>
+              <DiscoverList items={items.filter((it) => it.title.kind !== 'short')} />
+            </section>
+          )}
+          {items.some((it) => it.title.kind === 'short') && (
+            <section aria-labelledby="discover-clips-heading">
+              <h2 id="discover-clips-heading">Clips</h2>
+              <DiscoverList items={items.filter((it) => it.title.kind === 'short')} />
+            </section>
+          )}
+        </>
       )}
     </div>
+  );
+}
+
+/** One ranked list of Discover entries (rank numbering is per list). */
+function DiscoverList({ items }: { items: DiscoverItem[] }) {
+  return (
+    <ol className="discover-list">
+      {items.map((item, index) => (
+        <li key={item.title.id}>
+          <div className="discover-rank" aria-hidden="true">
+            {index + 1}
+          </div>
+          <TitleCard title={item.title} />
+          <div className="discover-why">
+            <p className="discover-reason">{item.reason}</p>
+            <p className="discover-stats">
+              {item.stats.plays.toLocaleString()} plays · {Math.round(item.stats.finishRate * 100)}%
+              finish it
+            </p>
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }

@@ -7,6 +7,7 @@ export interface SessionUser {
   id: string;
   email: string;
   displayName: string;
+  avatarUrl: string | null;
   username: string | null;
   handle: string | null;
   isAdmin: boolean;
@@ -15,6 +16,7 @@ export interface SessionUser {
 export interface CreatorRef {
   handle: string;
   displayName: string;
+  avatarUrl?: string | null;
 }
 
 export interface FeedItem {
@@ -32,6 +34,8 @@ export interface FeedItem {
   commentCount: number;
   likedByMe: boolean;
   isBlu: boolean;
+  /** Company name when a scout promotion deal is active, else null. */
+  promotedBy: string | null;
 }
 
 export interface TitleSummary {
@@ -86,6 +90,20 @@ export interface TitleDetail extends TitleSummary {
   bluAccess: boolean;
 }
 
+/** A creator's own title in the "Your content" screen (includes drafts). */
+export interface StudioTitleSummary {
+  id: string;
+  slug: string;
+  name: string;
+  kind: string;
+  published: boolean;
+  episodeCount: number;
+  /** Currently Sweam Blu (paid). */
+  isBlu: boolean;
+  /** Has ever been Blu (even if free now); gates whether it can be hard-deleted. */
+  everBlu: boolean;
+}
+
 export interface CommentItem {
   id: string;
   body: string;
@@ -109,11 +127,32 @@ export interface WatchPayload {
 export interface CreatorPublicPage {
   handle: string;
   displayName: string;
+  avatarUrl: string | null;
   bio: string;
   verified: boolean;
+  /** True when the account has a creator profile; every account has a profile page. */
+  isCreator?: boolean;
   followerCount: number;
   followedByMe: boolean;
   titles: TitleSummary[];
+}
+
+/** An account found by search: any Sweam account, creator or not. */
+export interface AccountSearchResult {
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  isCreator: boolean;
+  verified: boolean;
+  followerCount: number;
+  publishedTitles: number;
+}
+
+/** Search results: matching accounts first, then matching titles. */
+export interface SearchResults {
+  query: string;
+  accounts: AccountSearchResult[];
+  results: TitleSummary[];
 }
 
 export interface NotificationItem {

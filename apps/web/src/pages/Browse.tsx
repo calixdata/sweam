@@ -77,7 +77,8 @@ export function Browse() {
               All kinds
             </Link>
           </li>
-          {CONTENT_KINDS.map((value) => (
+          {/* Clips (shorts) live in the feed, not the catalog, so Browse omits them. */}
+          {CONTENT_KINDS.filter((value) => value !== 'short').map((value) => (
             <li key={value}>
               <Link
                 to={chipHref(params, 'kind', value)}

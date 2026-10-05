@@ -252,10 +252,10 @@ export async function publishClip(
         .prepare(
           `INSERT INTO titles
              (id, creator_id, kind, name, slug, synopsis, genre, audiences, genres, subgenres, advisory, poster_url,
-              published, published_at, admin_locked, series_id, review_state, is_blu, blu_price_cents, blu_changed_at, created_at)
-           VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, NULL, 1, ?, 1, NULL, 'pending', ?, ?, ?, ?)`,
+              published, published_at, admin_locked, series_id, review_state, is_blu, blu_price_cents, blu_changed_at, ever_blu, created_at)
+           VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, NULL, 1, ?, 1, NULL, 'pending', ?, ?, ?, ?, ?)`,
         )
-        .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), genres, advisory, now, isBlu ? 1 : 0, clip.bluPriceCents, isBlu ? now : null, now),
+        .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), genres, advisory, now, isBlu ? 1 : 0, clip.bluPriceCents, isBlu ? now : null, isBlu ? 1 : 0, now),
       env.DB.prepare('INSERT INTO title_stats (title_id) VALUES (?)').bind(titleId),
     ]);
 

@@ -99,3 +99,26 @@ export function passwordResetEmail(
     `</div></body></html>`;
   return { subject, html, text };
 }
+
+/** Sent to the NEW address to confirm an email change (subject, HTML, text parts). */
+export function emailChangeVerification(
+  link: string,
+  displayName: string,
+): { subject: string; html: string; text: string } {
+  const name = escapeHtml(displayName);
+  const subject = 'Confirm your new email for Sweam';
+  const text =
+    `Hi ${displayName},\n\n` +
+    `Confirm this address to make it the email on your Sweam account:\n${link}\n\n` +
+    `This link expires in 24 hours. If you did not request this change, you can ignore this email; your account email will not change.`;
+  const html =
+    `<!doctype html><html><body style="margin:0;font-family:Segoe UI,Arial,sans-serif;background:#080e19;color:#f4f7ff;padding:24px">` +
+    `<div style="max-width:480px;margin:0 auto;background:#111c2d;border:1px solid #293a52;border-radius:14px;padding:28px">` +
+    `<h1 style="font-size:1.35rem;margin:0 0 12px">Confirm your new email</h1>` +
+    `<p style="color:#a5b5cd;margin:0 0 20px">Hi ${name}, confirm this address to make it the email on your Sweam account.</p>` +
+    `<p style="margin:0 0 24px"><a href="${link}" style="display:inline-block;background:#4de0f3;color:#061827;font-weight:700;text-decoration:none;padding:12px 20px;border-radius:8px">Confirm new email</a></p>` +
+    `<p style="color:#a5b5cd;font-size:0.85rem;margin:0">Or paste this link into your browser:<br><a href="${link}" style="color:#6fe1f2">${link}</a></p>` +
+    `<p style="color:#a5b5cd;font-size:0.85rem;margin:16px 0 0">This link expires in 24 hours. If you did not request this change, ignore this email; your account email will not change.</p>` +
+    `</div></body></html>`;
+  return { subject, html, text };
+}

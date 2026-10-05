@@ -124,7 +124,9 @@ export default function CreatorScreen() {
 
       <Text style={styles.gridHeading}>Titles</Text>
       {page.titles.length === 0 ? (
-        <Text style={[styles.muted, { paddingHorizontal: pad }]}>No published titles yet.</Text>
+        <Text style={[styles.muted, { paddingHorizontal: pad }]}>
+          {page.isCreator === false ? 'No posts yet.' : 'No published titles yet.'}
+        </Text>
       ) : (
         <View style={[styles.grid, { paddingHorizontal: pad, gap }]}>
           {page.titles.map((t) => {

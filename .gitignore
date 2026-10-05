@@ -24,3 +24,12 @@ Sweam Temp/
 Sweam-Portfolio-*.png
 Sweam-Portfolio-*.webp
 perch-db-backup-*.sql
+
+# Brand kits, artwork previews and loose builds (not app source)
+SWEAM BLU ICON LOGO/
+SWEAM LAUNCH PICS AND VIDS/
+SWEAM NEW LOGO OCT 2026/
+SWEAM SCOUT LOGO/
+sweam-stripe-artwork-preview.*
+small-size-proof.*
+*.apk

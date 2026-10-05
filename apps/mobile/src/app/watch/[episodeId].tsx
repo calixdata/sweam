@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
@@ -55,6 +55,16 @@ export default function WatchScreen() {
       };
     }, [player]),
   );
+
+  const shareTitle = useCallback(async () => {
+    if (!payload) return;
+    const url = `https://sweam.co/t/${payload.title.slug}`;
+    try {
+      await Share.share({ message: `${payload.title.name} on Sweam\n${url}`, url });
+    } catch {
+      /* share sheet dismissed */
+    }
+  }, [payload]);
 
   const toggleLike = useCallback(async () => {
     if (!payload) return;
@@ -124,6 +134,15 @@ export default function WatchScreen() {
           >
             <Ionicons name="chatbubble-outline" size={22} color="#fff" />
             <Text style={styles.actionText}>Comments</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Share"
+            onPress={() => void shareTitle()}
+          >
+            <Ionicons name="share-outline" size={22} color="#fff" />
+            <Text style={styles.actionText}>Share</Text>
           </Pressable>
         </View>
         {episode.synopsis ? <Text style={styles.synopsis}>{episode.synopsis}</Text> : null}

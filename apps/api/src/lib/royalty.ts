@@ -152,8 +152,19 @@ export async function runScoutRoyalty(
     return mapRun(existing, await allocationsForRun(db, existing.id));
   }
 
+  // The pool is funded by fees actually collected: paid memberships only. A
+  // scout still inside the first-50 free period (or holding a card-free free
+  // membership) has not paid for the month, so they add nothing to the pool,
+  // though their Blu watch-time still shapes how it is split.
   const scoutRow = await db
-    .prepare("SELECT COUNT(*) AS n FROM scout_all_access WHERE status = 'active'")
+    .prepare(
+      `SELECT COUNT(*) AS n FROM scout_all_access saa
+       JOIN scout_profiles sp ON sp.user_id = saa.user_id
+       WHERE sp.status = 'approved' AND saa.status = 'active'
+         AND saa.stripe_subscription_id IS NOT NULL
+         AND (saa.trial_end IS NULL OR saa.trial_end < ?)`,
+    )
+    .bind(periodEnd)
     .first<{ n: number }>();
   const scoutCount = scoutRow?.n ?? 0;
   const poolCents = Math.round(scoutCount * SCOUT_ALL_ACCESS_CENTS * BLU_CREATOR_SHARE);

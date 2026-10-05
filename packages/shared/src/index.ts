@@ -9,15 +9,22 @@ export * from './money';
 import type { MonetizationEligibility } from './money';
 
 /** The kinds of catalog entries a creator can publish. */
-export type ContentKind = 'film' | 'series' | 'short' | 'documentary';
+export type ContentKind = 'film' | 'series' | 'short' | 'documentary' | 'reality';
 
-export const CONTENT_KINDS: readonly ContentKind[] = ['film', 'series', 'short', 'documentary'];
+export const CONTENT_KINDS: readonly ContentKind[] = [
+  'film',
+  'series',
+  'short',
+  'documentary',
+  'reality',
+];
 
 export const CONTENT_KIND_LABELS: Record<ContentKind, string> = {
   film: 'Film',
   series: 'Series',
   short: 'Short film',
   documentary: 'Documentary',
+  reality: 'Reality series',
 };
 
 export const GENRES = [
@@ -116,8 +123,43 @@ export function bluTierByCents(cents: number | null): BluTier | undefined {
 /** A creator may flip a title between Free and Blu at most once per this window. */
 export const BLU_SWITCH_COOLDOWN_DAYS = 30;
 
-/** Scout All-Access: one monthly fee for all Blu content, no per-creator subscriptions. */
-export const SCOUT_ALL_ACCESS_CENTS = 9900;
+/**
+ * Scout membership: one monthly fee that unlocks the scout portal and all-access
+ * to Blu content. Intro pricing of $25/month while the platform is being seeded;
+ * revisit once there are at least 10,000 content accounts.
+ */
+export const SCOUT_ALL_ACCESS_CENTS = 2500;
+
+/** The first N approved scouts get the membership free for a trial window (beta). */
+export const SCOUT_BETA_FREE_LIMIT = 50;
+/** Length of the first-50 free trial, in days (roughly three months). */
+export const SCOUT_BETA_TRIAL_DAYS = 90;
+
+/**
+ * Fewest plays a title needs to appear on the scout finish-rate board. Kept low
+ * while the platform is being seeded (ranking is smoothed and the play count is
+ * shown next to the rate); raise it as volume grows.
+ */
+export const SCOUT_FINISH_BOARD_MIN_PLAYS = 3;
+
+/**
+ * Free/consumer email providers that are not accepted as a Scout work email.
+ * Scouts must apply with an organization-domain address.
+ */
+export const FREE_EMAIL_DOMAINS: readonly string[] = [
+  'gmail.com', 'googlemail.com', 'yahoo.com', 'ymail.com', 'rocketmail.com',
+  'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'live.com', 'msn.com',
+  'aol.com', 'icloud.com', 'me.com', 'mac.com',
+  'proton.me', 'protonmail.com', 'pm.me', 'gmx.com', 'gmx.net',
+  'mail.com', 'zoho.com', 'yandex.com', 'yandex.ru', 'tutanota.com',
+  'hey.com', 'fastmail.com', 'mail.ru', 'qq.com', '163.com', '126.com', 'naver.com',
+];
+
+/** True when an email uses a free/consumer provider rather than a work domain. */
+export function isFreeEmailDomain(email: string): boolean {
+  const domain = email.trim().toLowerCase().split('@')[1];
+  return domain ? FREE_EMAIL_DOMAINS.includes(domain) : false;
+}
 
 /** Accessible label for the Blu badge image. */
 export const BLU_BADGE_LABEL = 'Sweam Blu paid content';
@@ -188,6 +230,8 @@ export const UPLOAD_SPECS = {
     accept: 'video/mp4,video/webm',
     maxBytes: 512 * 1024 * 1024,
     maxLabel: '512 MB',
+    recommended:
+      'For a full-screen feed, film vertical 9:16 (1080 × 1920). Wider clips (e.g. 16:9) play in full, letterboxed — never cropped.',
   },
   poster: {
     formats: 'JPEG, PNG, or WebP',
@@ -204,9 +248,53 @@ export const UPLOAD_SPECS = {
     maxBytes: 2 * 1024 * 1024,
     maxLabel: '2 MB',
   },
+  avatar: {
+    formats: 'JPEG, PNG, or WebP',
+    accept: 'image/jpeg,image/png,image/webp',
+    maxBytes: 5 * 1024 * 1024,
+    maxLabel: '5 MB',
+    recommended: 'Square works best (at least 256 x 256, e.g. 512 x 512).',
+  },
 } as const;
 
 export type ScoutStatus = 'pending' | 'approved' | 'rejected';
+
+/**
+ * A scout's membership standing. Scout access INCLUDES all-access to every
+ * creator's Sweam Blu content: a scout never buys Blu separately. Membership is
+ * in good standing while the first-50 free period runs or a paid subscription
+ * is current; when it is not, the portal and Blu access pause together.
+ */
+export interface ScoutMembership {
+  /** In good standing right now. */
+  active: boolean;
+  /** Why it is not active: never started, free period ended, payment failed, or canceled. Null while active. */
+  reason: 'none' | 'ended' | 'past_due' | 'canceled' | null;
+  /** When the first-50 free period ends (ISO), or null when this scout never had one. */
+  freeUntil: string | null;
+  /** True while the free period is still running. */
+  inFreePeriod: boolean;
+  /** End of the current period: the next billing date with a card on file, otherwise when access ends. */
+  currentPeriodEnd: string | null;
+  /** A card is on file (a Stripe subscription exists for this membership). */
+  hasCard: boolean;
+  /** One of the first 50 scouts. */
+  betaFree: boolean;
+  priceCents: number;
+}
+
+/**
+ * A scout's content-alert preferences. Empty `genres`/`kinds` mean "all" — a
+ * scout is alerted about every newly scoutable title until they narrow it.
+ */
+export interface ScoutPreferences {
+  /** Master switch for new-content alerts. */
+  notifyEnabled: boolean;
+  /** Genres the scout wants alerts for; empty = all genres. */
+  genres: Genre[];
+  /** Content kinds the scout wants alerts for; empty = all kinds. */
+  kinds: ContentKind[];
+}
 
 /**
  * The signed-in user attached to a session. `handle` is null until the user
@@ -216,17 +304,45 @@ export interface SessionUser {
   id: string;
   email: string;
   displayName: string;
+  /** The account's profile picture URL (a /media/... key or absolute URL), or null. */
+  avatarUrl: string | null;
   /** The account's unique public @username (chosen at sign-up). */
   username: string | null;
   /** The creator handle, present only for creators; equals the username. */
   handle: string | null;
+  /**
+   * Scout application state. Whether an approved scout's membership is in good
+   * standing (which opens the portal and Blu all-access) is reported separately
+   * by GET /api/me/subscriptions as `scoutMembership`.
+   */
   scout: { status: ScoutStatus; orgName: string } | null;
   isAdmin: boolean;
+}
+
+/** An account found by search: any Sweam account, creator or not. */
+export interface AccountSearchResult {
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  /** True when the account has a creator profile (its handle equals the username). */
+  isCreator: boolean;
+  verified: boolean;
+  followerCount: number;
+  publishedTitles: number;
+}
+
+/** Search results: matching accounts first, then matching titles. */
+export interface SearchResults {
+  query: string;
+  accounts: AccountSearchResult[];
+  results: TitleSummary[];
 }
 
 export interface CreatorRef {
   handle: string;
   displayName: string;
+  /** Profile picture URL, when the payload carries it for this context. */
+  avatarUrl?: string | null;
 }
 
 /** A catalog card: everything needed to render a title in a rail or grid. */
@@ -250,6 +366,8 @@ export interface TitleSummary {
   isBlu: boolean;
   /** Monthly Blu price in cents (one of the preset tiers), or null when free. */
   bluPriceCents: number | null;
+  /** Company name when a scout promotion deal is active ("Promoted by X"), else null. */
+  promotedBy: string | null;
 }
 
 export interface EpisodeSummary {
@@ -286,6 +404,8 @@ export interface TitleDetail extends TitleSummary {
    * Blu it requires an active subscription, scout all-access, or being the creator.
    */
   bluAccess: boolean;
+  /** Free titles only: the creator allows viewers to download/share the video off Sweam. */
+  allowDownload: boolean;
 }
 
 /** One active Blu subscription, for the viewer's manage-subscriptions screen. */
@@ -297,9 +417,12 @@ export interface BluSubscriptionSummary {
   currentPeriodEnd: string | null;
 }
 
-/** The viewer's active Sweam Blu subscriptions and scout all-access (manage screen). */
+/** The viewer's active Sweam Blu subscriptions and scout membership (manage screen). */
 export interface MySubscriptions {
   blu: BluSubscriptionSummary[];
+  /** The scout membership, or null when this account is not an approved scout. */
+  scoutMembership: ScoutMembership | null;
+  /** @deprecated Older cached bundles read this; prefer `scoutMembership`. */
   scoutAllAccess: { active: boolean; currentPeriodEnd: string | null };
 }
 
@@ -356,6 +479,8 @@ export interface FeedItem {
   likedByMe: boolean;
   /** Sweam Blu: true when subscriber-only paid content. */
   isBlu: boolean;
+  /** Company name when a scout promotion deal is active, else null. */
+  promotedBy: string | null;
 }
 
 /** One entry in the Discover feed, with the human-readable reason it ranked where it did. */
@@ -456,6 +581,10 @@ export interface StudioTitleSummary {
   published: boolean;
   episodeCount: number;
   stats: TitleStats;
+  /** Currently Sweam Blu (paid). */
+  isBlu: boolean;
+  /** Has ever been Blu (even if free now); gates whether it can be hard-deleted. */
+  everBlu: boolean;
 }
 
 export interface StudioTitleDetail extends StudioTitleSummary {
@@ -468,6 +597,10 @@ export interface StudioTitleDetail extends StudioTitleSummary {
   adminLocked: boolean;
   /** True while a removal request for this title is open. */
   removalRequested: boolean;
+  /** Free titles only: whether viewers may download/share the video off Sweam. */
+  allowDownload: boolean;
+  /** On an investigation hold by Sweam: hidden everywhere, visibility frozen. */
+  suppressed: boolean;
   episodes: StudioEpisode[];
 }
 
@@ -498,10 +631,30 @@ export interface EpisodeRetention {
   curve: number[];
 }
 
+/**
+ * Views for one episode: viewers who started it (signed-in and anonymous
+ * sessions alike) and how many of them reached the end.
+ */
+export interface EpisodeViews {
+  episodeId: string;
+  season: number;
+  episode: number;
+  name: string;
+  views: number;
+  finishes: number;
+}
+
 export interface FinishLeader {
   title: TitleSummary;
   plays: number;
+  /** Viewers who reached the end. */
+  finishes: number;
+  /** Raw finish rate (finishes / plays), 0..1. */
   finishRate: number;
+  /** Bayesian-smoothed finish rate the board is ranked by, 0..1. */
+  smoothedFinishRate: number;
+  /** Per-episode views for series; null for single-video titles. */
+  episodes: EpisodeViews[] | null;
 }
 
 export interface GrowthLeader {
@@ -510,6 +663,8 @@ export interface GrowthLeader {
   priorPlays: number;
   /** Smoothed week-over-week ratio; above 1 is growth. */
   growth: number;
+  /** Per-episode views for series; null for single-video titles. */
+  episodes: EpisodeViews[] | null;
 }
 
 export interface GenreBreakout {
@@ -517,6 +672,8 @@ export interface GenreBreakout {
   title: TitleSummary;
   recentPlays: number;
   growth: number;
+  /** Per-episode views for series; null for single-video titles. */
+  episodes: EpisodeViews[] | null;
 }
 
 export interface ScoutLeaderboards {
@@ -533,6 +690,8 @@ export interface OneSheet {
   stats: TitleStats & { watchSeconds: number };
   daily: DailyPoint[];
   retention: EpisodeRetention[];
+  /** Views per episode, in season/episode order. */
+  episodes: EpisodeViews[];
   myInterest: boolean;
 }
 
@@ -550,11 +709,57 @@ export interface ScoutInterestForCreator {
   createdAt: string;
 }
 
+/**
+ * A scout can make a creator one of two offers on a title: sign it to the
+ * scout's own network/site (handled off Sweam), or a Sweam promotion deal where
+ * the scout promotes the title for a share of its earnings and it is labelled
+ * "Promoted by [Company]".
+ */
+export const SCOUT_OFFER_KINDS = ['external_sign', 'sweam_promo'] as const;
+export type ScoutOfferKind = (typeof SCOUT_OFFER_KINDS)[number];
+export const SCOUT_OFFER_KIND_LABELS: Record<ScoutOfferKind, string> = {
+  external_sign: 'Sign with our network',
+  sweam_promo: 'Promote on Sweam',
+};
+
+export type ScoutOfferStatus = 'pending' | 'accepted' | 'declined' | 'withdrawn';
+
+/** The most of a creator's own earnings a promotion deal may ask for. */
+export const SCOUT_PROMO_MAX_PERCENT = 50;
+
+/** An incoming offer, as the creator sees it in their Studio. */
+export interface ScoutOfferForCreator {
+  id: string;
+  kind: ScoutOfferKind;
+  status: ScoutOfferStatus;
+  orgName: string;
+  orgUrl: string | null;
+  contactEmail: string;
+  message: string;
+  /** For a promotion deal: the % of the creator's earnings on this title. */
+  promoPercent: number | null;
+  title: { id: string; name: string; slug: string };
+  createdAt: string;
+}
+
+/** An outgoing offer, as the scout sees it. */
+export interface ScoutOfferMine {
+  id: string;
+  kind: ScoutOfferKind;
+  status: ScoutOfferStatus;
+  promoPercent: number | null;
+  message: string;
+  title: { id: string; name: string };
+  createdAt: string;
+}
+
 /** Creator-side analytics for one title: the same data scouts see, plus who looked. */
 export interface TitleAnalytics {
   scoutable: boolean;
   daily: DailyPoint[];
   retention: EpisodeRetention[];
+  /** Views per episode, in season/episode order. */
+  episodes: EpisodeViews[];
   oneSheetViews: OneSheetView[];
   interests: ScoutInterestForCreator[];
 }
@@ -581,6 +786,8 @@ export type NotificationKind =
   | 'scout_view'
   | 'scout_interest'
   | 'scout_decision'
+  | 'scout_content'
+  | 'scout_offer'
   | 'takedown'
   | 'takedown_released'
   | 'strike'
@@ -646,6 +853,17 @@ export interface AdminScoutApplication {
   orgUrl: string | null;
   contactEmail: string;
   createdAt: string;
+  /** Applicant details from the Scout application form (null on legacy rows). */
+  firstName: string | null;
+  lastName: string | null;
+  position: string | null;
+  workEmail: string | null;
+  /** 'pending' = applied but no card on file yet; 'approved' = provisionally approved. */
+  status: 'pending' | 'approved';
+  /** Auto-approved on application and not yet confirmed by an admin. */
+  provisional: boolean;
+  /** One of the first 50 scouts (free trial window). */
+  betaFree: boolean;
 }
 
 export interface AdminReport {
@@ -686,7 +904,16 @@ export interface AdminEpisodeLite {
 
 /** A title and its episodes, looked up by slug for the admin video-swap tool. */
 export interface AdminTitleEpisodes {
-  title: { id: string; name: string; slug: string; creatorHandle: string | null };
+  title: {
+    id: string;
+    name: string;
+    slug: string;
+    creatorHandle: string | null;
+    /** Whether the title is published (live) right now. */
+    published: boolean;
+    /** Whether Sweam has this title on an investigation hold. */
+    suppressed: boolean;
+  };
   episodes: AdminEpisodeLite[];
 }
 
@@ -983,11 +1210,19 @@ export const COMMENT_REPORT_REASONS = ['spam', 'abuse', 'other'] as const;
 export type CommentReportReason = (typeof COMMENT_REPORT_REASONS)[number];
 
 /** A creator's public page. */
+/**
+ * A public profile at /c/:handle. Every account has one (looked up by @username);
+ * `isCreator` is true when the account also has a creator profile, which is
+ * where published titles come from.
+ */
 export interface CreatorPublicPage {
   handle: string;
   displayName: string;
+  /** The account's profile picture URL, or null. */
+  avatarUrl: string | null;
   bio: string;
   verified: boolean;
+  isCreator: boolean;
   followerCount: number;
   followedByMe: boolean;
   titles: TitleSummary[];

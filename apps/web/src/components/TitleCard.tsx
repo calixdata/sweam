@@ -39,7 +39,9 @@ const GENRE_HUES: Partial<Record<Genre, number>> = {
 export function TitleCard({ title }: { title: TitleSummary }) {
   const label = `${title.name}, ${CONTENT_KIND_LABELS[title.kind]}${
     title.kind === 'series' ? `, ${title.episodeCount} episodes` : ''
-  }, ${title.genre}, by ${title.creator.displayName}${title.isBlu ? ', Sweam Blu paid content' : ''}`;
+  }, ${title.genre}, by ${title.creator.displayName}${title.isBlu ? ', Sweam Blu paid content' : ''}${
+    title.promotedBy ? `, promoted by ${title.promotedBy}` : ''
+  }`;
   const hue = GENRE_HUES[title.genre] ?? 210;
 
   const noPoster = !title.posterUrl;
@@ -67,6 +69,7 @@ export function TitleCard({ title }: { title: TitleSummary }) {
           {title.genre}
           {title.kind === 'series' ? ` · ${title.episodeCount} ep` : ''} · @{title.creator.handle}
         </p>
+        {title.promotedBy && <p className="card-promoted">Promoted by {title.promotedBy}</p>}
       </Link>
     </article>
   );

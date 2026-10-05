@@ -8,8 +8,8 @@ import type { Advisory, ContentKind, EpisodeSummary, Genre, TitleSummary } from 
 export const TITLE_SELECT = `
   t.id, t.slug, t.name, t.kind, t.genre, t.audiences AS audiences, t.hero_url AS hero_url,
   t.synopsis, t.advisory, t.poster_url, t.published_at,
-  t.is_blu AS is_blu, t.blu_price_cents AS blu_price_cents,
-  u.display_name AS creator_name, cp.handle AS creator_handle,
+  t.is_blu AS is_blu, t.blu_price_cents AS blu_price_cents, t.promoted_by AS promoted_by,
+  u.display_name AS creator_name, u.avatar_url AS creator_avatar, cp.handle AS creator_handle,
   (SELECT COUNT(*) FROM episodes e WHERE e.title_id = t.id) AS episode_count
 `;
 
@@ -33,7 +33,9 @@ export interface TitleRow {
   published_at: string | null;
   is_blu: number;
   blu_price_cents: number | null;
+  promoted_by: string | null;
   creator_name: string;
+  creator_avatar: string | null;
   creator_handle: string;
   episode_count: number;
 }
@@ -59,9 +61,14 @@ export function mapTitle(row: TitleRow): TitleSummary {
     posterUrl: row.poster_url,
     publishedAt: row.published_at,
     episodeCount: row.episode_count,
-    creator: { handle: row.creator_handle, displayName: row.creator_name },
+    creator: {
+      handle: row.creator_handle,
+      displayName: row.creator_name,
+      avatarUrl: row.creator_avatar,
+    },
     isBlu: row.is_blu === 1,
     bluPriceCents: row.blu_price_cents,
+    promotedBy: row.promoted_by,
   };
 }
 

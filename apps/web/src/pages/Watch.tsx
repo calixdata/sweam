@@ -165,6 +165,14 @@ export function Watch() {
     const needsHlsJs =
       videoUrl.endsWith('.m3u8') && video.canPlayType('application/vnd.apple.mpegurl') === '';
 
+    // Start playing as soon as the source is ready. Clicking "Play" on the
+    // title page is a genuine user gesture that carries into this SPA view, so
+    // playback with sound is allowed; if a browser still blocks it, the promise
+    // rejects, the native controls stay, and the viewer presses play themselves.
+    const tryAutoplay = () => {
+      void video.play().catch(() => undefined);
+    };
+
     if (needsHlsJs) {
       void import('hls.js').then(({ default: HlsModule }) => {
         if (cancelled) return;
@@ -173,6 +181,7 @@ export function Watch() {
           hls.on(HlsModule.Events.ERROR, (_event, data) => {
             if (data.fatal) setAnnouncement('Playback error. Try reloading the page.');
           });
+          hls.on(HlsModule.Events.MANIFEST_PARSED, tryAutoplay);
           hls.loadSource(videoUrl);
           hls.attachMedia(video);
         } else {
@@ -181,6 +190,7 @@ export function Watch() {
       });
     } else {
       video.src = videoUrl;
+      tryAutoplay();
     }
 
     return () => {
@@ -282,6 +292,7 @@ export function Watch() {
           ref={videoRef}
           className="player"
           controls
+          autoPlay
           preload="metadata"
           aria-label={`${title.name}: ${episode.name}`}
           onLoadedMetadata={handleLoadedMetadata}

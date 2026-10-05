@@ -82,10 +82,13 @@ bluRoutes.put('/titles/:id', async (c) => {
 
   const now = nowIso();
   await c.env.DB.batch([
-    c.env.DB.prepare('UPDATE titles SET is_blu = ?, blu_price_cents = ?, blu_changed_at = ? WHERE id = ?').bind(
+    c.env.DB.prepare(
+      'UPDATE titles SET is_blu = ?, blu_price_cents = ?, blu_changed_at = ?, ever_blu = MAX(ever_blu, ?) WHERE id = ?',
+    ).bind(
       body.isBlu ? 1 : 0,
       priceCents,
       switching ? now : (title.blu_changed_at ?? now),
+      body.isBlu ? 1 : 0,
       titleId,
     ),
     c.env.DB.prepare(

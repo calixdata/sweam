@@ -7,7 +7,11 @@ import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
 import { notify } from '../lib/notify';
 import { requireUser, currentUser } from '../lib/session';
 
-/** Public creator pages and the follow relationship. */
+/**
+ * Public profile pages and the follow relationship. Every account has a
+ * profile at its @username (a creator's handle equals its username), so a
+ * username found in search always opens; only creators have published titles.
+ */
 export const creatorRoutes = new Hono<AppEnv>();
 
 interface CreatorRow {
@@ -16,18 +20,27 @@ interface CreatorRow {
   bio: string;
   verified: number;
   display_name: string;
+  avatar_url: string | null;
+  is_creator: number;
 }
 
 async function creatorByHandle(db: D1Database, handle: string): Promise<CreatorRow> {
   const row = await db
     .prepare(
-      `SELECT cp.user_id, cp.handle, cp.bio, cp.verified, u.display_name
-       FROM creator_profiles cp JOIN users u ON u.id = cp.user_id
-       WHERE cp.handle = ?`,
+      `SELECT u.id AS user_id, COALESCE(cp.handle, u.username) AS handle,
+         COALESCE(cp.bio, '') AS bio, COALESCE(cp.verified, 0) AS verified,
+         u.display_name, u.avatar_url, (cp.user_id IS NOT NULL) AS is_creator
+       FROM users u
+       LEFT JOIN creator_profiles cp ON cp.user_id = u.id
+       WHERE (cp.handle = ? OR u.username = ? COLLATE NOCASE)
+         AND u.email_verified = 1
+         AND (cp.user_id IS NOT NULL OR u.is_demo = 0)
+       ORDER BY (cp.handle = ?) DESC
+       LIMIT 1`,
     )
-    .bind(handle)
+    .bind(handle, handle, handle)
     .first<CreatorRow>();
-  if (!row) fail(404, 'creator_not_found', 'No creator with that handle.');
+  if (!row) fail(404, 'creator_not_found', 'No account with that username.');
   return row;
 }
 
@@ -60,8 +73,10 @@ creatorRoutes.get('/:handle', async (c) => {
   const payload: CreatorPublicPage = {
     handle: creator.handle,
     displayName: creator.display_name,
+    avatarUrl: creator.avatar_url,
     bio: creator.bio,
     verified: creator.verified === 1,
+    isCreator: creator.is_creator === 1,
     followerCount,
     followedByMe,
     titles: titlesResult.results.map(mapTitle),
