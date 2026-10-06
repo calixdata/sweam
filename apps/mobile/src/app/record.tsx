@@ -34,6 +34,9 @@ import type { BluFundStatus, SeriesSummary } from '../lib/types';
 import { BluBadge } from '../components/BluBadge';
 import { colors, radius } from '../lib/theme';
 
+/** Cover images are capped like poster uploads on the web (10 MB). */
+const COVER_MAX_BYTES = 10 * 1024 * 1024;
+
 type Phase = 'capture' | 'review';
 interface Clip {
   uri: string;
@@ -103,6 +106,10 @@ export default function RecordScreen() {
   const [seriesId, setSeriesId] = useState('');
   // Optional scheduled release day, typed as YYYY-MM-DD (Eastern); empty posts right away.
   const [releaseDate, setReleaseDate] = useState('');
+  // Optional cover image, uploaded as soon as it is picked; a frame from the clip is used when empty.
+  const [cover, setCover] = useState<{ name: string; url: string } | null>(null);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const [coverNote, setCoverNote] = useState('');
 
   const [posting, setPosting] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -210,12 +217,42 @@ export default function RecordScreen() {
     setPhase('review');
   }, []);
 
+  const pickCover = useCallback(async () => {
+    setCoverNote('');
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.9,
+    });
+    const asset = result.canceled ? null : result.assets?.[0];
+    if (!asset) return;
+    if (asset.fileSize && asset.fileSize > COVER_MAX_BYTES) {
+      setCoverNote('That image is over 10 MB. Choose a smaller one.');
+      return;
+    }
+    const name = asset.fileName ?? filenameForUri(asset.uri, 'cover.jpg');
+    const mime = asset.mimeType && asset.mimeType.startsWith('image/') ? asset.mimeType : 'image/jpeg';
+    setCoverBusy(true);
+    try {
+      const { url } = await uploadVideo(asset.uri, mime, name, () => undefined);
+      setCover({ name, url });
+      setCoverNote(`Cover attached: ${name}`);
+    } catch (err) {
+      setCoverNote(
+        err instanceof ApiError || err instanceof UploadError ? err.message : 'Could not upload that image.',
+      );
+    } finally {
+      setCoverBusy(false);
+    }
+  }, []);
+
   const retake = useCallback(() => {
     player.pause();
     setClip(null);
     setProgress(null);
     setError(null);
     setBluTierId(null);
+    setCover(null);
+    setCoverNote('');
     setPhase('capture');
   }, [player]);
 
@@ -252,6 +289,7 @@ export default function RecordScreen() {
         bluTierId: seriesId ? null : bluTierId,
         seriesId: seriesId || null,
         releaseDate: releaseDate.trim() || null,
+        posterUrl: cover?.url ?? null,
       });
       player.pause();
       router.replace(`/watch/${result.episodeId}`);
@@ -332,6 +370,39 @@ export default function RecordScreen() {
               accessibilityLabel="Clip caption"
             />
             <Text style={styles.hint}>{captionLeft} characters left. This becomes the clip's title.</Text>
+
+            <Text style={styles.label}>Cover image (optional)</Text>
+            <View style={styles.coverRow}>
+              <Pressable
+                style={[styles.coverBtn, coverBusy && styles.btnDisabled]}
+                onPress={() => void pickCover()}
+                disabled={posting || coverBusy}
+                accessibilityRole="button"
+                accessibilityLabel={cover ? 'Change cover image' : 'Choose a cover image'}
+              >
+                <Ionicons name="image-outline" size={18} color={colors.text} />
+                <Text style={styles.coverBtnText}>{cover ? 'Change cover' : 'Choose cover'}</Text>
+              </Pressable>
+              {cover && (
+                <Pressable
+                  style={styles.coverBtn}
+                  onPress={() => {
+                    setCover(null);
+                    setCoverNote('');
+                  }}
+                  disabled={posting || coverBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove the cover image"
+                >
+                  <Text style={styles.coverBtnText}>Remove</Text>
+                </Pressable>
+              )}
+            </View>
+            <Text style={styles.hint} accessibilityLiveRegion="polite">
+              {coverBusy
+                ? 'Uploading the cover…'
+                : coverNote || 'JPEG, PNG, or WebP up to 10 MB. Shown on cards and in search. Leave empty to use a frame from your clip.'}
+            </Text>
 
             <Text style={styles.label}>Release date (optional)</Text>
             <TextInput
@@ -788,6 +859,19 @@ const styles = StyleSheet.create({
   chipText: { color: colors.text, fontSize: 14 },
   chipTextOn: { color: colors.bg, fontWeight: '700' },
   seriesInheritHint: { marginTop: 12 },
+  coverRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4 },
+  coverBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
+  },
+  coverBtnText: { color: colors.text, fontSize: 14, fontWeight: '600' },
   primaryBtn: {
     backgroundColor: colors.accent,
     borderRadius: radius.pill,
