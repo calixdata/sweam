@@ -13,6 +13,7 @@ import { fail } from '../lib/http';
 import type { TitleRow, TitleStatsRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, likeEscape, mapTitle } from '../lib/mappers';
 import { DEFAULT_WEIGHTS, rankTitles } from '../lib/ranking';
+import { notBlockedBy } from '../lib/blocks';
 import { searchQuerySchema } from '../lib/validate';
 
 export const catalogRoutes = new Hono<AppEnv>();
@@ -192,6 +193,7 @@ catalogRoutes.get('/search', async (c) => {
   const prefix = `${likeEscape(term)}%`;
 
   if (term === '') return c.json({ query, accounts: [], results: [] });
+  const viewerId = c.get('user')?.id ?? '';
 
   const [accountsResult, titlesResult] = await c.env.DB.batch([
     c.env.DB.prepare(
@@ -203,6 +205,7 @@ catalogRoutes.get('/search', async (c) => {
        LEFT JOIN creator_profiles cp ON cp.user_id = u.id
        WHERE u.email_verified = 1 AND u.username IS NOT NULL
          AND (cp.user_id IS NOT NULL OR u.is_demo = 0)
+         AND ${notBlockedBy('?6', 'u.id')}
          AND (u.username LIKE ? ESCAPE '\\'
               OR u.display_name LIKE ? ESCAPE '\\'
               OR cp.handle LIKE ? ESCAPE '\\')
@@ -210,18 +213,19 @@ catalogRoutes.get('/search', async (c) => {
          (u.username LIKE ? ESCAPE '\\') DESC,
          follower_count DESC, u.username
        LIMIT 20`,
-    ).bind(pattern, pattern, pattern, term, prefix),
+    ).bind(pattern, pattern, pattern, term, prefix, viewerId),
     c.env.DB.prepare(
       `SELECT ${TITLE_SELECT}
        ${TITLE_FROM}
        WHERE t.published = 1
+         AND ${notBlockedBy('?5', 't.creator_id')}
          AND (t.name LIKE ? ESCAPE '\\'
               OR t.synopsis LIKE ? ESCAPE '\\'
               OR cp.handle LIKE ? ESCAPE '\\'
               OR u.display_name LIKE ? ESCAPE '\\')
        ORDER BY t.published_at DESC
        LIMIT 25`,
-    ).bind(pattern, pattern, pattern, pattern),
+    ).bind(pattern, pattern, pattern, pattern, viewerId),
   ]);
 
   const accounts: AccountSearchResult[] = ((accountsResult?.results ?? []) as AccountRow[]).map(

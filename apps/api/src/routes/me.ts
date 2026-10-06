@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { deleteCookie, getCookie } from 'hono/cookie';
-import type { MyVerification, NotificationItem, VerificationStatus } from '@sweam/shared';
+import type { BlockedAccount, MyVerification, NotificationItem, VerificationStatus } from '@sweam/shared';
 import { UPLOAD_SPECS } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { generateToken, hashPassword, sha256Hex, verifyPassword } from '../lib/auth';
@@ -464,6 +464,42 @@ meRoutes.post('/reports', async (c) => {
     fail(409, 'already_reported', 'You already reported this title. Our moderators will review it.');
   }
   return c.json({ reported: true }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Blocked accounts
+// ---------------------------------------------------------------------------
+
+interface BlockedRow {
+  handle: string;
+  display_name: string;
+  avatar_url: string | null;
+  verified: number;
+  created_at: string;
+}
+
+meRoutes.get('/blocks', async (c) => {
+  const user = currentUser(c);
+  const { results } = await c.env.DB.prepare(
+    `SELECT COALESCE(cp.handle, u.username) AS handle, u.display_name, u.avatar_url,
+       MAX(u.verified, COALESCE(cp.verified, 0)) AS verified, b.created_at
+     FROM blocks b
+     JOIN users u ON u.id = b.blocked_id
+     LEFT JOIN creator_profiles cp ON cp.user_id = u.id
+     WHERE b.blocker_id = ?
+     ORDER BY b.created_at DESC
+     LIMIT 500`,
+  )
+    .bind(user.id)
+    .all<BlockedRow>();
+  const blocks: BlockedAccount[] = results.map((row) => ({
+    handle: row.handle,
+    displayName: row.display_name,
+    avatarUrl: row.avatar_url,
+    verified: row.verified === 1,
+    blockedAt: row.created_at,
+  }));
+  return c.json({ blocks });
 });
 
 // ---------------------------------------------------------------------------

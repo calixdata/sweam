@@ -147,7 +147,18 @@ export interface CreatorPublicPage {
   isCreator?: boolean;
   followerCount: number;
   followedByMe: boolean;
+  /** True when the signed-in viewer has blocked this account. */
+  blockedByMe?: boolean;
   titles: TitleSummary[];
+}
+
+/** An account the signed-in user has blocked. */
+export interface BlockedAccount {
+  handle: string;
+  displayName: string;
+  avatarUrl: string | null;
+  verified: boolean;
+  blockedAt: string;
 }
 
 /** An account found by search: any Sweam account, creator or not. */

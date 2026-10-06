@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -207,12 +208,22 @@ export default function TitleScreen() {
 
         {firstEpisode &&
           (title.isBlu && !title.bluAccess ? (
-            <Pressable style={styles.playBtn} onPress={() => void subscribeBlu()}>
-              <Ionicons name="lock-closed" size={18} color="#04121a" />
-              <Text style={styles.playText}>
-                Subscribe{title.bluPriceCents != null ? ` $${(title.bluPriceCents / 100).toFixed(2)}/mo` : ''}
-              </Text>
-            </Pressable>
+            Platform.OS === 'ios' ? (
+              // No purchase flow on iOS: membership is managed on the website.
+              <View style={styles.bluNotice} accessibilityRole="text">
+                <Ionicons name="lock-closed" size={18} color={colors.muted} />
+                <Text style={styles.bluNoticeText}>
+                  This is a Sweam Blu title. Blu membership is managed on your sweam.co account.
+                </Text>
+              </View>
+            ) : (
+              <Pressable style={styles.playBtn} onPress={() => void subscribeBlu()}>
+                <Ionicons name="lock-closed" size={18} color="#04121a" />
+                <Text style={styles.playText}>
+                  Subscribe{title.bluPriceCents != null ? ` ${(title.bluPriceCents / 100).toFixed(2)}/mo` : ''}
+                </Text>
+              </Pressable>
+            )
           ) : (
             <Pressable style={styles.playBtn} onPress={() => router.push(`/watch/${firstEpisode.id}`)}>
               <Ionicons name="play" size={20} color="#04121a" />
@@ -419,6 +430,8 @@ const styles = StyleSheet.create({
   creatorRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 },
   creatorText: { color: colors.accent, fontSize: 15, fontWeight: '600' },
   bluRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
+  bluNotice: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12, padding: 12, borderRadius: radius.md, backgroundColor: colors.surface2 },
+  bluNoticeText: { color: colors.muted, fontSize: 14, flex: 1, lineHeight: 20 },
   bluText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
   metaLine: { color: colors.muted, fontSize: 13 },
   stats: { color: colors.muted, fontSize: 13 },

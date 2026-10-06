@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { DiscoverItem } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import type { TitleRow, TitleStatsRow } from '../lib/mappers';
+import { notBlockedBy } from '../lib/blocks';
 import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
 import { rankTitles, smoothedFinishRate } from '../lib/ranking';
 import { recordImpressions } from './catalog';
@@ -19,6 +20,7 @@ type DiscoverRow = TitleRow & TitleStatsRow;
  * signal the exploration term uses to retire its own bonus.
  */
 discoverRoutes.get('/', async (c) => {
+  const viewerId = c.get('user')?.id ?? '';
   const { results } = await c.env.DB.prepare(
     `SELECT ${TITLE_SELECT},
       COALESCE(s.impressions, 0) AS impressions,
@@ -27,8 +29,10 @@ discoverRoutes.get('/', async (c) => {
       COALESCE(s.likes, 0) AS likes
     ${TITLE_FROM}
     LEFT JOIN title_stats s ON s.title_id = t.id
-    WHERE t.published = 1`,
-  ).all<DiscoverRow>();
+    WHERE t.published = 1 AND ${notBlockedBy('?1', 't.creator_id')}`,
+  )
+    .bind(viewerId)
+    .all<DiscoverRow>();
 
   const nowMs = Date.now();
   const catalogImpressions = results.reduce((sum, row) => sum + row.impressions, 0);

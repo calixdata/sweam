@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { MyVerification } from '@sweam/shared';
+import type { BlockedAccount, MyVerification } from '@sweam/shared';
 import { UPLOAD_SPECS, USERNAME_HINT, USERNAME_RE } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
@@ -156,6 +156,8 @@ export function Settings() {
 
       <ChangePasswordSection />
 
+      <BlockedAccountsSection />
+
       <DeleteAccountSection />
 
       <section aria-labelledby="billing-heading">
@@ -170,6 +172,75 @@ export function Settings() {
         </p>
       </section>
     </div>
+  );
+}
+
+/** Accounts this user has blocked, with one-click unblock. */
+function BlockedAccountsSection() {
+  const [blocks, setBlocks] = useState<BlockedAccount[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await apiGet<{ blocks: BlockedAccount[] }>('/api/me/blocks');
+      setBlocks(res.blocks);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load blocked accounts.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function unblock(handle: string) {
+    setBusy(handle);
+    try {
+      await apiSend('DELETE', `/api/creators/${encodeURIComponent(handle)}/block`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not unblock that account.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <section aria-labelledby="blocked-heading">
+      <h2 id="blocked-heading">Blocked accounts</h2>
+      <p className="page-intro">
+        Blocked accounts cannot follow you, and their videos and comments are hidden from you. Block
+        someone from the Block button on their profile.
+      </p>
+      {error && <p role="alert">{error}</p>}
+      {blocks === null ? (
+        <p>Loading…</p>
+      ) : blocks.length === 0 ? (
+        <p>You have not blocked anyone.</p>
+      ) : (
+        <ul className="plain-list">
+          {blocks.map((b) => (
+            <li key={b.handle} className="row-between">
+              <span>
+                <Link to={`/c/${b.handle}`}>
+                  {b.displayName} (@{b.handle})
+                </Link>
+              </span>
+              <button
+                type="button"
+                className="button button-quiet"
+                disabled={busy === b.handle}
+                onClick={() => void unblock(b.handle)}
+                aria-label={`Unblock ${b.displayName}`}
+              >
+                Unblock
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

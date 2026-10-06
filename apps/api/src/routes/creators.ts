@@ -4,6 +4,7 @@ import type { AppEnv } from '../env';
 import { fail, nowIso } from '../lib/http';
 import type { TitleRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
+import { blockedEitherWay } from '../lib/blocks';
 import { notify } from '../lib/notify';
 import { requireUser, currentUser } from '../lib/session';
 
@@ -48,13 +49,19 @@ creatorRoutes.get('/:handle', async (c) => {
   const creator = await creatorByHandle(c.env.DB, c.req.param('handle'));
   const viewer = c.get('user');
 
-  const [followerCount, followedByMe, titlesResult] = await Promise.all([
+  const [followerCount, followedByMe, blockedByMe, titlesResult] = await Promise.all([
     c.env.DB.prepare('SELECT COUNT(*) AS n FROM follows WHERE creator_id = ?')
       .bind(creator.user_id)
       .first<{ n: number }>()
       .then((row) => row?.n ?? 0),
     viewer
       ? c.env.DB.prepare('SELECT 1 AS x FROM follows WHERE follower_id = ? AND creator_id = ?')
+          .bind(viewer.id, creator.user_id)
+          .first()
+          .then((hit) => hit !== null)
+      : Promise.resolve(false),
+    viewer
+      ? c.env.DB.prepare('SELECT 1 AS x FROM blocks WHERE blocker_id = ? AND blocked_id = ?')
           .bind(viewer.id, creator.user_id)
           .first()
           .then((hit) => hit !== null)
@@ -79,6 +86,7 @@ creatorRoutes.get('/:handle', async (c) => {
     isCreator: creator.is_creator === 1,
     followerCount,
     followedByMe,
+    blockedByMe,
     titles: titlesResult.results.map(mapTitle),
   };
   return c.json(payload);
@@ -89,6 +97,9 @@ creatorRoutes.put('/:handle/follow', requireUser, async (c) => {
   const creator = await creatorByHandle(c.env.DB, c.req.param('handle'));
   if (creator.user_id === user.id) {
     fail(400, 'self_follow', 'You cannot follow yourself.');
+  }
+  if (await blockedEitherWay(c.env.DB, user.id, creator.user_id)) {
+    fail(403, 'blocked', 'You cannot follow this account.');
   }
   const result = await c.env.DB.prepare(
     'INSERT OR IGNORE INTO follows (follower_id, creator_id, created_at) VALUES (?, ?, ?)',
@@ -114,4 +125,36 @@ creatorRoutes.delete('/:handle/follow', requireUser, async (c) => {
     .bind(user.id, creator.user_id)
     .run();
   return c.json({ followedByMe: false });
+});
+
+/**
+ * Block an account. Private and one-directional: the blocked account is not
+ * told. Any follow in either direction is removed so neither side keeps
+ * getting the other's content or notifications.
+ */
+creatorRoutes.put('/:handle/block', requireUser, async (c) => {
+  const user = currentUser(c);
+  const creator = await creatorByHandle(c.env.DB, c.req.param('handle'));
+  if (creator.user_id === user.id) {
+    fail(400, 'self_block', 'You cannot block yourself.');
+  }
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      'INSERT OR IGNORE INTO blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)',
+    ).bind(user.id, creator.user_id, nowIso()),
+    c.env.DB.prepare(
+      `DELETE FROM follows
+       WHERE (follower_id = ?1 AND creator_id = ?2) OR (follower_id = ?2 AND creator_id = ?1)`,
+    ).bind(user.id, creator.user_id),
+  ]);
+  return c.json({ blockedByMe: true, followedByMe: false });
+});
+
+creatorRoutes.delete('/:handle/block', requireUser, async (c) => {
+  const user = currentUser(c);
+  const creator = await creatorByHandle(c.env.DB, c.req.param('handle'));
+  await c.env.DB.prepare('DELETE FROM blocks WHERE blocker_id = ? AND blocked_id = ?')
+    .bind(user.id, creator.user_id)
+    .run();
+  return c.json({ blockedByMe: false });
 });

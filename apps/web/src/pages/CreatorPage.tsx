@@ -41,6 +41,24 @@ export function CreatorPage() {
   const clips = creator.titles.filter((title) => title.kind === 'short');
   const shows = creator.titles.filter((title) => title.kind !== 'short');
 
+  async function toggleBlock() {
+    if (!creator) return;
+    if (!creator.blockedByMe) {
+      const ok = window.confirm(
+        `Block @${creator.handle}? You will stop seeing their videos and comments, and neither of you can follow the other. They are not notified.`,
+      );
+      if (!ok) return;
+    }
+    setBusy(true);
+    try {
+      const method = creator.blockedByMe ? 'DELETE' : 'PUT';
+      await apiSend(method, `/api/creators/${encodeURIComponent(creator.handle)}/block`);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleFollow() {
     if (!creator) return;
     setBusy(true);
@@ -74,15 +92,33 @@ export function CreatorPage() {
       {!isSelf && (
         <div className="title-actions">
           {user ? (
-            <button
-              type="button"
-              className={creator.followedByMe ? 'button button-quiet' : 'button'}
-              aria-pressed={creator.followedByMe}
-              disabled={busy}
-              onClick={toggleFollow}
-            >
-              {creator.followedByMe ? 'Following ✓' : 'Follow'}
-            </button>
+            <>
+              {!creator.blockedByMe && (
+                <button
+                  type="button"
+                  className={creator.followedByMe ? 'button button-quiet' : 'button'}
+                  aria-pressed={creator.followedByMe}
+                  disabled={busy}
+                  onClick={toggleFollow}
+                >
+                  {creator.followedByMe ? 'Following ✓' : 'Follow'}
+                </button>
+              )}{' '}
+              <button
+                type="button"
+                className={creator.blockedByMe ? 'button button-quiet' : 'button button-danger'}
+                aria-pressed={creator.blockedByMe}
+                disabled={busy}
+                onClick={toggleBlock}
+              >
+                {creator.blockedByMe ? 'Unblock' : 'Block'}
+              </button>
+              {creator.blockedByMe && (
+                <p className="title-meta">
+                  You blocked this account. Their videos and comments are hidden from you.
+                </p>
+              )}
+            </>
           ) : (
             <p>
               <Link to="/signin" state={{ from: `/c/${creator.handle}` }}>

@@ -1371,7 +1371,18 @@ export interface CreatorPublicPage {
   isCreator: boolean;
   followerCount: number;
   followedByMe: boolean;
+  /** True when the signed-in viewer has blocked this account. */
+  blockedByMe: boolean;
   titles: TitleSummary[];
+}
+
+/** An account the signed-in user has blocked (Settings > Blocked accounts). */
+export interface BlockedAccount {
+  handle: string;
+  displayName: string;
+  avatarUrl: string | null;
+  verified: boolean;
+  blockedAt: string;
 }
 
 export interface AdminCommentReport {

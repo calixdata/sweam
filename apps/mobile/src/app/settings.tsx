@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,6 +19,7 @@ import { ApiError, api, getToken, mediaUrl } from '../lib/api';
 import { API_BASE } from '../lib/config';
 import { useAuth } from '../lib/auth';
 import { colors } from '../lib/theme';
+import type { BlockedAccount } from '../lib/types';
 
 /** Max profile picture size, mirrored from the API (UPLOAD_SPECS.avatar). */
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
@@ -49,6 +50,7 @@ export default function SettingsScreen() {
         <ProfilePictureSection avatarUrl={user.avatarUrl} name={user.displayName} refresh={refresh} />
         <ChangeEmailSection currentEmail={user.email} />
         <ChangePasswordSection />
+        <BlockedAccountsSection />
         <DeleteAccountSection />
       </ScrollView>
     </View>
@@ -371,6 +373,8 @@ const styles = StyleSheet.create({
   },
   primaryBtnText: { color: '#04121a', fontSize: 15, fontWeight: '700' },
   dangerBtn: { backgroundColor: colors.danger },
+  blockedRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6 },
+  blockedName: { color: colors.text, fontSize: 15, fontWeight: '600' },
   secondaryBtn: {
     borderWidth: 1,
     borderColor: colors.line,
@@ -388,6 +392,73 @@ const styles = StyleSheet.create({
 });
 
 /** Permanent account deletion: password, then a final confirm dialog. */
+function BlockedAccountsSection() {
+  const [blocks, setBlocks] = useState<BlockedAccount[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await api.get<{ blocks: BlockedAccount[] }>('/api/me/blocks');
+      setBlocks(res.blocks);
+    } catch {
+      setError('Could not load blocked accounts.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function unblock(handle: string) {
+    setBusy(handle);
+    try {
+      await api.del(`/api/creators/${encodeURIComponent(handle)}/block`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not unblock that account.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Blocked accounts</Text>
+      <Text style={styles.sectionHint}>
+        Blocked accounts cannot follow you, and their videos and comments are hidden from you. Block
+        someone from the Block button on their profile.
+      </Text>
+      {error && <Text style={[styles.status, styles.statusErr]}>{error}</Text>}
+      {blocks === null ? (
+        <ActivityIndicator color={colors.accent} />
+      ) : blocks.length === 0 ? (
+        <Text style={styles.muted}>You have not blocked anyone.</Text>
+      ) : (
+        blocks.map((b) => (
+          <View key={b.handle} style={styles.blockedRow}>
+            <Pressable onPress={() => router.push(`/c/${b.handle}`)} style={{ flex: 1 }}>
+              <Text style={styles.blockedName} numberOfLines={1}>
+                {b.displayName}
+              </Text>
+              <Text style={styles.muted}>@{b.handle}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.secondaryBtn, busy === b.handle && styles.btnDisabled]}
+              disabled={busy === b.handle}
+              onPress={() => void unblock(b.handle)}
+              accessibilityRole="button"
+              accessibilityLabel={`Unblock ${b.displayName}`}
+            >
+              <Text style={styles.secondaryBtnText}>Unblock</Text>
+            </Pressable>
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
 function DeleteAccountSection() {
   const { signOut } = useAuth();
   const [password, setPassword] = useState('');

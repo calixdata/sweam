@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { TitleDetail } from '@sweam/shared';
 import type { AppEnv } from '../env';
+import { notBlockedBy } from '../lib/blocks';
 import type { CommentRow } from '../lib/comments';
 import { buildCommentTree, countVisible } from '../lib/comments';
 import { fail, nowIso, parseBody } from '../lib/http';
@@ -114,11 +115,12 @@ const COMMENTS_QUERY = `
   SELECT co.id, co.parent_id, co.body, co.status, co.created_at,
     u.id AS author_id, u.display_name AS author_name, cp.handle AS author_handle,
     (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = co.id) AS likes,
-    (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = co.id AND cl.user_id = ?) AS liked_by_me
+    (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = co.id AND cl.user_id = ?1) AS liked_by_me
   FROM comments co
   JOIN users u ON u.id = co.author_id
   LEFT JOIN creator_profiles cp ON cp.user_id = co.author_id
-  WHERE co.title_id = ?
+  WHERE co.title_id = ?2
+    AND ${notBlockedBy('?1', 'co.author_id')}
   ORDER BY co.created_at
   LIMIT 500
 `;

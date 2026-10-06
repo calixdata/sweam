@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -29,6 +30,7 @@ export default function CreatorScreen() {
   const [following, setFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     if (!handle) return;
@@ -38,6 +40,7 @@ export default function CreatorScreen() {
         setPage(p);
         setFollowing(p.followedByMe);
         setFollowerCount(p.followerCount);
+        setBlocked(p.blockedByMe === true);
       })
       .catch(() => setError('Could not load this creator.'));
   }, [handle]);
@@ -63,6 +66,47 @@ export default function CreatorScreen() {
       setBusy(false);
     }
   }, [handle, busy, user, following]);
+
+  const setBlock = useCallback(
+    async (next: boolean) => {
+      if (!handle || busy) return;
+      setBusy(true);
+      try {
+        await (next
+          ? api.put(`/api/creators/${encodeURIComponent(handle)}/block`)
+          : api.del(`/api/creators/${encodeURIComponent(handle)}/block`));
+        setBlocked(next);
+        if (next && following) {
+          setFollowing(false);
+          setFollowerCount((n) => Math.max(0, n - 1));
+        }
+      } catch {
+        Alert.alert('Block', next ? 'Could not block this account.' : 'Could not unblock this account.');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [handle, busy, following],
+  );
+
+  const toggleBlock = useCallback(() => {
+    if (!user) {
+      router.push('/signin');
+      return;
+    }
+    if (blocked) {
+      void setBlock(false);
+      return;
+    }
+    Alert.alert(
+      `Block @${handle}?`,
+      'You will stop seeing their videos and comments, and neither of you can follow the other. They are not notified.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Block', style: 'destructive', onPress: () => void setBlock(true) },
+      ],
+    );
+  }, [user, blocked, handle, setBlock]);
 
   if (error) {
     return (
@@ -107,21 +151,43 @@ export default function CreatorScreen() {
           {page.titles.length} {page.titles.length === 1 ? 'title' : 'titles'}
         </Text>
         {page.bio ? <Text style={styles.bio}>{page.bio}</Text> : null}
-        <Pressable
-          style={[styles.followBtn, following && styles.followingBtn]}
-          onPress={() => void toggleFollow()}
-          disabled={busy}
-          accessibilityRole="button"
-          accessibilityState={{ selected: following }}
-          accessibilityLabel={
-            following ? `Following ${page.displayName}. Tap to unfollow.` : `Follow ${page.displayName}`
-          }
-        >
-          <Ionicons name={following ? 'checkmark' : 'add'} size={18} color={following ? colors.text : colors.bg} />
-          <Text style={[styles.followText, following && styles.followingText]}>
-            {following ? 'Following' : 'Follow'}
+        <View style={styles.actionRow}>
+          {!blocked && (
+            <Pressable
+              style={[styles.followBtn, following && styles.followingBtn]}
+              onPress={() => void toggleFollow()}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityState={{ selected: following }}
+              accessibilityLabel={
+                following ? `Following ${page.displayName}. Tap to unfollow.` : `Follow ${page.displayName}`
+              }
+            >
+              <Ionicons name={following ? 'checkmark' : 'add'} size={18} color={following ? colors.text : colors.bg} />
+              <Text style={[styles.followText, following && styles.followingText]}>
+                {following ? 'Following' : 'Follow'}
+              </Text>
+            </Pressable>
+          )}
+          {(!user || (user.username ?? user.handle)?.toLowerCase() !== page.handle.toLowerCase()) && (
+            <Pressable
+              style={[styles.followBtn, styles.blockBtn, blocked && styles.followingBtn]}
+              onPress={toggleBlock}
+              disabled={busy}
+              accessibilityRole="button"
+              accessibilityState={{ selected: blocked }}
+              accessibilityLabel={blocked ? `Unblock ${page.displayName}` : `Block ${page.displayName}`}
+            >
+              <Ionicons name={blocked ? 'lock-open-outline' : 'ban-outline'} size={18} color={colors.text} />
+              <Text style={[styles.followText, styles.followingText]}>{blocked ? 'Unblock' : 'Block'}</Text>
+            </Pressable>
+          )}
+        </View>
+        {blocked && (
+          <Text style={styles.followers} accessibilityLiveRegion="polite">
+            You blocked this account. Their videos and comments are hidden from you.
           </Text>
-        </Pressable>
+        )}
       </View>
 
       <Text style={styles.gridHeading}>Titles</Text>
@@ -197,6 +263,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   followingBtn: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.line },
+  actionRow: { flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
+  blockBtn: { backgroundColor: colors.surface2, borderWidth: 1, borderColor: colors.danger, paddingHorizontal: 18 },
   followText: { color: colors.bg, fontSize: 15, fontWeight: '700' },
   followingText: { color: colors.text },
   gridHeading: { color: colors.text, fontSize: 18, fontWeight: '700', paddingHorizontal: 16, marginTop: 18, marginBottom: 10 },

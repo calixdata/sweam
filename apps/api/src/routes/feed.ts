@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { ContentKind, FeedItem } from '@sweam/shared';
 import type { AppEnv } from '../env';
+import { notBlockedBy } from '../lib/blocks';
 import { requireUser, currentUser } from '../lib/session';
 
 /**
@@ -100,6 +101,7 @@ feedRoutes.get('/', async (c) => {
     const res = await c.env.DB.prepare(
       `${FEED_SELECT}
        WHERE t.published = 1 AND t.is_blu = 0 AND t.promoted_at IS NOT NULL
+         AND ${notBlockedBy('?1', 't.creator_id')}
          AND (?2 = 0 OR EXISTS (
            SELECT 1 FROM follows f WHERE f.follower_id = ?1 AND f.creator_id = t.creator_id
          ))
@@ -114,6 +116,7 @@ feedRoutes.get('/', async (c) => {
   const rows = await c.env.DB.prepare(
     `${FEED_SELECT}
      WHERE t.published = 1 AND t.is_blu = 0 AND t.promoted_at IS NULL AND (?2 = '' OR t.published_at < ?2)
+       AND ${notBlockedBy('?1', 't.creator_id')}
        AND (?3 = 0 OR EXISTS (
          SELECT 1 FROM follows f WHERE f.follower_id = ?1 AND f.creator_id = t.creator_id
        ))
