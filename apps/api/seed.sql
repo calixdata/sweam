@@ -7,7 +7,10 @@
 -- player works out of the box with real, licensed video. The creator, viewer,
 -- and scout accounts around them are fictional demo data.
 --
--- Every demo account uses the password: SweamDemo1!
+-- Demo accounts have NO password (password_hash is a locked sentinel that can
+-- never verify). They exist only to own the demo catalog and make the stats
+-- demonstrable. To work as a signed-in user locally, sign up through the app;
+-- to make yourself an admin, insert your user id into the admins table.
 --
 -- title_stats rows are synthetic lifetime aggregates chosen to make the
 -- discovery ranking demonstrable (Sintel's small devoted audience outranks
@@ -48,13 +51,13 @@ DELETE FROM creator_profiles;
 DELETE FROM users;
 
 INSERT INTO users (id, email, display_name, password_hash, created_at) VALUES
-  ('usr_ana',   'ana@demo.sweam',   'Ana Voss',    'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-07-20T14:00:00.000Z'),
-  ('usr_nova',  'nova@demo.sweam',  'Nova Reyes',  'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-07-21T09:30:00.000Z'),
-  ('usr_mira',  'mira@demo.sweam',  'Mira Chen',   'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-01T18:45:00.000Z'),
-  ('usr_sam',   'sam@demo.sweam',   'Sam Park',    'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-10T11:00:00.000Z'),
-  ('usr_scout', 'scout@demo.sweam', 'Riley Grant', 'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-15T10:00:00.000Z'),
-  ('usr_scout2', 'westgate@demo.sweam', 'Jordan Wells', 'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-24T09:00:00.000Z'),
-  ('usr_admin', 'admin@demo.sweam', 'Alex Ondo', 'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-07-15T09:00:00.000Z');
+  ('usr_ana',   'ana@demo.sweam',   'Ana Voss',    'locked-demo-account', '2026-07-20T14:00:00.000Z'),
+  ('usr_nova',  'nova@demo.sweam',  'Nova Reyes',  'locked-demo-account', '2026-07-21T09:30:00.000Z'),
+  ('usr_mira',  'mira@demo.sweam',  'Mira Chen',   'locked-demo-account', '2026-08-01T18:45:00.000Z'),
+  ('usr_sam',   'sam@demo.sweam',   'Sam Park',    'locked-demo-account', '2026-08-10T11:00:00.000Z'),
+  ('usr_scout', 'scout@demo.sweam', 'Riley Grant', 'locked-demo-account', '2026-08-15T10:00:00.000Z'),
+  ('usr_scout2', 'westgate@demo.sweam', 'Jordan Wells', 'locked-demo-account', '2026-08-24T09:00:00.000Z'),
+  ('usr_admin', 'admin@demo.sweam', 'Alex Ondo', 'locked-demo-account', '2026-07-15T09:00:00.000Z');
 
 -- Admins are provisioned here or by operations:
 --   npx wrangler d1 execute sweam-db --local --command "INSERT INTO admins (user_id, created_at) VALUES ('<id>', strftime('%Y-%m-%dT%H:%M:%fZ','now'))"
@@ -62,18 +65,18 @@ INSERT INTO admins (user_id, created_at) VALUES
   ('usr_admin', '2026-07-15T09:05:00.000Z');
 
 -- Tracked viewer cohort: exists to make retention curves real. Not intended
--- as sign-in demo accounts, but the shared demo password works for them too.
+-- as sign-in accounts; like every seed account they have no usable password.
 INSERT INTO users (id, email, display_name, password_hash, created_at) VALUES
-  ('usr_v01', 'viewer01@seed.sweam', 'Viewer One',   'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-11T10:00:00.000Z'),
-  ('usr_v02', 'viewer02@seed.sweam', 'Viewer Two',   'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-11T10:01:00.000Z'),
-  ('usr_v03', 'viewer03@seed.sweam', 'Viewer Three', 'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-11T10:02:00.000Z'),
-  ('usr_v04', 'viewer04@seed.sweam', 'Viewer Four',  'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-11T10:03:00.000Z'),
-  ('usr_v05', 'viewer05@seed.sweam', 'Viewer Five',  'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-11T10:04:00.000Z'),
-  ('usr_v06', 'viewer06@seed.sweam', 'Viewer Six',   'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-11T10:05:00.000Z'),
-  ('usr_v07', 'viewer07@seed.sweam', 'Viewer Seven', 'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-11T10:06:00.000Z'),
-  ('usr_v08', 'viewer08@seed.sweam', 'Viewer Eight', 'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-11T10:07:00.000Z'),
-  ('usr_v09', 'viewer09@seed.sweam', 'Viewer Nine',  'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-11T10:08:00.000Z'),
-  ('usr_v10', 'viewer10@seed.sweam', 'Viewer Ten',   'pbkdf2$100000$2h1iQtgV/bqgPcq6niESmw==$46b133w/oul9xoXowCpOixI+jFjru/zxNlF/7dzBhSw=', '2026-08-11T10:09:00.000Z');
+  ('usr_v01', 'viewer01@seed.sweam', 'Viewer One',   'locked-demo-account', '2026-08-11T10:00:00.000Z'),
+  ('usr_v02', 'viewer02@seed.sweam', 'Viewer Two',   'locked-demo-account', '2026-08-11T10:01:00.000Z'),
+  ('usr_v03', 'viewer03@seed.sweam', 'Viewer Three', 'locked-demo-account', '2026-08-11T10:02:00.000Z'),
+  ('usr_v04', 'viewer04@seed.sweam', 'Viewer Four',  'locked-demo-account', '2026-08-11T10:03:00.000Z'),
+  ('usr_v05', 'viewer05@seed.sweam', 'Viewer Five',  'locked-demo-account', '2026-08-11T10:04:00.000Z'),
+  ('usr_v06', 'viewer06@seed.sweam', 'Viewer Six',   'locked-demo-account', '2026-08-11T10:05:00.000Z'),
+  ('usr_v07', 'viewer07@seed.sweam', 'Viewer Seven', 'locked-demo-account', '2026-08-11T10:06:00.000Z'),
+  ('usr_v08', 'viewer08@seed.sweam', 'Viewer Eight', 'locked-demo-account', '2026-08-11T10:07:00.000Z'),
+  ('usr_v09', 'viewer09@seed.sweam', 'Viewer Nine',  'locked-demo-account', '2026-08-11T10:08:00.000Z'),
+  ('usr_v10', 'viewer10@seed.sweam', 'Viewer Ten',   'locked-demo-account', '2026-08-11T10:09:00.000Z');
 
 INSERT INTO creator_profiles (user_id, handle, bio, verified, created_at) VALUES
   ('usr_ana',  'anavoss',   'Animator turned director. Two features on Sweam and counting.', 1, '2026-07-20T14:05:00.000Z'),

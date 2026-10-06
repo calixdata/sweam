@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/calixdata/sweam/actions/workflows/ci.yml/badge.svg)](https://github.com/calixdata/sweam/actions/workflows/ci.yml)
 
-**Live demo: https://sweam.hi-3e9.workers.dev** — the whole app (SPA + API) on one Cloudflare Worker with D1 and R2. Demo accounts below; all use the password `SweamDemo1!`.
+**Live: https://sweam.co** — the whole app (SPA + API) on one Cloudflare Worker with D1 and R2. Sign-up is free and takes a minute; there are no shared demo logins.
 
 Sweam is a full-stack streaming platform where the core catalog is creator-made: short films, binge series, sketch runs, and documentaries. It pairs the lean-back catalog experience of an ad-supported streamer (think Tubi) with the open, anyone-can-publish pipeline of a social platform (think TikTok), and it makes one promise neither of them makes: **equal visibility, enforced by a published algorithm.**
 
@@ -99,30 +99,15 @@ npm run dev:transcoder
 
 Everything else works without it: uploads play as their source files until a transcoder picks the job up, and the demo catalog streams as-is.
 
-### Demo accounts
+### Demo catalog and seed accounts
 
-The seed creates a small catalog around the Blender Foundation open movies plus four demo accounts, all with the password `SweamDemo1!`:
-
-| Email | Role |
-| --- | --- |
-| `sam@demo.sweam` | Viewer with continue-watching history and a watchlist |
-| `ana@demo.sweam` | Creator `@anavoss` (Sintel, Tears of Steel) |
-| `nova@demo.sweam` | Creator `@novareyes` (Big Buck Bunny, Elephants Dream) |
-| `mira@demo.sweam` | Creator `@miradocs` (Open Cinema Anthology, a 3-episode series) |
-| `scout@demo.sweam` | Approved scout for Northlight Studios |
-| `westgate@demo.sweam` | Scout applicant with a pending application to decide |
-| `admin@demo.sweam` | Platform administrator |
-
-The seeded stats are chosen to make the mechanics visible. Open Discover and Sintel (90 plays, devoted audience) outranks Big Buck Bunny (2,100 plays, indifferent audience). Sign in as the scout and the fastest-growing board leads with Tears of Steel mid-launch-spike, Elephants Dream is absent everywhere scout-facing because its creator has not opted in, and Ana's Studio analytics for Sintel already shows a one-sheet view and an expression of interest from Northlight Studios. Sign in as the admin and the console opens with Westgate Media's application waiting for a decision, one open report in the moderation queue, a reported spam comment, and Nova's $10.00 payout awaiting review. Ana's earnings page shows $21.78 available from a seeded impressions ledger that follows the real revenue math row for row. Sam follows two creators, so Home opens with a "From creators you follow" rail, and Sintel's comment thread includes a reply from its creator; Big Buck Bunny's thread demonstrates a removed comment holding its place for a visible reply.
-
-### Verify everything
+The seed creates a small catalog around the Blender Foundation open movies owned by fictional creator accounts (`@anavoss`, `@novareyes`, `@miradocs`), a viewer with watch history, an approved scout, a pending scout applicant, and a tracked viewer cohort. None of these accounts has a usable password: their `password_hash` is a locked sentinel that never verifies, so they cannot be signed in to anywhere, including the live site. To use the app as a signed-in user locally, sign up through the app; to administer it, add your user id to the `admins` table:
 
 ```bash
-npm run lint
-npm run typecheck
-npm test
-npm run build
+npx wrangler d1 execute sweam-db --local --command "INSERT INTO admins (user_id, created_at) VALUES ('<your user id>', strftime('%Y-%m-%dT%H:%M:%fZ','now'))"
 ```
+
+The seeded stats are chosen to make the mechanics visible. Open Discover and Sintel (90 plays, devoted audience) outranks Big Buck Bunny (2,100 plays, indifferent audience). As a scout, the fastest-growing board leads with Tears of Steel mid-launch-spike, and Elephants Dream is absent everywhere scout-facing because its creator has not opted in. As an admin, the console opens with Westgate Media's application waiting for a decision, one open report in the moderation queue, a reported spam comment, and Nova's $10.00 payout awaiting review. Sintel's comment thread includes a reply from its creator; Big Buck Bunny's thread demonstrates a removed comment holding its place for a visible reply.
 
 ## Deploy
 
