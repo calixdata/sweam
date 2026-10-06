@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link } from 'react-router-dom';
 import type {
   AdminMonetization as AdminMonetizationPayload,
   BluFundRun,
@@ -9,6 +8,7 @@ import type {
 import { AD_CATEGORIES, AD_CATEGORY_LABELS, GENRES, formatMillicents, formatUsdCents } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { AdminNav } from '../components/AdminNav';
 import { ErrorNote, Loading } from '../components/Status';
 import { usePageTitle } from '../hooks';
 
@@ -62,10 +62,8 @@ function MonetizationDashboard() {
 
   return (
     <div className="page page-narrow">
-      <p>
-        <Link to="/admin">Back to Admin</Link>
-      </p>
       <h1>Monetization</h1>
+      <AdminNav />
 
       {notice && (
         <p className="status" role="status">

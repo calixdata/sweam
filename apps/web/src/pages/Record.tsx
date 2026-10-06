@@ -15,6 +15,7 @@ import type { BluFundStatus, SeriesSummary } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { BluBadge } from '../components/BluBadge';
+import { CoverArtField } from '../components/CoverArtField';
 import { usePageTitle } from '../hooks';
 import { uploadMedia } from '../upload';
 import type { UploadProgress } from '../upload';
@@ -58,6 +59,8 @@ export function Record() {
   const [seriesId, setSeriesId] = useState('');
   // Optional scheduled release day (YYYY-MM-DD, Eastern); empty posts right away.
   const [releaseDate, setReleaseDate] = useState('');
+  // Optional cover image; a frame from the clip is used when empty.
+  const [posterUrl, setPosterUrl] = useState('');
 
   const [posting, setPosting] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -226,6 +229,7 @@ export function Record() {
         bluTierId: !seriesId && bluMode === 'blu' ? bluTierId : null,
         seriesId: seriesId || null,
         releaseDate: releaseDate || null,
+        posterUrl: posterUrl || null,
       });
       stopStream();
       navigate(`/watch/${result.episodeId}`);
@@ -234,7 +238,7 @@ export function Record() {
       setPosting(false);
       setProgress(null);
     }
-  }, [clip, caption, rating, genre, audience, bluMode, bluTierId, seriesId, releaseDate, navigate, stopStream]);
+  }, [clip, caption, rating, genre, audience, bluMode, bluTierId, seriesId, releaseDate, posterUrl, navigate, stopStream]);
 
   if (!user) {
     return (
@@ -407,6 +411,15 @@ export function Record() {
           </div>
         )}
 
+        <CoverArtField
+          label="Cover image"
+          value={posterUrl}
+          onChange={setPosterUrl}
+          portrait={false}
+          base={INTAKE_UPLOAD_BASE}
+          disabled={posting}
+          hint="JPEG, PNG, or WebP, up to 10 MB. Shown on cards and in search. Leave empty to use a frame from your clip."
+        />
         <div className="field">
           <label htmlFor="clip-release-date">Release date (optional)</label>
           <input

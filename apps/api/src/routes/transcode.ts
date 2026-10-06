@@ -176,10 +176,14 @@ transcodeRoutes.post('/jobs/:jobId/complete', async (c) => {
     c.env.DB.prepare(
       `UPDATE transcode_jobs SET status = 'done', error = NULL, updated_at = ? WHERE id = ?`,
     ).bind(now, job.id),
+    // A generated frame fills in or refreshes an earlier generated frame, but
+    // never replaces a cover the creator chose (an upload under /media/u or /media/sub).
     c.env.DB.prepare(
       `UPDATE episodes SET
          video_url = ?,
-         thumbnail_url = COALESCE(?, thumbnail_url),
+         thumbnail_url = CASE
+           WHEN thumbnail_url IS NULL OR thumbnail_url LIKE '/media/hls/%' THEN COALESCE(?, thumbnail_url)
+           ELSE thumbnail_url END,
          duration_s = CASE WHEN ? > 0 THEN ? ELSE duration_s END
        WHERE id = ?`,
     ).bind(masterUrl, posterUrl, body.durationS, body.durationS, job.episode_id),

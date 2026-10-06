@@ -117,6 +117,7 @@ clipRoutes.post('/', async (c) => {
       bluPriceCents,
       seriesId: body.seriesId,
       releaseDate: body.releaseDate,
+      posterUrl: body.posterUrl,
     },
     user.displayName,
   );

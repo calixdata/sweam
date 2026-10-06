@@ -265,6 +265,9 @@ export function TitlePage() {
                 {episodes.map((episode) => (
                   <li key={episode.id}>
                     <div className="episode-row">
+                      {episode.thumbnailUrl && (
+                        <img className="episode-thumb" src={episode.thumbnailUrl} alt="" />
+                      )}
                       <div>
                         <h3>
                           {episode.released ? (

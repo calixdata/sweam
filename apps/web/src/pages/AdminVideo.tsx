@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import type { AdminTitleEpisodes, AdminVideoReplacement } from '@sweam/shared';
 import { UPLOAD_SPECS } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { AdminNav } from '../components/AdminNav';
 import { Loading } from '../components/Status';
 import { usePageTitle } from '../hooks';
 import { uploadMedia } from '../upload';
@@ -29,10 +29,8 @@ export function AdminVideo() {
 
   return (
     <div className="page page-narrow">
-      <p>
-        <Link to="/admin">Back to Admin</Link>
-      </p>
       <h1>Video replacement</h1>
+      <AdminNav />
       <p className="page-intro">
         Swap a live episode's video for a new file without a fresh submission — the title, episode,
         and watch history stay the same, and the new file re-processes to adaptive HLS. Below that,

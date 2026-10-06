@@ -14,6 +14,7 @@ import {
   formatReleaseDate,
 } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
+import { CoverArtField } from '../components/CoverArtField';
 
 /** The Eastern calendar day (YYYY-MM-DD) a release instant falls on, for the date input. */
 function easternDay(iso: string): string {
@@ -236,6 +237,7 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
   const [synopsis, setSynopsis] = useState(title.synopsis);
   const [scoutable, setScoutable] = useState(title.scoutable);
   const [allowDownload, setAllowDownload] = useState(title.allowDownload);
+  const [posterUrl, setPosterUrl] = useState(title.posterUrl ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -244,6 +246,10 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
     event.preventDefault();
     setError(null);
     setSaved(false);
+    if (!posterUrl) {
+      setError('Upload cover art for this title. It is the artwork viewers see.');
+      return;
+    }
     setSubmitting(true);
     try {
       await apiSend('PATCH', `/api/studio/titles/${title.id}`, {
@@ -254,6 +260,7 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
         synopsis,
         scoutable,
         allowDownload: title.isBlu ? false : allowDownload,
+        posterUrl,
       });
       setSaved(true);
       await onSaved();
@@ -315,6 +322,7 @@ function TitleEditForm({ title, onSaved }: { title: StudioTitleDetail; onSaved: 
             </select>
           </div>
         </div>
+        <CoverArtField label="Cover art" value={posterUrl} onChange={setPosterUrl} required />
         <div className="field">
           <label htmlFor="edit-synopsis">Synopsis</label>
           <textarea
@@ -700,6 +708,8 @@ function EpisodeForm({
   const [durationS, setDurationS] = useState(episode?.durationS ?? 0);
   // Scheduled release day (YYYY-MM-DD, Eastern); empty = available as soon as the title is live.
   const [releaseDate, setReleaseDate] = useState(episode?.releaseAt ? easternDay(episode.releaseAt) : '');
+  // Episode cover (optional; the title's cover art is used when empty).
+  const [thumbnailUrl, setThumbnailUrl] = useState(episode?.thumbnailUrl ?? '');
   const [error, setError] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -758,6 +768,7 @@ function EpisodeForm({
       captionsUrl: captionsUrl || null,
       durationS,
       releaseDate: releaseDate || null,
+      thumbnailUrl: thumbnailUrl || null,
     };
     try {
       if (isEdit && episode) {
@@ -867,6 +878,13 @@ function EpisodeForm({
           onChange={(event) => setCaptionsUrl(event.target.value)}
         />
       </div>
+      <CoverArtField
+        label="Episode cover"
+        value={thumbnailUrl}
+        onChange={setThumbnailUrl}
+        portrait={false}
+        hint="JPEG, PNG, or WebP, up to 10 MB; landscape works best. Shown in the episode list. Leave empty to use the title's cover art."
+      />
       <div className="field">
         <label htmlFor="ep-release-date">Release date (optional)</label>
         <input

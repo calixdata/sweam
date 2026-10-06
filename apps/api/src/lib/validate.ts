@@ -159,6 +159,8 @@ export const episodeCreateSchema = z.object({
   durationS: z.number().int().min(0).max(86_400).default(0),
   /** Optional scheduled release day; omitted or null releases on publish. */
   releaseDate: releaseDate.default(null),
+  /** Optional episode cover image; the title cover is used when null. */
+  thumbnailUrl: mediaUrl.nullable().default(null),
 });
 
 export const episodeUpdateSchema = episodeCreateSchema
@@ -567,6 +569,8 @@ export const clipCreateSchema = z.object({
   seriesId: z.string().trim().min(1).max(64).nullable().default(null),
   /** Optional scheduled release day (YYYY-MM-DD); null posts right away. */
   releaseDate: releaseDate.default(null),
+  /** Optional cover image for the clip (an uploaded /media image); a frame is used when null. */
+  posterUrl: mediaUrl.nullable().default(null),
 });
 
 /** An admin's decision on a clip in the review queue. */

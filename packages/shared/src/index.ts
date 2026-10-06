@@ -469,6 +469,8 @@ export interface EpisodeSummary {
   released: boolean;
   /** Signed-in viewers only: a release-day reminder is set for this episode. */
   reminderSet?: boolean;
+  /** Episode cover image (creator-chosen, or a frame from the transcode), or null. */
+  thumbnailUrl: string | null;
 }
 
 /** Full title page payload. Viewer-specific fields are false for signed-out requests. */
@@ -636,7 +638,6 @@ export type TranscodeStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancel
  */
 export interface StudioEpisode extends EpisodeSummary {
   sourceUrl: string | null;
-  thumbnailUrl: string | null;
   transcode: { status: TranscodeStatus; error: string | null; updatedAt: string } | null;
 }
 

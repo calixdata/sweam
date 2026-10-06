@@ -722,6 +722,70 @@ h1 .blu-badge {
   font-size: 0.92rem;
 }
 
+/* Admin section tabs: a horizontal strip, scrollable on narrow screens. */
+.admin-nav {
+  margin: 0.25rem 0 1.5rem;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+.admin-nav ul {
+  display: flex;
+  gap: 1.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.admin-nav a {
+  position: relative;
+  display: inline-block;
+  padding: 0.6rem 0.1rem;
+  color: #aebad0;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.admin-nav a:hover,
+.admin-nav a:focus-visible {
+  color: #fff;
+}
+.admin-nav a[aria-current='page'] {
+  color: #fff;
+}
+.admin-nav a[aria-current='page']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--cyan);
+}
+
+/* Cover art field: current artwork shown as text and a small preview. */
+.cover-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.4rem 0;
+}
+.cover-preview img {
+  width: 64px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 0.4rem;
+  background: var(--surface-2);
+}
+.episode-thumb {
+  width: 96px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 0.35rem;
+  background: var(--surface-2);
+  margin-right: 0.75rem;
+  flex: none;
+}
+
 /* Verified-account check: inline with the name it follows. */
 .verified-badge {
   display: inline-block;

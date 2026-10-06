@@ -41,7 +41,7 @@ titleRoutes.get('/:slug', async (c) => {
   if (!row) fail(404, 'title_not_found', 'That title does not exist or is not published.');
 
   const { results: episodeRows } = await c.env.DB.prepare(
-    `SELECT id, season, episode, name, synopsis, video_url, captions_url, duration_s, release_at
+    `SELECT id, season, episode, name, synopsis, video_url, captions_url, duration_s, release_at, thumbnail_url
      FROM episodes WHERE title_id = ? ORDER BY season, episode`,
   )
     .bind(row.id)

@@ -11,6 +11,7 @@ import {
 } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { CoverArtField } from '../components/CoverArtField';
 import { ErrorNote, Loading } from '../components/Status';
 import { usePageTitle } from '../hooks';
 
@@ -240,6 +241,7 @@ function NewTitleForm({ onCreated }: { onCreated: () => Promise<void> }) {
   const [genre, setGenre] = useState<string>(GENRES[0]);
   const [advisory, setAdvisory] = useState<string>('TV-PG');
   const [synopsis, setSynopsis] = useState('');
+  const [posterUrl, setPosterUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [createdMessage, setCreatedMessage] = useState('');
@@ -247,12 +249,17 @@ function NewTitleForm({ onCreated }: { onCreated: () => Promise<void> }) {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (!posterUrl) {
+      setError('Upload cover art for the title. It is the artwork viewers see.');
+      return;
+    }
     setSubmitting(true);
     try {
-      await apiSend('POST', '/api/studio/titles', { name, kind, genre, advisory, synopsis });
+      await apiSend('POST', '/api/studio/titles', { name, kind, genre, advisory, synopsis, posterUrl });
       setCreatedMessage(`Created “${name}” as a draft. Open it below to add episodes.`);
       setName('');
       setSynopsis('');
+      setPosterUrl('');
       await onCreated();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not create the title.');
@@ -322,6 +329,7 @@ function NewTitleForm({ onCreated }: { onCreated: () => Promise<void> }) {
             onChange={(event) => setSynopsis(event.target.value)}
           />
         </div>
+        <CoverArtField label="Cover art" value={posterUrl} onChange={setPosterUrl} required />
         {error && (
           <p className="status status-error" role="alert">
             {error}

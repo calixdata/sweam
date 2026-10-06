@@ -197,7 +197,6 @@ async function titleEpisodes(c: Context<AppEnv>, titleId: string): Promise<Studi
     // The creator always sees their own playback URLs, released or scheduled.
     ...mapEpisode(row, { reveal: true }),
     sourceUrl: row.source_url,
-    thumbnailUrl: row.thumbnail_url,
     transcode:
       row.t_status && row.t_updated
         ? { status: row.t_status, error: row.t_error, updatedAt: row.t_updated }
@@ -540,8 +539,8 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
 
   try {
     await c.env.DB.prepare(
-      `INSERT INTO episodes (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO episodes (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at, thumbnail_url)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         id,
@@ -556,6 +555,7 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
         sourceUrl,
         nowIso(),
         releaseAt,
+        body.thumbnailUrl,
       )
       .run();
   } catch (err) {
@@ -640,6 +640,7 @@ studioRoutes.patch('/episodes/:episodeId', requireCreator, async (c) => {
     captions_url: body.captionsUrl,
     duration_s: body.durationS,
     source_url: newSource ?? undefined,
+    thumbnail_url: body.thumbnailUrl,
     release_at: releaseAt,
     // A moved schedule is announced again when it actually releases.
     release_notified_at: scheduleChanged ? null : undefined,

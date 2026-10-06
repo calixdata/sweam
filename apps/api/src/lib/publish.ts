@@ -183,6 +183,8 @@ export interface ClipToPublish {
   seriesId: string | null;
   /** Optional scheduled release day (YYYY-MM-DD); the clip unlocks at midnight Eastern. */
   releaseDate?: string | null;
+  /** Optional cover image chosen at post time; a frame from the transcode is used when null. */
+  posterUrl?: string | null;
 }
 
 /** A clip's title name is its caption, trimmed to a display-friendly length. */
@@ -258,9 +260,9 @@ export async function publishClip(
           `INSERT INTO titles
              (id, creator_id, kind, name, slug, synopsis, genre, audiences, genres, subgenres, advisory, poster_url,
               published, published_at, admin_locked, series_id, review_state, is_blu, blu_price_cents, blu_changed_at, ever_blu, created_at)
-           VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, NULL, 1, ?, 1, NULL, 'pending', ?, ?, ?, ?, ?)`,
+           VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, ?, 1, ?, 1, NULL, 'pending', ?, ?, ?, ?, ?)`,
         )
-        .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), genres, advisory, now, isBlu ? 1 : 0, clip.bluPriceCents, isBlu ? now : null, isBlu ? 1 : 0, now),
+        .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), genres, advisory, clip.posterUrl ?? null, now, isBlu ? 1 : 0, clip.bluPriceCents, isBlu ? now : null, isBlu ? 1 : 0, now),
       env.DB.prepare('INSERT INTO title_stats (title_id) VALUES (?)').bind(titleId),
     ]);
 
@@ -284,10 +286,10 @@ export async function publishClip(
   const releaseAt = clip.releaseDate ? easternMidnightUtc(clip.releaseDate) : null;
   await env.DB.prepare(
     `INSERT INTO episodes
-       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at)
-     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at, thumbnail_url)
+     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
   )
-    .bind(episodeId, titleId, episode, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now, releaseAt)
+    .bind(episodeId, titleId, episode, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now, releaseAt, clip.posterUrl ?? null)
     .run();
   await enqueueTranscode(env.DB, episodeId, clip.sourceUrl);
 

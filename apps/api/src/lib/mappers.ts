@@ -100,6 +100,8 @@ export interface EpisodeRow {
   ai_credits?: string | null;
   /** Scheduled release instant; queries that do not select it treat the episode as released. */
   release_at?: string | null;
+  /** Episode cover, when the query selects it. */
+  thumbnail_url?: string | null;
 }
 
 /**
@@ -123,6 +125,7 @@ export function mapEpisode(row: EpisodeRow, opts: { reveal?: boolean } = {}): Ep
     ...(row.ai_credits !== undefined ? { aiCredits: row.ai_credits } : {}),
     releaseAt,
     released,
+    thumbnailUrl: row.thumbnail_url ?? null,
   };
 }
 

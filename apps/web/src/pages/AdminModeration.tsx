@@ -11,6 +11,7 @@ import type {
 import { AI_RECOMMENDATION_LABELS, REPORT_REASON_LABELS } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { AdminNav } from '../components/AdminNav';
 import { ErrorNote, Loading } from '../components/Status';
 import { usePageTitle } from '../hooks';
 
@@ -87,10 +88,8 @@ function ModerationQueue() {
 
   return (
     <div className="page page-narrow">
-      <p>
-        <Link to="/admin">Back to Admin</Link>
-      </p>
       <h1>Moderation</h1>
+      <AdminNav />
 
       {notice && (
         <p className="status" role="status">

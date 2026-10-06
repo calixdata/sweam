@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import type { AdminRemovalRequest, AdminSubmission, SubmissionStatus } from '@sweam/shared';
 import {
   AI_RECOMMENDATION_LABELS,
@@ -8,6 +7,7 @@ import {
 } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { AdminNav } from '../components/AdminNav';
 import { ErrorNote, Loading } from '../components/Status';
 import { usePageTitle } from '../hooks';
 
@@ -121,10 +121,8 @@ function SubmissionsCrm() {
   return (
     <div className="page page-narrow">
       <h1>Submissions</h1>
-      <p className="page-intro">
-        The review pipeline for content pitched to Sweam. Back to the{' '}
-        <Link to="/admin">admin dashboard</Link>.
-      </p>
+      <AdminNav />
+      <p className="page-intro">The review pipeline for content pitched to Sweam.</p>
 
       {removals.length > 0 && (
         <section aria-labelledby="removals-heading" className="crm-removals">
