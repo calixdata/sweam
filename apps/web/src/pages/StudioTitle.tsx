@@ -661,7 +661,7 @@ function ReplacementRequest({ episodeId }: { episodeId: string }) {
         <input
           id={`replace-${episodeId}`}
           type="file"
-          accept="video/mp4,video/webm"
+          accept="video/mp4,video/webm,video/quicktime"
           disabled={busy}
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
         />
@@ -862,11 +862,11 @@ function EpisodeForm({
         </p>
       </div>
       <div className="field">
-        <label htmlFor="ep-video-file">Upload video (MP4 or WebM, up to 512 MB)</label>
+        <label htmlFor="ep-video-file">Upload video (MP4, WebM, or MOV, up to 512 MB)</label>
         <input
           id="ep-video-file"
           type="file"
-          accept="video/mp4,video/webm"
+          accept="video/mp4,video/webm,video/quicktime"
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (file) void handleUpload(file, 'video');

@@ -44,3 +44,4 @@ example
 
 # Firebase config (do not commit to the public repo)
 google-services.json
+play-service-account.json

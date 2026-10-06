@@ -276,7 +276,7 @@ export default function RecordScreen() {
       setError('Choose a cover image for your clip. Every clip needs one.');
       return;
     }
-    if (!isAcceptedVideo(clip.mime) && !/\.(mp4|webm)$/i.test(clip.name)) {
+    if (!isAcceptedVideo(clip.mime) && !/.(mp4|webm|mov)$/i.test(clip.name)) {
       setError('That video format is not supported yet. Record in the app, or pick an MP4 or WebM file.');
       return;
     }

@@ -61,6 +61,8 @@ export const MAX_UPLOAD_BYTES = 512 * 1024 * 1024;
 export const UPLOAD_CONTENT_TYPES = new Set([
   'video/mp4',
   'video/webm',
+  // iPhone recordings (expo-camera on iOS writes .mov); ffmpeg transcodes them like any other source.
+  'video/quicktime',
   'text/vtt',
   'image/jpeg',
   'image/png',
@@ -76,6 +78,7 @@ const EXTENSION_CONTENT_TYPE: Record<string, string> = {
   mp4: 'video/mp4',
   m4v: 'video/mp4',
   webm: 'video/webm',
+  mov: 'video/quicktime',
   vtt: 'text/vtt',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',

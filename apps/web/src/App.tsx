@@ -23,6 +23,7 @@ import { ResetPassword } from './pages/ResetPassword';
 import { AiDisclosure } from './pages/legal/AiDisclosure';
 import { CommunityGuidelines } from './pages/legal/CommunityGuidelines';
 import { Cookies } from './pages/legal/Cookies';
+import { DeleteAccount } from './pages/legal/DeleteAccount';
 import { CreatorAgreement } from './pages/legal/CreatorAgreement';
 import { ScoutTerms } from './pages/legal/ScoutTerms';
 import { Privacy } from './pages/legal/Privacy';
@@ -153,6 +154,7 @@ export function App() {
         <Route path="/legal/terms" element={<Terms />} />
         <Route path="/legal/privacy" element={<Privacy />} />
         <Route path="/legal/cookies" element={<Cookies />} />
+        <Route path="/legal/delete-account" element={<DeleteAccount />} />
         <Route path="/legal/ai" element={<AiDisclosure />} />
         <Route path="/legal/community-guidelines" element={<CommunityGuidelines />} />
         <Route path="/legal/creator-agreement" element={<CreatorAgreement />} />

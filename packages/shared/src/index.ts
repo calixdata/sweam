@@ -294,8 +294,8 @@ export const USERNAME_HINT = '3–24 characters: lowercase letters, numbers, and
  */
 export const UPLOAD_SPECS = {
   video: {
-    formats: 'MP4 or WebM',
-    accept: 'video/mp4,video/webm',
+    formats: 'MP4, WebM, or MOV',
+    accept: 'video/mp4,video/webm,video/quicktime',
     maxBytes: 512 * 1024 * 1024,
     maxLabel: '512 MB',
     recommended:

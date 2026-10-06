@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -48,6 +49,7 @@ export default function SettingsScreen() {
         <ProfilePictureSection avatarUrl={user.avatarUrl} name={user.displayName} refresh={refresh} />
         <ChangeEmailSection currentEmail={user.email} />
         <ChangePasswordSection />
+        <DeleteAccountSection />
       </ScrollView>
     </View>
   );
@@ -368,6 +370,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryBtnText: { color: '#04121a', fontSize: 15, fontWeight: '700' },
+  dangerBtn: { backgroundColor: colors.danger },
   secondaryBtn: {
     borderWidth: 1,
     borderColor: colors.line,
@@ -383,3 +386,73 @@ const styles = StyleSheet.create({
   statusOk: { color: colors.accent },
   statusErr: { color: colors.danger },
 });
+
+/** Permanent account deletion: password, then a final confirm dialog. */
+function DeleteAccountSection() {
+  const { signOut } = useAuth();
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+
+  function confirmDelete() {
+    setStatus(null);
+    if (!password) {
+      setStatus({ ok: false, text: 'Enter your password first.' });
+      return;
+    }
+    Alert.alert(
+      'Delete your account?',
+      'This permanently deletes your account, everything you published, your comments, likes, follows and history, and cancels any subscription. There is no undo.',
+      [
+        { text: 'Keep my account', style: 'cancel' },
+        { text: 'Delete permanently', style: 'destructive', onPress: () => void run() },
+      ],
+    );
+  }
+
+  async function run() {
+    setBusy(true);
+    try {
+      await api.del('/api/me/account', { password, confirm: 'DELETE' });
+      await signOut().catch(() => undefined);
+      router.replace('/');
+    } catch (err) {
+      setStatus({ ok: false, text: err instanceof ApiError ? err.message : 'Could not delete your account.' });
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Delete account</Text>
+      <Text style={styles.sectionHint}>
+        Permanently deletes your account, your profile, everything you published, your comments,
+        likes, follows and history, and cancels any Sweam Blu or Scout subscription. This cannot
+        be undone.
+      </Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Your password"
+        placeholderTextColor={colors.muted}
+        secureTextEntry
+        value={password}
+        onChangeText={setPassword}
+        accessibilityLabel="Your password, to confirm deletion"
+      />
+      <Pressable
+        style={[styles.primaryBtn, styles.dangerBtn, busy && { opacity: 0.5 }]}
+        disabled={busy}
+        onPress={confirmDelete}
+        accessibilityRole="button"
+        accessibilityLabel="Delete my account permanently"
+      >
+        <Text style={styles.primaryBtnText}>{busy ? 'Deleting…' : 'Delete my account permanently'}</Text>
+      </Pressable>
+      {status && (
+        <Text style={[styles.status, status.ok ? styles.statusOk : styles.statusErr]} accessibilityLiveRegion="polite">
+          {status.text}
+        </Text>
+      )}
+    </View>
+  );
+}

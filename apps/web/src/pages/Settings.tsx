@@ -5,6 +5,7 @@ import type { MyVerification } from '@sweam/shared';
 import { UPLOAD_SPECS, USERNAME_HINT, USERNAME_RE } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { useNavigate } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { usePageTitle } from '../hooks';
@@ -154,6 +155,8 @@ export function Settings() {
       <ChangeEmailSection />
 
       <ChangePasswordSection />
+
+      <DeleteAccountSection />
 
       <section aria-labelledby="billing-heading">
         <h2 id="billing-heading">Subscriptions &amp; billing</h2>
@@ -650,6 +653,83 @@ function ChangePasswordSection() {
         )}
         <button type="submit" className="button" disabled={busy}>
           {busy ? 'Saving…' : 'Change password'}
+        </button>
+      </form>
+    </section>
+  );
+}
+
+/** Permanent account deletion: password plus a typed DELETE, then a final confirm. */
+function DeleteAccountSection() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    if (confirm.trim() !== 'DELETE') {
+      setError('Type DELETE in capital letters to confirm.');
+      document.getElementById('settings-delete-confirm')?.focus();
+      return;
+    }
+    if (
+      !window.confirm(
+        'This permanently deletes your account, everything you published, and your subscriptions. There is no undo. Delete it now?',
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await apiSend('DELETE', '/api/me/account', { password, confirm: 'DELETE' });
+      await signOut().catch(() => undefined);
+      navigate('/', { replace: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not delete your account.');
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="delete-heading">
+      <h2 id="delete-heading">Delete account</h2>
+      <p className="page-intro">
+        Permanently deletes your account, your profile, everything you published, your comments,
+        likes, follows and history, and cancels any Sweam Blu or Scout subscription. This cannot be
+        undone. Details are on the <Link to="/legal/delete-account">account deletion page</Link>.
+      </p>
+      <form onSubmit={submit} noValidate>
+        <div className="field">
+          <label htmlFor="settings-delete-password">Your password</label>
+          <input
+            id="settings-delete-password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="settings-delete-confirm">Type DELETE to confirm</label>
+          <input
+            id="settings-delete-confirm"
+            type="text"
+            autoComplete="off"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </div>
+        {error && (
+          <p className="status status-error" role="alert">
+            {error}
+          </p>
+        )}
+        <button type="submit" className="button button-danger" disabled={busy || !password}>
+          {busy ? 'Deleting…' : 'Delete my account permanently'}
         </button>
       </form>
     </section>

@@ -10,7 +10,15 @@
     "backgroundColor": "#080e19",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "co.sweam.app"
+      "bundleIdentifier": "co.sweam.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryAddUsageDescription": "Sweam saves clips you choose to keep to your library."
+      },
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "co.sweam.app",
@@ -21,7 +29,14 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_MEDIA_VIDEO",
+        "READ_MEDIA_IMAGES",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
       "output": "static",
@@ -64,6 +79,8 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "privacy": "public",
+    "description": "Sweam: where TikTok meets Tubi. Creator-made films, series and clips with equal visibility, scouted by networks."
   }
 }

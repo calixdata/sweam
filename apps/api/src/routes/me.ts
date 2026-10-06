@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { getCookie } from 'hono/cookie';
+import { deleteCookie, getCookie } from 'hono/cookie';
 import type { MyVerification, NotificationItem, VerificationStatus } from '@sweam/shared';
 import { UPLOAD_SPECS } from '@sweam/shared';
 import type { AppEnv } from '../env';
@@ -10,10 +10,12 @@ import type { TitleRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { loadScoutMembership } from '../lib/scoutMembership';
+import { cancelSubscription, stripeConfigured } from '../lib/stripe';
 import { SESSION_COOKIE, bearerToken, requireUser, currentUser } from '../lib/session';
 import {
   changeEmailSchema,
   changePasswordSchema,
+  deleteAccountSchema,
   pushTokenDeleteSchema,
   pushTokenSchema,
   reportCreateSchema,
@@ -253,6 +255,50 @@ meRoutes.delete('/release-reminders/:episodeId', async (c) => {
     .bind(user.id, c.req.param('episodeId'))
     .run();
   return c.json({ reminderSet: false });
+});
+
+// ---------------------------------------------------------------------------
+// Account deletion (required by the app stores for any app with sign-up)
+// ---------------------------------------------------------------------------
+
+/**
+ * Delete the signed-in account permanently. The password and a typed DELETE
+ * confirm it. Live Stripe subscriptions are canceled first (best effort), then
+ * the user row goes and every table referencing it cascades: profile, titles,
+ * episodes, comments, likes, follows, sessions, notifications, and so on.
+ * Admin accounts cannot be deleted this way.
+ */
+meRoutes.delete('/account', async (c) => {
+  const user = currentUser(c);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.pwChange, user.id);
+  const body = await parseBody(c, deleteAccountSchema);
+  if (user.isAdmin) {
+    fail(403, 'admin_account', 'Administrator accounts cannot be deleted from the app. Ask another admin to remove the admin role first.');
+  }
+  const row = await c.env.DB.prepare('SELECT password_hash FROM users WHERE id = ?')
+    .bind(user.id)
+    .first<{ password_hash: string }>();
+  if (!row || !(await verifyPassword(body.password, row.password_hash))) {
+    fail(400, 'invalid_password', 'Your password is incorrect.');
+  }
+
+  // Stop billing before the records disappear.
+  if (stripeConfigured(c.env)) {
+    const { results: subs } = await c.env.DB.prepare(
+      `SELECT stripe_subscription_id AS id FROM blu_subscriptions
+         WHERE subscriber_id = ?1 AND stripe_subscription_id IS NOT NULL AND status != 'canceled'
+       UNION
+       SELECT stripe_subscription_id AS id FROM scout_all_access
+         WHERE user_id = ?1 AND stripe_subscription_id IS NOT NULL AND status != 'canceled'`,
+    )
+      .bind(user.id)
+      .all<{ id: string }>();
+    await Promise.allSettled(subs.map((sub) => cancelSubscription(c.env, sub.id)));
+  }
+
+  await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id).run();
+  deleteCookie(c, SESSION_COOKIE, { path: '/' });
+  return c.json({ deleted: true });
 });
 
 // ---------------------------------------------------------------------------

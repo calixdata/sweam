@@ -54,7 +54,7 @@ export const CLIP_SPEC = {
 } as const;
 
 /** Video container types the intake upload accepts (UPLOAD_CONTENT_TYPES on the API). */
-export const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm'] as const;
+export const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime'] as const;
 
 /**
  * Sweam Blu preset price tiers (mirrors BLU_TIERS on the server). Creators do

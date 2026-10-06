@@ -662,3 +662,11 @@ export const verbatiimJobSchema = z.object({
   clipCount: z.number().int().min(0).max(10).default(3),
   rightsConfirmed: z.literal(true, { errorMap: () => ({ message: 'Confirm you hold the rights to this text.' }) }),
 });
+
+/** Permanent account deletion: the password plus the word DELETE, typed. */
+export const deleteAccountSchema = z.object({
+  password: z.string().min(1, 'Enter your password.'),
+  confirm: z.literal('DELETE', {
+    errorMap: () => ({ message: 'Type DELETE to confirm.' }),
+  }),
+});
