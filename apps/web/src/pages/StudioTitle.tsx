@@ -708,7 +708,7 @@ function EpisodeForm({
   const [durationS, setDurationS] = useState(episode?.durationS ?? 0);
   // Scheduled release day (YYYY-MM-DD, Eastern); empty = available as soon as the title is live.
   const [releaseDate, setReleaseDate] = useState(episode?.releaseAt ? easternDay(episode.releaseAt) : '');
-  // Episode cover (optional; the title's cover art is used when empty).
+  // Episode cover art (mandatory).
   const [thumbnailUrl, setThumbnailUrl] = useState(episode?.thumbnailUrl ?? '');
   const [error, setError] = useState<string | null>(null);
   const [uploadState, setUploadState] = useState('');
@@ -758,6 +758,10 @@ function EpisodeForm({
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (!thumbnailUrl) {
+      setError('Upload cover art for this episode. Every episode needs its own cover.');
+      return;
+    }
     setSubmitting(true);
     const body = {
       season,
@@ -768,7 +772,7 @@ function EpisodeForm({
       captionsUrl: captionsUrl || null,
       durationS,
       releaseDate: releaseDate || null,
-      thumbnailUrl: thumbnailUrl || null,
+      thumbnailUrl,
     };
     try {
       if (isEdit && episode) {
@@ -879,11 +883,12 @@ function EpisodeForm({
         />
       </div>
       <CoverArtField
-        label="Episode cover"
+        label="Episode cover art"
         value={thumbnailUrl}
         onChange={setThumbnailUrl}
+        required
         portrait={false}
-        hint="JPEG, PNG, or WebP, up to 10 MB; landscape works best. Shown in the episode list. Leave empty to use the title's cover art."
+        hint="JPEG, PNG, or WebP, up to 10 MB; landscape works best. Shown in the episode list and on the watch page."
       />
       <div className="field">
         <label htmlFor="ep-release-date">Release date (optional)</label>

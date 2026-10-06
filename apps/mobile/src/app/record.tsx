@@ -106,7 +106,7 @@ export default function RecordScreen() {
   const [seriesId, setSeriesId] = useState('');
   // Optional scheduled release day, typed as YYYY-MM-DD (Eastern); empty posts right away.
   const [releaseDate, setReleaseDate] = useState('');
-  // Optional cover image, uploaded as soon as it is picked; a frame from the clip is used when empty.
+  // Cover image (mandatory), uploaded as soon as it is picked.
   const [cover, setCover] = useState<{ name: string; url: string } | null>(null);
   const [coverBusy, setCoverBusy] = useState(false);
   const [coverNote, setCoverNote] = useState('');
@@ -272,6 +272,10 @@ export default function RecordScreen() {
       setError('Choose a maturity rating.');
       return;
     }
+    if (!cover) {
+      setError('Choose a cover image for your clip. Every clip needs one.');
+      return;
+    }
     if (!isAcceptedVideo(clip.mime) && !/\.(mp4|webm)$/i.test(clip.name)) {
       setError('That video format is not supported yet. Record in the app, or pick an MP4 or WebM file.');
       return;
@@ -289,7 +293,7 @@ export default function RecordScreen() {
         bluTierId: seriesId ? null : bluTierId,
         seriesId: seriesId || null,
         releaseDate: releaseDate.trim() || null,
-        posterUrl: cover?.url ?? null,
+        posterUrl: cover.url,
       });
       player.pause();
       router.replace(`/watch/${result.episodeId}`);
@@ -302,7 +306,7 @@ export default function RecordScreen() {
       setPosting(false);
       setProgress(null);
     }
-  }, [clip, posting, caption, rating, genre, audiences, bluTierId, seriesId, player, router]);
+  }, [clip, posting, caption, rating, genre, audiences, bluTierId, seriesId, releaseDate, cover, player, router]);
 
   // --- Signed-out gate ---------------------------------------------------
   if (!user) {
@@ -371,7 +375,7 @@ export default function RecordScreen() {
             />
             <Text style={styles.hint}>{captionLeft} characters left. This becomes the clip's title.</Text>
 
-            <Text style={styles.label}>Cover image (optional)</Text>
+            <Text style={styles.label}>Cover image (required)</Text>
             <View style={styles.coverRow}>
               <Pressable
                 style={[styles.coverBtn, coverBusy && styles.btnDisabled]}
@@ -401,7 +405,7 @@ export default function RecordScreen() {
             <Text style={styles.hint} accessibilityLiveRegion="polite">
               {coverBusy
                 ? 'Uploading the cover…'
-                : coverNote || 'JPEG, PNG, or WebP up to 10 MB. Shown on cards and in search. Leave empty to use a frame from your clip.'}
+                : coverNote || 'JPEG, PNG, or WebP up to 10 MB. Shown on cards and in search. Every clip needs one.'}
             </Text>
 
             <Text style={styles.label}>Release date (optional)</Text>

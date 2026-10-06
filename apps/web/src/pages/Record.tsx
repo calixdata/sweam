@@ -59,7 +59,7 @@ export function Record() {
   const [seriesId, setSeriesId] = useState('');
   // Optional scheduled release day (YYYY-MM-DD, Eastern); empty posts right away.
   const [releaseDate, setReleaseDate] = useState('');
-  // Optional cover image; a frame from the clip is used when empty.
+  // Cover image for the clip (mandatory).
   const [posterUrl, setPosterUrl] = useState('');
 
   const [posting, setPosting] = useState(false);
@@ -229,7 +229,7 @@ export function Record() {
         bluTierId: !seriesId && bluMode === 'blu' ? bluTierId : null,
         seriesId: seriesId || null,
         releaseDate: releaseDate || null,
-        posterUrl: posterUrl || null,
+        posterUrl,
       });
       stopStream();
       navigate(`/watch/${result.episodeId}`);
@@ -415,10 +415,11 @@ export function Record() {
           label="Cover image"
           value={posterUrl}
           onChange={setPosterUrl}
+          required
           portrait={false}
           base={INTAKE_UPLOAD_BASE}
           disabled={posting}
-          hint="JPEG, PNG, or WebP, up to 10 MB. Shown on cards and in search. Leave empty to use a frame from your clip."
+          hint="JPEG, PNG, or WebP, up to 10 MB. Shown on cards and in search."
         />
         <div className="field">
           <label htmlFor="clip-release-date">Release date (optional)</label>

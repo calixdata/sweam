@@ -159,10 +159,10 @@ export async function publishSubmission(
   const releaseAt = submission.release_date ? easternMidnightUtc(submission.release_date) : null;
   await env.DB.prepare(
     `INSERT INTO episodes
-       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at)
-     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
+       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at, thumbnail_url)
+     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
   )
-    .bind(episodeId, titleId, episode, submission.title_name, submission.synopsis, submission.source_url, submission.captions_url, submission.source_url, now, releaseAt)
+    .bind(episodeId, titleId, episode, submission.title_name, submission.synopsis, submission.source_url, submission.captions_url, submission.source_url, now, releaseAt, submission.poster_url)
     .run();
   await enqueueTranscode(env.DB, episodeId, submission.source_url);
 
@@ -183,8 +183,8 @@ export interface ClipToPublish {
   seriesId: string | null;
   /** Optional scheduled release day (YYYY-MM-DD); the clip unlocks at midnight Eastern. */
   releaseDate?: string | null;
-  /** Optional cover image chosen at post time; a frame from the transcode is used when null. */
-  posterUrl?: string | null;
+  /** Cover image chosen at post time (mandatory). */
+  posterUrl: string;
 }
 
 /** A clip's title name is its caption, trimmed to a display-friendly length. */

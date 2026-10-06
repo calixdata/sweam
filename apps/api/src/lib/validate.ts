@@ -110,13 +110,25 @@ const mediaUrl = z
     'Must be an http(s) URL or a /media/... path from the Sweam uploader.',
   );
 
+/** Cover art is mandatory on every title, episode and clip: a media URL, never empty or null. */
+const coverArt = z
+  .string({ required_error: 'Cover art is required.', invalid_type_error: 'Cover art is required.' })
+  .trim()
+  .min(1, 'Cover art is required.')
+  .max(2048)
+  .refine(
+    (value) => /^https?:\/\/\S+$/.test(value) || /^\/media\/\S+$/.test(value),
+    'Cover art must be an uploaded image (a /media/... path) or an https image URL.',
+  );
+
 export const titleCreateSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.').max(120),
   kind,
   genre,
   synopsis: z.string().trim().max(2000).default(''),
   advisory: advisory.default('TV-PG'),
-  posterUrl: mediaUrl.nullable().default(null),
+  /** Cover art is mandatory. */
+  posterUrl: coverArt,
 });
 
 export const titleUpdateSchema = titleCreateSchema
@@ -159,8 +171,8 @@ export const episodeCreateSchema = z.object({
   durationS: z.number().int().min(0).max(86_400).default(0),
   /** Optional scheduled release day; omitted or null releases on publish. */
   releaseDate: releaseDate.default(null),
-  /** Optional episode cover image; the title cover is used when null. */
-  thumbnailUrl: mediaUrl.nullable().default(null),
+  /** Episode cover art: mandatory. */
+  thumbnailUrl: coverArt,
 });
 
 export const episodeUpdateSchema = episodeCreateSchema
@@ -569,8 +581,8 @@ export const clipCreateSchema = z.object({
   seriesId: z.string().trim().min(1).max(64).nullable().default(null),
   /** Optional scheduled release day (YYYY-MM-DD); null posts right away. */
   releaseDate: releaseDate.default(null),
-  /** Optional cover image for the clip (an uploaded /media image); a frame is used when null. */
-  posterUrl: mediaUrl.nullable().default(null),
+  /** Cover image for the clip: mandatory (an uploaded /media image). */
+  posterUrl: coverArt,
 });
 
 /** An admin's decision on a clip in the review queue. */

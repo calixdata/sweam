@@ -54,36 +54,71 @@ describe('creatorProfileSchema', () => {
 
 describe('titleCreateSchema', () => {
   it('accepts a minimal valid title and applies defaults', () => {
-    const parsed = titleCreateSchema.parse({ name: 'My Film', kind: 'film', genre: 'Drama' });
+    const parsed = titleCreateSchema.parse({
+      name: 'My Film',
+      kind: 'film',
+      genre: 'Drama',
+      posterUrl: '/media/u/abc/def/cover.png',
+    });
     expect(parsed.advisory).toBe('TV-PG');
     expect(parsed.synopsis).toBe('');
-    expect(parsed.posterUrl).toBeNull();
+    expect(parsed.posterUrl).toBe('/media/u/abc/def/cover.png');
+  });
+
+  it('requires cover art', () => {
+    const missing = titleCreateSchema.safeParse({ name: 'My Film', kind: 'film', genre: 'Drama' });
+    expect(missing.success).toBe(false);
+    if (!missing.success) expect(missing.error.issues[0]?.message).toBe('Cover art is required.');
+    expect(
+      titleCreateSchema.safeParse({ name: 'X', kind: 'film', genre: 'Drama', posterUrl: null }).success,
+    ).toBe(false);
+    expect(
+      titleCreateSchema.safeParse({ name: 'X', kind: 'film', genre: 'Drama', posterUrl: '' }).success,
+    ).toBe(false);
   });
 
   it('rejects unknown kinds and genres', () => {
-    expect(titleCreateSchema.safeParse({ name: 'X', kind: 'podcast', genre: 'Drama' }).success).toBe(false);
-    expect(titleCreateSchema.safeParse({ name: 'X', kind: 'film', genre: 'Cooking' }).success).toBe(false);
+    const cover = '/media/u/abc/def/cover.png';
+    expect(
+      titleCreateSchema.safeParse({ name: 'X', kind: 'podcast', genre: 'Drama', posterUrl: cover }).success,
+    ).toBe(false);
+    expect(
+      titleCreateSchema.safeParse({ name: 'X', kind: 'film', genre: 'Cooking', posterUrl: cover }).success,
+    ).toBe(false);
   });
 });
 
 describe('episodeCreateSchema', () => {
+  const thumbnailUrl = '/media/u/abc/def/cover.png';
+
   it('accepts https URLs and Sweam /media/ paths for video', () => {
     expect(
-      episodeCreateSchema.safeParse({ name: 'Pilot', videoUrl: 'https://cdn.example.com/v.mp4' }).success,
+      episodeCreateSchema.safeParse({ name: 'Pilot', videoUrl: 'https://cdn.example.com/v.mp4', thumbnailUrl })
+        .success,
     ).toBe(true);
     expect(
-      episodeCreateSchema.safeParse({ name: 'Pilot', videoUrl: '/media/u/abc/def/v.mp4' }).success,
+      episodeCreateSchema.safeParse({ name: 'Pilot', videoUrl: '/media/u/abc/def/v.mp4', thumbnailUrl }).success,
     ).toBe(true);
+  });
+
+  it('requires episode cover art', () => {
+    const missing = episodeCreateSchema.safeParse({ name: 'Pilot', videoUrl: '/media/u/abc/def/v.mp4' });
+    expect(missing.success).toBe(false);
+    if (!missing.success) expect(missing.error.issues[0]?.message).toBe('Cover art is required.');
+    expect(
+      episodeCreateSchema.safeParse({ name: 'Pilot', videoUrl: '/media/u/abc/def/v.mp4', thumbnailUrl: null })
+        .success,
+    ).toBe(false);
   });
 
   it('rejects javascript:, relative, and empty video URLs', () => {
     for (const videoUrl of ['javascript:alert(1)', 'v.mp4', '', 'ftp://x/y.mp4', '/etc/passwd']) {
-      expect(episodeCreateSchema.safeParse({ name: 'Pilot', videoUrl }).success).toBe(false);
+      expect(episodeCreateSchema.safeParse({ name: 'Pilot', videoUrl, thumbnailUrl }).success).toBe(false);
     }
   });
 
   it('bounds season and episode numbers', () => {
-    const base = { name: 'Pilot', videoUrl: 'https://cdn.example.com/v.mp4' };
+    const base = { name: 'Pilot', videoUrl: 'https://cdn.example.com/v.mp4', thumbnailUrl };
     expect(episodeCreateSchema.safeParse({ ...base, season: 0 }).success).toBe(false);
     expect(episodeCreateSchema.safeParse({ ...base, episode: 501 }).success).toBe(false);
     expect(episodeCreateSchema.safeParse({ ...base, season: 1, episode: 1 }).success).toBe(true);
