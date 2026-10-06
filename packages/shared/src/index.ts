@@ -949,6 +949,22 @@ export interface MyVerification {
   } | null;
 }
 
+/** An account as the admin Accounts tool lists it (search + verified toggle). */
+export interface AdminAccount {
+  id: string;
+  displayName: string;
+  username: string | null;
+  email: string;
+  verified: boolean;
+  verifiedAt: string | null;
+  /** Sweam's own account or a flagship creator (gates waived). */
+  official: boolean;
+  /** A seed/demo account. */
+  isDemo: boolean;
+  isCreator: boolean;
+  createdAt: string;
+}
+
 /** A pending identity verification, as the admin queue shows it. */
 export interface AdminVerificationRequest {
   id: string;

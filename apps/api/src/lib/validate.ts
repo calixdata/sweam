@@ -355,6 +355,16 @@ export const verificationDecideSchema = z.object({
   note: z.string().trim().max(500).default(''),
 });
 
+/** Staff grant or removal of the verified check on an account. */
+export const verifiedToggleSchema = z.object({
+  verified: z.boolean(),
+});
+
+/** Admin account search. */
+export const adminUserSearchSchema = z.object({
+  q: z.string().trim().min(1, 'Enter a username, name, or email.').max(120),
+});
+
 export const takedownCreateSchema = z.object({
   slug: z.string().trim().min(1).max(200),
   kind: takedownKind,

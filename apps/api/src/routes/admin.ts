@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type {
+  AdminAccount,
   AdminAd,
   AdminCommentReport,
   AdminMonetization,
@@ -27,6 +28,7 @@ import type {
 import { formatMillicents } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { fail, nowIso, parseBody } from '../lib/http';
+import { likeEscape } from '../lib/mappers';
 import { notify } from '../lib/notify';
 import { announceReleasedEpisodes } from '../lib/release';
 import { applyVideoReplacement } from '../lib/replace';
@@ -42,6 +44,7 @@ import {
 import {
   adCreateSchema,
   adUpdateSchema,
+  adminUserSearchSchema,
   clipDecideSchema,
   commentReportResolveSchema,
   multipartAbortSchema,
@@ -58,6 +61,7 @@ import {
   suppressSchema,
   takedownCreateSchema,
   verificationDecideSchema,
+  verifiedToggleSchema,
 } from '../lib/validate';
 import { grantFreeMembership } from '../lib/scoutMembership';
 import { cancelSubscription, stripeConfigured } from '../lib/stripe';
@@ -604,6 +608,120 @@ adminRoutes.post('/scout-applications/:userId/decide', async (c) => {
       : `Your scout application for ${row.org_name} was not approved.`;
   await notify(c.env.DB, userId, 'scout_decision', message, body.approve ? '/scout' : null);
   return c.json({ status, billingWarning, freeUntil });
+});
+
+// ---------------------------------------------------------------------------
+// Accounts: search + the verified check (staff can grant it directly)
+// ---------------------------------------------------------------------------
+
+interface AdminAccountRow {
+  id: string;
+  display_name: string;
+  username: string | null;
+  email: string;
+  verified: number;
+  verified_at: string | null;
+  official: number;
+  is_demo: number;
+  is_creator: number;
+  created_at: string;
+}
+
+function mapAdminAccount(row: AdminAccountRow): AdminAccount {
+  return {
+    id: row.id,
+    displayName: row.display_name,
+    username: row.username,
+    email: row.email,
+    verified: row.verified === 1,
+    verifiedAt: row.verified_at,
+    official: row.official === 1,
+    isDemo: row.is_demo === 1,
+    isCreator: row.is_creator === 1,
+    createdAt: row.created_at,
+  };
+}
+
+const ADMIN_ACCOUNT_SELECT = `u.id, u.display_name, u.username, u.email, u.verified, u.verified_at,
+  u.official, u.is_demo, (cp.user_id IS NOT NULL) AS is_creator, u.created_at
+  FROM users u LEFT JOIN creator_profiles cp ON cp.user_id = u.id`;
+
+/** Find accounts by username, display name, or email (exact username first). */
+adminRoutes.get('/users', async (c) => {
+  const parsed = adminUserSearchSchema.safeParse({ q: c.req.query('q') ?? '' });
+  if (!parsed.success) fail(400, 'validation_failed', parsed.error.issues[0]?.message ?? 'Invalid search.');
+  const term = parsed.data.q.replace(/^@+/, '').trim();
+  const pattern = `%${likeEscape(term)}%`;
+  const { results } = await c.env.DB.prepare(
+    `SELECT ${ADMIN_ACCOUNT_SELECT}
+     WHERE u.username LIKE ? ESCAPE '\\' OR u.display_name LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\'
+     ORDER BY (lower(u.username) = lower(?)) DESC, (lower(u.email) = lower(?)) DESC, u.created_at DESC
+     LIMIT 25`,
+  )
+    .bind(pattern, pattern, pattern, term, term)
+    .all<AdminAccountRow>();
+  return c.json({ accounts: results.map(mapAdminAccount) });
+});
+
+/**
+ * Grant or remove the verified check by hand. Granting also closes any
+ * document request still waiting for that account (approved, documents
+ * deleted) so the queue and the account never disagree.
+ */
+adminRoutes.post('/users/:userId/verified', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, verifiedToggleSchema);
+  const userId = c.req.param('userId');
+  const target = await c.env.DB.prepare('SELECT id, verified FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ id: string; verified: number }>();
+  if (!target) fail(404, 'user_not_found', 'No account with that id.');
+
+  const now = nowIso();
+  await c.env.DB.batch([
+    c.env.DB
+      .prepare('UPDATE users SET verified = ?, verified_at = ? WHERE id = ?')
+      .bind(body.verified ? 1 : 0, body.verified ? now : null, userId),
+    c.env.DB
+      .prepare('UPDATE creator_profiles SET verified = ? WHERE user_id = ?')
+      .bind(body.verified ? 1 : 0, userId),
+  ]);
+
+  if (body.verified) {
+    const { results: pending } = await c.env.DB.prepare(
+      "SELECT id, id_doc_key, address_doc_key FROM identity_verifications WHERE user_id = ? AND status = 'pending'",
+    )
+      .bind(userId)
+      .all<{ id: string; id_doc_key: string; address_doc_key: string }>();
+    for (const request of pending) {
+      await c.env.DB.prepare(
+        "UPDATE identity_verifications SET status = 'approved', note = 'Verified by Sweam staff.', reviewer_id = ?, decided_at = ? WHERE id = ?",
+      )
+        .bind(admin.id, now, request.id)
+        .run();
+      await Promise.allSettled([
+        c.env.MEDIA.delete(request.id_doc_key),
+        c.env.MEDIA.delete(request.address_doc_key),
+      ]);
+    }
+  }
+
+  const changed = (target.verified === 1) !== body.verified;
+  if (changed) {
+    await notify(
+      c.env.DB,
+      userId,
+      'verification',
+      body.verified
+        ? 'Your account is now verified. The verified check shows next to your name across Sweam.'
+        : 'The verified check was removed from your account.',
+      '/settings',
+    );
+  }
+  const row = await c.env.DB.prepare(`SELECT ${ADMIN_ACCOUNT_SELECT} WHERE u.id = ?`)
+    .bind(userId)
+    .first<AdminAccountRow>();
+  return c.json({ account: row ? mapAdminAccount(row) : null });
 });
 
 // ---------------------------------------------------------------------------
