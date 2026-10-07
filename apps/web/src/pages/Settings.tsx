@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { BlockedAccount, MyVerification } from '@sweam/shared';
+import type { AudienceSettings, BlockedAccount, MyVerification } from '@sweam/shared';
 import { UPLOAD_SPECS, USERNAME_HINT, USERNAME_RE } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
@@ -156,6 +156,8 @@ export function Settings() {
 
       <ChangePasswordSection />
 
+      <AudienceSection />
+
       <BlockedAccountsSection />
 
       <DeleteAccountSection />
@@ -172,6 +174,112 @@ export function Settings() {
         </p>
       </section>
     </div>
+  );
+}
+
+/** Self-declared sex and the For You / feed audience filter. */
+function AudienceSection() {
+  const [data, setData] = useState<AudienceSettings | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await apiGet<AudienceSettings>('/api/me/audience'));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load your audience settings.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function save(patch: Partial<AudienceSettings>) {
+    setBusy(true);
+    setSaved(false);
+    setError(null);
+    try {
+      const next = await apiSend<AudienceSettings>('PUT', '/api/me/audience', patch);
+      setData(next);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="audience-heading">
+      <h2 id="audience-heading">Who you see</h2>
+      <p className="page-intro">
+        Choose whose videos reach your For You and feed. This never changes who can watch your own
+        posts.
+      </p>
+      {error && <p role="alert">{error}</p>}
+      {data === null ? (
+        <p>Loading…</p>
+      ) : (
+        <>
+          <div className="field">
+            <label htmlFor="audience-feed">Limit my For You and feed to</label>
+            <select
+              id="audience-feed"
+              value={data.feedAudience}
+              disabled={busy}
+              onChange={(event) => void save({ feedAudience: event.target.value as AudienceSettings['feedAudience'] })}
+            >
+              <option value="all">Everyone</option>
+              <option value="women">Women creators only</option>
+              <option value="men">Men creators only</option>
+            </select>
+          </div>
+          {data.feedAudience !== 'all' && (
+            <div className="field field-checkbox">
+              <input
+                id="audience-verified"
+                type="checkbox"
+                checked={data.verifiedOnly}
+                disabled={busy}
+                onChange={(event) => void save({ verifiedOnly: event.target.checked })}
+              />
+              <label htmlFor="audience-verified">
+                Only creators whose sex is confirmed by a reviewed ID. Stronger, but hides creators
+                who have not verified.
+              </label>
+            </div>
+          )}
+          <div className="field">
+            <label htmlFor="audience-sex">How you are counted</label>
+            <select
+              id="audience-sex"
+              value={data.sex}
+              disabled={busy}
+              onChange={(event) => void save({ sex: event.target.value as AudienceSettings['sex'] })}
+            >
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="nonbinary">Non-binary</option>
+              <option value="undisclosed">Prefer not to say</option>
+            </select>
+            <p className="field-hint">
+              This sets how your posts are counted in other people&rsquo;s audience filters. It is
+              never shown on your profile.
+              {data.verifiedSex
+                ? ` Your verified ID is on file as ${data.verifiedSex === 'female' ? 'female' : 'male'}, which is what the stronger filter uses.`
+                : ''}
+            </p>
+          </div>
+          {saved && (
+            <p role="status" aria-live="polite">
+              Saved.
+            </p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

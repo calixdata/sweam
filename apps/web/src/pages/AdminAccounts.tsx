@@ -54,6 +54,7 @@ function VerificationQueue() {
 
   async function decideVerification(request: AdminVerificationRequest, approve: boolean) {
     let note = '';
+    let sex: 'female' | 'male' | undefined;
     if (!approve) {
       const answer = window.prompt(
         `Reason the request from ${request.legalName} is not approved (shown to them; optional):`,
@@ -61,11 +62,18 @@ function VerificationQueue() {
       );
       if (answer === null) return;
       note = answer.trim();
-    } else if (!window.confirm(`Mark ${request.legalName} (@${request.username ?? 'unknown'}) as verified?`)) {
-      return;
+    } else {
+      const marker = window.prompt(
+        `Sex marker on ${request.legalName}'s ID — type F or M (they declared "${request.declaredSex}"). Leave blank to verify without recording it; the women-only / men-only filter needs it.`,
+        request.declaredSex === 'female' ? 'F' : request.declaredSex === 'male' ? 'M' : '',
+      );
+      if (marker === null) return;
+      const m = marker.trim().toLowerCase();
+      if (m === 'f' || m === 'female') sex = 'female';
+      else if (m === 'm' || m === 'male') sex = 'male';
     }
     try {
-      await apiSend('POST', `/api/admin/verifications/${request.id}/decide`, { approve, note });
+      await apiSend('POST', `/api/admin/verifications/${request.id}/decide`, { approve, note, sex });
       setNotice(`${approve ? 'Verified' : 'Rejected'} ${request.legalName}. The documents were deleted.`);
       await load();
     } catch (err) {

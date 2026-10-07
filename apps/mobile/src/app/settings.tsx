@@ -19,7 +19,7 @@ import { ApiError, api, getToken, mediaUrl } from '../lib/api';
 import { API_BASE } from '../lib/config';
 import { useAuth } from '../lib/auth';
 import { colors } from '../lib/theme';
-import type { BlockedAccount } from '../lib/types';
+import type { AudienceSettings, BlockedAccount } from '../lib/types';
 
 /** Max profile picture size, mirrored from the API (UPLOAD_SPECS.avatar). */
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
@@ -50,6 +50,7 @@ export default function SettingsScreen() {
         <ProfilePictureSection avatarUrl={user.avatarUrl} name={user.displayName} refresh={refresh} />
         <ChangeEmailSection currentEmail={user.email} />
         <ChangePasswordSection />
+        <AudienceSection />
         <BlockedAccountsSection />
         <DeleteAccountSection />
       </ScrollView>
@@ -375,6 +376,14 @@ const styles = StyleSheet.create({
   dangerBtn: { backgroundColor: colors.danger },
   blockedRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6 },
   blockedName: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  fieldLabel: { color: colors.text, fontSize: 15, fontWeight: '700', marginTop: 4 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
+  chip: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
+  chipOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  chipText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  chipTextOn: { color: '#04121a' },
+  toggleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 6 },
+  toggleText: { color: colors.text, fontSize: 14, flex: 1, lineHeight: 20 },
   secondaryBtn: {
     borderWidth: 1,
     borderColor: colors.line,
@@ -392,6 +401,121 @@ const styles = StyleSheet.create({
 });
 
 /** Permanent account deletion: password, then a final confirm dialog. */
+const SEX_OPTIONS: ReadonlyArray<[AudienceSettings['sex'], string]> = [
+  ['female', 'Female'],
+  ['male', 'Male'],
+  ['nonbinary', 'Non-binary'],
+  ['undisclosed', 'Prefer not to say'],
+];
+const AUDIENCE_OPTIONS: ReadonlyArray<[AudienceSettings['feedAudience'], string]> = [
+  ['all', 'Everyone'],
+  ['women', 'Women only'],
+  ['men', 'Men only'],
+];
+
+function AudienceSection() {
+  const [data, setData] = useState<AudienceSettings | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api.get<AudienceSettings>('/api/me/audience'));
+    } catch {
+      setError('Could not load your audience settings.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function save(patch: Partial<AudienceSettings>) {
+    setBusy(true);
+    setError(null);
+    try {
+      setData(await api.put<AudienceSettings>('/api/me/audience', patch));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Who you see</Text>
+      <Text style={styles.sectionHint}>
+        Choose whose videos reach your For You and feed. This never changes who can watch your own
+        posts.
+      </Text>
+      {error && <Text style={[styles.status, styles.statusErr]}>{error}</Text>}
+      {data === null ? (
+        <ActivityIndicator color={colors.accent} />
+      ) : (
+        <>
+          <Text style={styles.fieldLabel}>Limit my For You and feed to</Text>
+          <View style={styles.chipRow}>
+            {AUDIENCE_OPTIONS.map(([value, label]) => (
+              <Pressable
+                key={value}
+                style={[styles.chip, data.feedAudience === value && styles.chipOn]}
+                disabled={busy}
+                onPress={() => void save({ feedAudience: value })}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: data.feedAudience === value }}
+                accessibilityLabel={label}
+              >
+                <Text style={[styles.chipText, data.feedAudience === value && styles.chipTextOn]}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {data.feedAudience !== 'all' && (
+            <Pressable
+              style={styles.toggleRow}
+              disabled={busy}
+              onPress={() => void save({ verifiedOnly: !data.verifiedOnly })}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: data.verifiedOnly }}
+            >
+              <Ionicons
+                name={data.verifiedOnly ? 'checkbox' : 'square-outline'}
+                size={22}
+                color={data.verifiedOnly ? colors.accent : colors.muted}
+              />
+              <Text style={styles.toggleText}>
+                Only creators whose sex is confirmed by a reviewed ID. Stronger, but hides creators
+                who have not verified.
+              </Text>
+            </Pressable>
+          )}
+          <Text style={[styles.fieldLabel, { marginTop: 12 }]}>How you are counted</Text>
+          <View style={styles.chipRow}>
+            {SEX_OPTIONS.map(([value, label]) => (
+              <Pressable
+                key={value}
+                style={[styles.chip, data.sex === value && styles.chipOn]}
+                disabled={busy}
+                onPress={() => void save({ sex: value })}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: data.sex === value }}
+                accessibilityLabel={label}
+              >
+                <Text style={[styles.chipText, data.sex === value && styles.chipTextOn]}>{label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.sectionHint}>
+            This sets how your posts are counted in other people&apos;s filters. It is never shown on
+            your profile.
+            {data.verifiedSex ? ' Your verified ID is on file as ' + data.verifiedSex + '.' : ''}
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}
+
 function BlockedAccountsSection() {
   const [blocks, setBlocks] = useState<BlockedAccount[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);

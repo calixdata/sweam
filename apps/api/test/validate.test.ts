@@ -18,6 +18,7 @@ describe('signUpSchema', () => {
       displayName: 'Casey',
       password: 'longenough',
       username: 'CaseyP',
+      sex: 'female',
       ageConfirmed: true,
     });
     expect(parsed.email).toBe('casey@example.com');
@@ -25,7 +26,7 @@ describe('signUpSchema', () => {
   });
 
   it('rejects short passwords and empty names', () => {
-    const base = { email: 'a@b.co', username: 'validname', ageConfirmed: true as const };
+    const base = { email: 'a@b.co', username: 'validname', sex: 'female' as const, ageConfirmed: true as const };
     expect(signUpSchema.safeParse({ ...base, displayName: 'A', password: 'short' }).success).toBe(false);
     expect(
       signUpSchema.safeParse({ ...base, displayName: '   ', password: 'longenough' }).success,
@@ -33,10 +34,16 @@ describe('signUpSchema', () => {
   });
 
   it('requires a valid username and age confirmation', () => {
-    const base = { email: 'a@b.co', displayName: 'A', password: 'longenough' };
+    const base = { email: 'a@b.co', displayName: 'A', password: 'longenough', sex: 'female' as const };
     expect(signUpSchema.safeParse({ ...base, username: 'no', ageConfirmed: true }).success).toBe(false);
     expect(signUpSchema.safeParse({ ...base, username: 'valid_name', ageConfirmed: false }).success).toBe(false);
     expect(signUpSchema.safeParse({ ...base, username: 'valid_name', ageConfirmed: true }).success).toBe(true);
+  });
+
+  it('requires a self-declared sex', () => {
+    const base = { email: 'a@b.co', displayName: 'A', password: 'longenough', username: 'valid_name', ageConfirmed: true as const };
+    expect(signUpSchema.safeParse(base).success).toBe(false);
+    expect(signUpSchema.safeParse({ ...base, sex: 'nonbinary' }).success).toBe(true);
   });
 });
 

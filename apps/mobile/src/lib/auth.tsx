@@ -14,6 +14,7 @@ interface AuthState {
     displayName: string;
     username: string;
     password: string;
+    sex: 'female' | 'male' | 'nonbinary' | 'undisclosed';
     ageConfirmed: boolean;
   }) => Promise<{ pending: boolean }>;
   signOut: () => Promise<void>;

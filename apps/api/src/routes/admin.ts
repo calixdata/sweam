@@ -680,8 +680,16 @@ adminRoutes.post('/users/:userId/verified', async (c) => {
   const now = nowIso();
   await c.env.DB.batch([
     c.env.DB
-      .prepare('UPDATE users SET verified = ?, verified_at = ? WHERE id = ?')
-      .bind(body.verified ? 1 : 0, body.verified ? now : null, userId),
+      .prepare(
+        body.verified && body.verifiedSex
+          ? 'UPDATE users SET verified = ?, verified_at = ?, verified_sex = ? WHERE id = ?'
+          : 'UPDATE users SET verified = ?, verified_at = ? WHERE id = ?',
+      )
+      .bind(
+        ...(body.verified && body.verifiedSex
+          ? [1, now, body.verifiedSex, userId]
+          : [body.verified ? 1 : 0, body.verified ? now : null, userId]),
+      ),
     c.env.DB
       .prepare('UPDATE creator_profiles SET verified = ? WHERE user_id = ?')
       .bind(body.verified ? 1 : 0, userId),
@@ -731,7 +739,7 @@ adminRoutes.post('/users/:userId/verified', async (c) => {
 adminRoutes.get('/verifications', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT v.id, v.user_id, v.legal_name, v.id_doc_key, v.address_doc_key, v.created_at,
-       u.display_name, u.username, u.email
+       u.display_name, u.username, u.email, u.sex
      FROM identity_verifications v JOIN users u ON u.id = v.user_id
      WHERE v.status = 'pending'
      ORDER BY v.created_at`,
@@ -745,6 +753,7 @@ adminRoutes.get('/verifications', async (c) => {
     display_name: string;
     username: string | null;
     email: string;
+    sex: 'female' | 'male' | 'nonbinary' | 'undisclosed';
   }>();
   const requests: AdminVerificationRequest[] = results.map((row) => ({
     id: row.id,
@@ -756,6 +765,7 @@ adminRoutes.get('/verifications', async (c) => {
     idDocUrl: `/media/${row.id_doc_key}`,
     addressDocUrl: `/media/${row.address_doc_key}`,
     createdAt: row.created_at,
+    declaredSex: row.sex,
   }));
   return c.json({ requests });
 });
@@ -780,13 +790,15 @@ adminRoutes.post('/verifications/:id/decide', async (c) => {
   const statements = [
     c.env.DB
       .prepare(
-        'UPDATE identity_verifications SET status = ?, note = ?, reviewer_id = ?, decided_at = ? WHERE id = ?',
+        'UPDATE identity_verifications SET status = ?, note = ?, reviewer_id = ?, decided_at = ?, sex = ? WHERE id = ?',
       )
-      .bind(status, body.note || null, admin.id, now, row.id),
+      .bind(status, body.note || null, admin.id, now, body.sex ?? null, row.id),
   ];
   if (body.approve) {
     statements.push(
-      c.env.DB.prepare('UPDATE users SET verified = 1, verified_at = ? WHERE id = ?').bind(now, row.user_id),
+      body.sex
+        ? c.env.DB.prepare('UPDATE users SET verified = 1, verified_at = ?, verified_sex = ? WHERE id = ?').bind(now, body.sex, row.user_id)
+        : c.env.DB.prepare('UPDATE users SET verified = 1, verified_at = ? WHERE id = ?').bind(now, row.user_id),
       c.env.DB.prepare('UPDATE creator_profiles SET verified = 1 WHERE user_id = ?').bind(row.user_id),
     );
   }

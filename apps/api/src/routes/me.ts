@@ -13,6 +13,7 @@ import { loadScoutMembership } from '../lib/scoutMembership';
 import { cancelSubscription, stripeConfigured } from '../lib/stripe';
 import { SESSION_COOKIE, bearerToken, requireUser, currentUser } from '../lib/session';
 import {
+  audienceUpdateSchema,
   changeEmailSchema,
   changePasswordSchema,
   deleteAccountSchema,
@@ -464,6 +465,66 @@ meRoutes.post('/reports', async (c) => {
     fail(409, 'already_reported', 'You already reported this title. Our moderators will review it.');
   }
   return c.json({ reported: true }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// Audience preference (For You / feed sex filter)
+// ---------------------------------------------------------------------------
+
+interface AudienceRow {
+  sex: 'female' | 'male' | 'nonbinary' | 'undisclosed';
+  verified_sex: 'female' | 'male' | null;
+  feed_audience: 'all' | 'women' | 'men';
+  feed_audience_verified: number;
+}
+
+meRoutes.get('/audience', async (c) => {
+  const user = currentUser(c);
+  const row = await c.env.DB.prepare(
+    'SELECT sex, verified_sex, feed_audience, feed_audience_verified FROM users WHERE id = ?',
+  )
+    .bind(user.id)
+    .first<AudienceRow>();
+  return c.json({
+    sex: row?.sex ?? 'undisclosed',
+    verifiedSex: row?.verified_sex ?? null,
+    feedAudience: row?.feed_audience ?? 'all',
+    verifiedOnly: (row?.feed_audience_verified ?? 0) === 1,
+  });
+});
+
+meRoutes.put('/audience', async (c) => {
+  const user = currentUser(c);
+  const body = await parseBody(c, audienceUpdateSchema);
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  if (body.sex !== undefined) {
+    sets.push('sex = ?');
+    binds.push(body.sex);
+  }
+  if (body.feedAudience !== undefined) {
+    sets.push('feed_audience = ?');
+    binds.push(body.feedAudience);
+  }
+  if (body.verifiedOnly !== undefined) {
+    sets.push('feed_audience_verified = ?');
+    binds.push(body.verifiedOnly ? 1 : 0);
+  }
+  binds.push(user.id);
+  await c.env.DB.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`)
+    .bind(...binds)
+    .run();
+  const row = await c.env.DB.prepare(
+    'SELECT sex, verified_sex, feed_audience, feed_audience_verified FROM users WHERE id = ?',
+  )
+    .bind(user.id)
+    .first<AudienceRow>();
+  return c.json({
+    sex: row?.sex ?? 'undisclosed',
+    verifiedSex: row?.verified_sex ?? null,
+    feedAudience: row?.feed_audience ?? 'all',
+    verifiedOnly: (row?.feed_audience_verified ?? 0) === 1,
+  });
 });
 
 // ---------------------------------------------------------------------------

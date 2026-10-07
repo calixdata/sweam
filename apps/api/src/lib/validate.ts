@@ -38,15 +38,32 @@ const username = z
   .toLowerCase()
   .regex(USERNAME_RE, `Username must be ${USERNAME_HINT}`);
 
+/** Self-declared sex, set at sign-up and freely changeable afterwards. */
+export const selfSex = z.enum(['female', 'male', 'nonbinary', 'undisclosed'], {
+  errorMap: () => ({ message: 'Choose how you want to be counted for audience filters.' }),
+});
+
 export const signUpSchema = z.object({
   email,
   displayName,
   password,
   username,
+  sex: selfSex,
   ageConfirmed: z.literal(true, {
     errorMap: () => ({ message: `You must confirm you are at least ${MIN_AGE} to join.` }),
   }),
 });
+
+/** A viewer's For You / feed audience preference. */
+export const audienceUpdateSchema = z
+  .object({
+    sex: selfSex.optional(),
+    feedAudience: z.enum(['all', 'women', 'men']).optional(),
+    verifiedOnly: z.boolean().optional(),
+  })
+  .refine((v) => v.sex !== undefined || v.feedAudience !== undefined || v.verifiedOnly !== undefined, {
+    message: 'Nothing to update.',
+  });
 
 /** Choosing or changing the account @username. */
 export const usernameSchema = z.object({ username });
@@ -367,11 +384,15 @@ export const verificationRequestSchema = z.object({
 export const verificationDecideSchema = z.object({
   approve: z.boolean(),
   note: z.string().trim().max(500).default(''),
+  /** The sex marker on the reviewed ID; sets the account's verified_sex. */
+  sex: z.enum(['female', 'male']).optional(),
 });
 
 /** Staff grant or removal of the verified check on an account. */
 export const verifiedToggleSchema = z.object({
   verified: z.boolean(),
+  /** Optional sex marker to record when granting the check. */
+  verifiedSex: z.enum(['female', 'male']).optional(),
 });
 
 /** Admin account search. */

@@ -103,10 +103,10 @@ authRoutes.post('/signup', async (c) => {
   const expiresAt = new Date(Date.now() + VERIFY_TTL_MS).toISOString();
   await c.env.DB.prepare(
     `INSERT INTO users
-       (id, email, display_name, username, age_confirmed, password_hash, email_verified, verify_token_hash, verify_expires_at, created_at)
-     VALUES (?, ?, ?, ?, 1, ?, 0, ?, ?, ?)`,
+       (id, email, display_name, username, sex, age_confirmed, password_hash, email_verified, verify_token_hash, verify_expires_at, created_at)
+     VALUES (?, ?, ?, ?, ?, 1, ?, 0, ?, ?, ?)`,
   )
-    .bind(id, body.email, body.displayName, body.username, await hashPassword(body.password), await sha256Hex(token), expiresAt, nowIso())
+    .bind(id, body.email, body.displayName, body.username, body.sex, await hashPassword(body.password), await sha256Hex(token), expiresAt, nowIso())
     .run();
 
   try {

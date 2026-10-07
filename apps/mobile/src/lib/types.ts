@@ -152,6 +152,14 @@ export interface CreatorPublicPage {
   titles: TitleSummary[];
 }
 
+/** A viewer's For You / feed audience filter. */
+export interface AudienceSettings {
+  sex: 'female' | 'male' | 'nonbinary' | 'undisclosed';
+  verifiedSex: 'female' | 'male' | null;
+  feedAudience: 'all' | 'women' | 'men';
+  verifiedOnly: boolean;
+}
+
 /** An account the signed-in user has blocked. */
 export interface BlockedAccount {
   handle: string;

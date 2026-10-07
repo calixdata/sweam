@@ -13,6 +13,7 @@ export default function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [age, setAge] = useState(false);
+  const [sex, setSex] = useState<'' | 'female' | 'male' | 'nonbinary' | 'undisclosed'>('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState(false);
@@ -26,6 +27,7 @@ export default function SignUp() {
         displayName: displayName.trim(),
         username: username.trim().toLowerCase(),
         password,
+        sex: sex as 'female' | 'male' | 'nonbinary' | 'undisclosed',
         ageConfirmed: age,
       });
       if (res.pending) setPending(true);
@@ -58,12 +60,38 @@ export default function SignUp() {
       <TextInput style={styles.input} placeholder="Username" placeholderTextColor={colors.muted} autoCapitalize="none" value={username} onChangeText={setUsername} />
       <TextInput style={styles.input} placeholder="Email" placeholderTextColor={colors.muted} autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
       <TextInput style={styles.input} placeholder="Password (8+ characters)" placeholderTextColor={colors.muted} secureTextEntry value={password} onChangeText={setPassword} />
+      <Text style={styles.fieldLabel}>Sex</Text>
+      <View style={styles.sexRow}>
+        {(
+          [
+            ['female', 'Female'],
+            ['male', 'Male'],
+            ['nonbinary', 'Non-binary'],
+            ['undisclosed', 'Prefer not to say'],
+          ] as const
+        ).map(([value, label]) => (
+          <Pressable
+            key={value}
+            style={[styles.sexChip, sex === value && styles.sexChipOn]}
+            onPress={() => setSex(value)}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: sex === value }}
+            accessibilityLabel={label}
+          >
+            <Text style={[styles.sexChipText, sex === value && styles.sexChipTextOn]}>{label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={styles.hint}>
+        We use this to power audience filters, like a women-only For You. It is never shown on your
+        profile, and you can change it in Settings.
+      </Text>
       <Pressable style={styles.ageRow} onPress={() => setAge((a) => !a)}>
         <Ionicons name={age ? 'checkbox' : 'square-outline'} size={22} color={age ? colors.accent : colors.muted} />
         <Text style={styles.ageText}>I confirm I am at least 16 years old.</Text>
       </Pressable>
       {error && <Text style={styles.error}>{error}</Text>}
-      <Pressable style={[styles.btn, (!age || busy) && styles.btnDisabled]} onPress={() => void submit()} disabled={!age || busy}>
+      <Pressable style={[styles.btn, (!age || !sex || busy) && styles.btnDisabled]} onPress={() => void submit()} disabled={!age || !sex || busy}>
         <Text style={styles.btnText}>{busy ? 'Creating…' : 'Create account'}</Text>
       </Pressable>
       <Pressable onPress={() => router.replace('/signin')}>
@@ -86,6 +114,13 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 16,
   },
+  fieldLabel: { color: colors.text, fontSize: 15, fontWeight: '700', marginTop: 4 },
+  hint: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+  sexRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  sexChip: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
+  sexChipOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  sexChipText: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  sexChipTextOn: { color: '#04121a' },
   ageRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   ageText: { color: colors.text, fontSize: 15, flex: 1 },
   error: { color: colors.danger, fontSize: 14 },

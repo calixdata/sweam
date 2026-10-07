@@ -978,6 +978,19 @@ export interface AdminVerificationRequest {
   idDocUrl: string;
   addressDocUrl: string;
   createdAt: string;
+  /** What the applicant declared about their own sex at sign-up. */
+  declaredSex: SelfSex;
+}
+
+/** Self-declared sex, set at sign-up for audience filtering. */
+export type SelfSex = 'female' | 'male' | 'nonbinary' | 'undisclosed';
+
+/** A viewer's For You / feed audience filter. */
+export interface AudienceSettings {
+  sex: SelfSex;
+  verifiedSex: 'female' | 'male' | null;
+  feedAudience: 'all' | 'women' | 'men';
+  verifiedOnly: boolean;
 }
 
 /** A creator's request for Sweam to remove one of their admin-locked titles. */

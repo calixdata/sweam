@@ -16,6 +16,7 @@ export function SignUp() {
   const [usernameStatus, setUsernameStatus] = useState<UsernameStatus>('idle');
   const [password, setPassword] = useState('');
   const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [sex, setSex] = useState<'' | 'female' | 'male' | 'nonbinary' | 'undisclosed'>('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -51,7 +52,7 @@ export function SignUp() {
     };
   }, [normalizedUsername]);
 
-  const canSubmit = ageConfirmed && usernameStatus === 'available' && !submitting;
+  const canSubmit = ageConfirmed && sex !== '' && usernameStatus === 'available' && !submitting;
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -63,6 +64,7 @@ export function SignUp() {
         displayName,
         username: normalizedUsername,
         password,
+        sex,
         ageConfirmed,
       });
       setSentTo(email);
@@ -161,6 +163,28 @@ export function SignUp() {
           />
           <p className="field-hint" id="signup-password-hint">
             At least 8 characters.
+          </p>
+        </div>
+        <div className="field">
+          <label htmlFor="signup-sex">Sex</label>
+          <select
+            id="signup-sex"
+            required
+            value={sex}
+            onChange={(event) => setSex(event.target.value as typeof sex)}
+            aria-describedby="signup-sex-hint"
+          >
+            <option value="" disabled>
+              Select one
+            </option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+            <option value="nonbinary">Non-binary</option>
+            <option value="undisclosed">Prefer not to say</option>
+          </select>
+          <p className="field-hint" id="signup-sex-hint">
+            We use this to power audience filters, like a women-only For You. It is never shown on
+            your profile. You can change it anytime in Settings.
           </p>
         </div>
         <div className="field field-checkbox">
