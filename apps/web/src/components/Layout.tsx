@@ -220,6 +220,9 @@ export function Layout() {
                   <Link to="/scout">Scout portal</Link>
                 </li>
                 <li>
+                  <Link to="/legal/creator-program">Creator Program and Blu Fund</Link>
+                </li>
+                <li>
                   <Link to="/legal/creator-agreement">Creator Agreement</Link>
                 </li>
                 <li>

@@ -172,11 +172,8 @@ const sections: LegalSection[] = [
         {SERVICE} is free to watch and supported by advertising. Creators who meet the published
         eligibility thresholds earn a {SHARE_PERCENT}% share of the ad revenue their titles generate,
         paid through the ledger described in the{' '}
-        <Link to="/legal/creator-agreement">Creator Agreement</Link> and the public{' '}
-        <a href="https://github.com/calixdata/sweam/blob/main/docs/CREATOR-PROGRAM.md">
-          Creator Program document
-        </a>
-        . Earnings depend on real viewership and advertiser demand and are not guaranteed. We do not
+        <Link to="/legal/creator-agreement">Creator Agreement</Link> and the{' '}
+        <Link to="/legal/creator-program">Creator Program</Link>. Earnings depend on real viewership and advertiser demand and are not guaranteed. We do not
         sell your personal data to advertisers; advertising on {SERVICE} is not behaviorally
         targeted using tracking cookies.
       </p>

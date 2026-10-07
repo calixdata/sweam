@@ -2614,3 +2614,26 @@ input[type='checkbox'] {
   justify-content: space-between;
   gap: 1rem;
 }
+
+/* Tables inside policy pages (Creator Program thresholds) */
+.legal-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0 1.25rem;
+  font-size: 0.95rem;
+}
+.legal-table caption {
+  text-align: left;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+.legal-table th,
+.legal-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid rgba(127, 127, 127, 0.35);
+}
+.legal-table thead th {
+  border-bottom-width: 2px;
+}

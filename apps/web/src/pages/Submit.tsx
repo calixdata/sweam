@@ -65,11 +65,9 @@ export function Submit() {
             standing.
           </li>
           <li>
-            Approved work goes live on Sweam. The full policy lives in the public{' '}
-            <a href="https://github.com/calixdata/sweam/blob/main/docs/CREATOR-PROGRAM.md">
-              Creator Program document
-            </a>
-            .
+            Approved work goes live on Sweam. The full policy, including the Blu Creator Fund split,
+            payout rules and eligibility, is at{' '}
+            <Link to="/legal/creator-program">sweam.co/legal/creator-program</Link>.
           </li>
         </ul>
       </section>

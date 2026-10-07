@@ -105,11 +105,8 @@ const sections: LegalSection[] = [
           Ads may run on your titles before you are eligible, but the creator share accrues only once
           every threshold is met, evaluated at each ad served. Your earnings page shows your progress
           toward each one. The full policy, with how these compare to YouTube, TikTok, Meta, Tubi,
-          and Netflix, is in the public{' '}
-          <a href="https://github.com/calixdata/sweam/blob/main/docs/CREATOR-PROGRAM.md">
-            Creator Program document
-          </a>
-          .
+          and Netflix, is in the{' '}
+          <Link to="/legal/creator-program">Creator Program</Link>.
         </p>
       </>
     ),

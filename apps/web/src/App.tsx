@@ -25,6 +25,7 @@ import { CommunityGuidelines } from './pages/legal/CommunityGuidelines';
 import { Cookies } from './pages/legal/Cookies';
 import { DeleteAccount } from './pages/legal/DeleteAccount';
 import { CreatorAgreement } from './pages/legal/CreatorAgreement';
+import { CreatorProgram } from './pages/legal/CreatorProgram';
 import { ScoutTerms } from './pages/legal/ScoutTerms';
 import { Privacy } from './pages/legal/Privacy';
 import { Terms } from './pages/legal/Terms';
@@ -158,6 +159,7 @@ export function App() {
         <Route path="/legal/ai" element={<AiDisclosure />} />
         <Route path="/legal/community-guidelines" element={<CommunityGuidelines />} />
         <Route path="/legal/creator-agreement" element={<CreatorAgreement />} />
+        <Route path="/legal/creator-program" element={<CreatorProgram />} />
         <Route path="/legal/scout-terms" element={<ScoutTerms />} />
         <Route path="*" element={<NotFound />} />
       </Route>
