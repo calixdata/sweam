@@ -71,10 +71,7 @@ export function LegalDoc({
   return (
     <article className="page page-narrow legal-doc">
       <h1>{title}</h1>
-      <p className="legal-meta">
-        Prepared {updated} · Draft {DRAFT_VERSION}
-      </p>
-      <DraftNotice />
+      <p className="legal-meta">Last updated {updated}</p>
       <p className="page-intro">{summary}</p>
 
       <nav className="legal-toc" aria-label="On this page">
