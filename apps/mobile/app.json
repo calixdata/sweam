@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "co.sweam.app",
-      "versionCode": 1,
+      "versionCode": 3,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#1759F5",
@@ -31,11 +31,11 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "CAMERA",
-        "RECORD_AUDIO",
-        "READ_MEDIA_VIDEO",
-        "READ_MEDIA_IMAGES",
-        "POST_NOTIFICATIONS"
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -81,6 +81,13 @@
       "reactCompiler": true
     },
     "privacy": "public",
-    "description": "Sweam: where TikTok meets Tubi. Creator-made films, series and clips with equal visibility, scouted by networks."
+    "description": "Sweam: where TikTok meets Tubi. Creator-made films, series and clips with equal visibility, scouted by networks.",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4acae0d1-da29-4922-800b-b1bf1c850674"
+      }
+    },
+    "owner": "sweam"
   }
 }
