@@ -61,6 +61,13 @@ function mimeForUri(uri: string, fallback = ''): string {
       return 'video/webm';
     case 'mov':
       return 'video/quicktime';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'webp':
+      return 'image/webp';
     default:
       return fallback;
   }
@@ -218,16 +225,27 @@ export default function RecordScreen() {
 
   const pickFromLibrary = useCallback(async () => {
     setError(null);
+    // Either kind, whatever mode the camera is in: a photo from the gallery is
+    // a photo post, a video is a clip. Images are re-encoded to JPEG at 85%
+    // so HEIC shots and 50 MP files land under the image size limit.
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: captureMode === 'photo' ? ['images'] : ['videos'],
-      quality: 1,
+      mediaTypes: ['images', 'videos'],
+      quality: 0.85,
       videoMaxDuration: CLIP_SPEC.maxSeconds,
     });
     const asset = result.canceled ? null : result.assets?.[0];
     if (!asset) return;
-    if (captureMode === 'photo') {
-      const pname = asset.fileName ?? filenameForUri(asset.uri, 'photo.jpg');
-      setClip({ uri: asset.uri, mime: mimeForUri(pname, asset.mimeType || 'image/jpeg'), name: pname, image: true });
+    const isImage = asset.type === 'image' || (asset.mimeType ?? '').startsWith('image/');
+    if (isImage) {
+      let pname = asset.fileName ?? filenameForUri(asset.uri, 'photo.jpg');
+      let mime = mimeForUri(pname, asset.mimeType || '');
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) {
+        // The picker's compressed output is JPEG even when the source was HEIC.
+        const dot = pname.lastIndexOf('.');
+        pname = (dot > 0 ? pname.slice(0, dot) : pname) + '.jpg';
+        mime = 'image/jpeg';
+      }
+      setClip({ uri: asset.uri, mime, name: pname, image: true });
       setPhase('review');
       return;
     }
@@ -240,7 +258,7 @@ export default function RecordScreen() {
       name,
     });
     setPhase('review');
-  }, [captureMode]);
+  }, []);
 
   const pickCover = useCallback(async () => {
     setCoverNote('');
