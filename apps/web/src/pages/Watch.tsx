@@ -4,6 +4,7 @@ import type Hls from 'hls.js';
 import type { PrerollAd, WatchPayload } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
+import { CommentsSection } from '../components/CommentsSection';
 import { ReportControl } from '../components/ReportControl';
 import { ErrorNote, Loading } from '../components/Status';
 import { formatDuration, useDoubleTap, usePageTitle } from '../hooks';
@@ -376,6 +377,8 @@ export function Watch() {
             ))}
         </section>
       )}
+
+      <CommentsSection titleSlug={title.slug} creatorHandle={title.creator.handle} />
     </div>
   );
 }
