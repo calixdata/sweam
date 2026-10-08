@@ -94,7 +94,15 @@ app.onError((err, c) => {
  */
 export default {
   fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
-    const { pathname } = new URL(request.url);
+    const url = new URL(request.url);
+    const { pathname } = url;
+    // One canonical host. The session cookie is host-only, so a sign-in on
+    // sweam.co is invisible on www.sweam.co (and vice versa); sending www to
+    // the apex keeps every visitor on the host that holds their cookie.
+    if (url.hostname === 'www.sweam.co') {
+      url.hostname = 'sweam.co';
+      return Response.redirect(url.toString(), 301);
+    }
     if (pathname.startsWith('/api') || pathname.startsWith('/media')) {
       return app.fetch(request, env, ctx);
     }
