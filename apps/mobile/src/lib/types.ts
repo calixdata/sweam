@@ -38,6 +38,8 @@ export interface FeedItem {
   isBlu: boolean;
   /** Company name when a scout promotion deal is active, else null. */
   promotedBy: string | null;
+  /** 'image' for a still photo post; shown as a picture instead of a player. */
+  mediaType?: 'video' | 'image';
 }
 
 export interface TitleSummary {
@@ -83,6 +85,8 @@ export interface EpisodeSummary {
   videoUrl: string;
   captionsUrl: string | null;
   durationS: number;
+  /** 'image' for a still photo post. */
+  mediaType?: 'video' | 'image';
   /** Scheduled release instant (ISO), or null when released on publish. */
   releaseAt?: string | null;
   /** False while a scheduled episode is still locked. */

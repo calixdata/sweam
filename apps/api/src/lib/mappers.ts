@@ -102,6 +102,7 @@ export interface EpisodeRow {
   release_at?: string | null;
   /** Episode cover, when the query selects it. */
   thumbnail_url?: string | null;
+  media_type?: 'video' | 'image' | null;
 }
 
 /**
@@ -126,6 +127,7 @@ export function mapEpisode(row: EpisodeRow, opts: { reveal?: boolean } = {}): Ep
     releaseAt,
     released,
     thumbnailUrl: row.thumbnail_url ?? null,
+    mediaType: row.media_type === 'image' ? 'image' : 'video',
   };
 }
 

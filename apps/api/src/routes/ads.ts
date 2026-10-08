@@ -29,7 +29,7 @@ interface AdRow {
 adRoutes.get('/preroll', async (c) => {
   const titleId = c.req.query('titleId') ?? '';
   if (!titleId) return c.json({ ad: null });
-  const title = await c.env.DB.prepare('SELECT genre FROM titles WHERE id = ? AND published = 1')
+  const title = await c.env.DB.prepare('SELECT genre FROM titles WHERE id = ? AND published = 1 AND promo_only = 0')
     .bind(titleId)
     .first<{ genre: string }>();
   if (!title) return c.json({ ad: null });

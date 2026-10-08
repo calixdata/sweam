@@ -9,6 +9,11 @@ import { ReportControl } from '../components/ReportControl';
 import { ErrorNote, Loading } from '../components/Status';
 import { formatDuration, useDoubleTap, usePageTitle } from '../hooks';
 
+/** Absolute-or-relative media path as the browser should request it. */
+function mediaSrc(path: string): string {
+  return path;
+}
+
 /** Send a resume beacon at most this often while playing. */
 const BEACON_INTERVAL_MS = 10_000;
 
@@ -125,8 +130,14 @@ export function Watch() {
   // Decide the pre-roll slot once per title per browser session. Free
   // catalog, ad-supported: the split is published on the earnings page.
   const titleId = payload?.title.id ?? null;
+  const isImage = payload?.episode.mediaType === 'image';
   useEffect(() => {
     if (!titleId) return;
+    // Promotional photos never carry an ad.
+    if (isImage) {
+      setAdDone(true);
+      return;
+    }
     const seenKey = `sweam-preroll-${titleId}`;
     let seen = false;
     try {
@@ -151,9 +162,9 @@ export function Watch() {
     return () => {
       cancelled = true;
     };
-  }, [titleId]);
+  }, [titleId, isImage]);
 
-  const videoUrl = adDone ? (payload?.episode.videoUrl ?? null) : null;
+  const videoUrl = adDone && !isImage ? (payload?.episode.videoUrl ?? null) : null;
 
   // Attach the source: native for MP4/WebM (and Safari's built-in HLS),
   // hls.js (lazy-loaded) for .m3u8 everywhere else. Runs only after the
@@ -288,7 +299,16 @@ export function Watch() {
       {/* Native controls carry the primary keyboard/SR experience. The
           feature player mounts after the pre-roll slot resolves. Double-tap the
           video to like it (a bonus gesture over the accessible Like button). */}
-      <div className="player-wrap" hidden={!adDone} {...videoTap}>
+      {isImage && (
+        <div className="player-wrap" {...videoTap}>
+          <img
+            className="player"
+            src={mediaSrc(episode.videoUrl)}
+            alt={`${title.name}: ${episode.name}`}
+          />
+        </div>
+      )}
+      <div className="player-wrap" hidden={!adDone || isImage} {...videoTap}>
         <video
           ref={videoRef}
           className="player"

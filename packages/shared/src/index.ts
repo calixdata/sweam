@@ -471,6 +471,8 @@ export interface EpisodeSummary {
   reminderSet?: boolean;
   /** Episode cover image (creator-chosen, or a frame from the transcode), or null. */
   thumbnailUrl: string | null;
+  /** 'image' for a still photo post (promotional, never monetized); otherwise 'video'. */
+  mediaType: 'video' | 'image';
 }
 
 /** Full title page payload. Viewer-specific fields are false for signed-out requests. */
@@ -571,6 +573,8 @@ export interface FeedItem {
   isBlu: boolean;
   /** Company name when a scout promotion deal is active, else null. */
   promotedBy: string | null;
+  /** 'image' for a still photo post; the client shows a picture instead of a player. */
+  mediaType: 'video' | 'image';
 }
 
 /** One entry in the Discover feed, with the human-readable reason it ranked where it did. */

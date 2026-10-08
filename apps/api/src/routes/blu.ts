@@ -21,6 +21,7 @@ interface BluTitleRow {
   is_blu: number;
   blu_price_cents: number | null;
   blu_changed_at: string | null;
+  promo_only: number;
 }
 
 /**
@@ -37,12 +38,16 @@ bluRoutes.put('/titles/:id', async (c) => {
   const body = await parseBody(c, bluTitleSchema);
 
   const title = await c.env.DB.prepare(
-    'SELECT id, creator_id, name, slug, is_blu, blu_price_cents, blu_changed_at FROM titles WHERE id = ?',
+    'SELECT id, creator_id, name, slug, is_blu, blu_price_cents, blu_changed_at, promo_only FROM titles WHERE id = ?',
   )
     .bind(titleId)
     .first<BluTitleRow>();
   if (!title) fail(404, 'title_not_found', 'No such title.');
   if (title.creator_id !== user.id) fail(403, 'not_your_title', 'You can only change your own titles.');
+  // Photo posts are promotional only and can never be monetized.
+  if (body.isBlu && title.promo_only === 1) {
+    fail(400, 'promo_only', 'Photo posts are promotional and cannot be Sweam Blu.');
+  }
 
   // Preset pricing only — no free-form prices.
   let priceCents: number | null = null;

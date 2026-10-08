@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CameraView, useCameraPermissions, useMicrophonePermissions } from 'expo-camera';
 import type { CameraType } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
+import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
@@ -42,6 +43,8 @@ interface Clip {
   uri: string;
   mime: string;
   name: string;
+  /** True for a still photo (promotional post, never monetized). */
+  image?: boolean;
 }
 
 function extensionOf(uri: string): string {
@@ -87,6 +90,8 @@ export default function RecordScreen() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [facing, setFacing] = useState<CameraType>('back');
+  // 'photo' captures a still; the CameraView switches to picture mode for it.
+  const [captureMode, setCaptureMode] = useState<'video' | 'photo'>('video');
   const [cameraReady, setCameraReady] = useState(false);
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -130,7 +135,7 @@ export default function RecordScreen() {
 
   // Drive the review preview from the captured clip.
   useEffect(() => {
-    if (phase === 'review' && clip) {
+    if (phase === 'review' && clip && !clip.image) {
       player.replace({ uri: clip.uri });
       player.play();
     } else {
@@ -197,15 +202,35 @@ export default function RecordScreen() {
     }
   }, [recording, cameraReady, stopRecording, stopTimer]);
 
+  const takePhoto = useCallback(async () => {
+    if (!cameraRef.current || recording || !cameraReady) return;
+    setError(null);
+    try {
+      const shot = await cameraRef.current.takePictureAsync({ quality: 0.9 });
+      if (shot?.uri) {
+        setClip({ uri: shot.uri, mime: 'image/jpeg', name: 'photo.jpg', image: true });
+        setPhase('review');
+      }
+    } catch {
+      setError('Could not take the photo. Try again.');
+    }
+  }, [recording, cameraReady]);
+
   const pickFromLibrary = useCallback(async () => {
     setError(null);
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['videos'],
+      mediaTypes: captureMode === 'photo' ? ['images'] : ['videos'],
       quality: 1,
       videoMaxDuration: CLIP_SPEC.maxSeconds,
     });
     const asset = result.canceled ? null : result.assets?.[0];
     if (!asset) return;
+    if (captureMode === 'photo') {
+      const pname = asset.fileName ?? filenameForUri(asset.uri, 'photo.jpg');
+      setClip({ uri: asset.uri, mime: mimeForUri(pname, asset.mimeType || 'image/jpeg'), name: pname, image: true });
+      setPhase('review');
+      return;
+    }
     const name = asset.fileName ?? filenameForUri(asset.uri, 'clip.mp4');
     setClip({
       uri: asset.uri,
@@ -215,7 +240,7 @@ export default function RecordScreen() {
       name,
     });
     setPhase('review');
-  }, []);
+  }, [captureMode]);
 
   const pickCover = useCallback(async () => {
     setCoverNote('');
@@ -272,28 +297,29 @@ export default function RecordScreen() {
       setError('Choose a maturity rating.');
       return;
     }
-    if (!cover) {
+    if (!cover && !clip.image) {
       setError('Choose a cover image for your clip. Every clip needs one.');
       return;
     }
-    if (!isAcceptedVideo(clip.mime) && !/.(mp4|webm|mov)$/i.test(clip.name)) {
+    if (!clip.image && !isAcceptedVideo(clip.mime) && !/.(mp4|webm|mov)$/i.test(clip.name)) {
       setError('That video format is not supported yet. Record in the app, or pick an MP4 or WebM file.');
       return;
     }
     setPosting(true);
     setError(null);
     try {
-      const { url } = await uploadVideo(clip.uri, clip.mime, clip.name, setProgress, CLIP_SPEC.maxBytes);
+      const { url } = await uploadVideo(clip.uri, clip.mime, clip.name, setProgress, clip.image ? COVER_MAX_BYTES : CLIP_SPEC.maxBytes);
       const result = await api.post<{ slug: string; titleId: string; episodeId: string }>('/api/clips', {
         caption: caption.trim(),
         rating,
         genre,
         audiences,
         sourceUrl: url,
-        bluTierId: seriesId ? null : bluTierId,
+        bluTierId: clip.image || seriesId ? null : bluTierId,
         seriesId: seriesId || null,
         releaseDate: releaseDate.trim() || null,
-        posterUrl: cover.url,
+        posterUrl: clip.image ? url : cover?.url,
+        mediaType: clip.image ? 'image' : 'video',
       });
       player.pause();
       router.replace(`/watch/${result.episodeId}`);
@@ -350,14 +376,19 @@ export default function RecordScreen() {
             >
               <Ionicons name="chevron-back" size={26} color={colors.text} />
             </Pressable>
-            <Text style={styles.reviewTitle}>New clip</Text>
+            <Text style={styles.reviewTitle}>{clip.image ? 'New photo' : 'New clip'}</Text>
             <View style={{ width: 26 }} />
           </View>
 
-          <VideoView player={player} style={styles.preview} contentFit="contain" nativeControls />
+          {clip.image ? (
+            <Image source={{ uri: clip.uri }} style={styles.preview} contentFit="contain" accessibilityLabel="Your photo" />
+          ) : (
+            <VideoView player={player} style={styles.preview} contentFit="contain" nativeControls />
+          )}
           <Text style={[styles.hint, styles.previewHint]}>
-            Vertical 9:16 (1080 × 1920) fills the feed. Wider clips play in full, letterboxed — never
-            cropped.
+            {clip.image
+              ? 'Photos promote your work. They are not eligible for any monetization: no ads, no Sweam Blu.'
+              : 'Vertical 9:16 (1080 × 1920) fills the feed. Wider clips play in full, letterboxed — never cropped.'}
           </Text>
 
           <View style={styles.form}>
@@ -375,7 +406,7 @@ export default function RecordScreen() {
             />
             <Text style={styles.hint}>{captionLeft} characters left. This becomes the clip's title.</Text>
 
-            <Text style={styles.label}>Cover image (required)</Text>
+            {!clip.image && <Text style={styles.label}>Cover image (required)</Text>}
             <View style={styles.coverRow}>
               <Pressable
                 style={[styles.coverBtn, coverBusy && styles.btnDisabled]}
@@ -653,7 +684,7 @@ export default function RecordScreen() {
         ref={cameraRef}
         style={styles.fill}
         facing={facing}
-        mode="video"
+        mode={captureMode === 'photo' ? 'picture' : 'video'}
         onCameraReady={() => setCameraReady(true)}
       />
 
@@ -708,16 +739,25 @@ export default function RecordScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => (recording ? stopRecording() : void startRecording())}
+          onPress={() => (captureMode === 'photo' ? void takePhoto() : recording ? stopRecording() : void startRecording())}
           disabled={!cameraReady}
           accessibilityRole="button"
-          accessibilityLabel={recording ? 'Stop recording' : 'Start recording'}
+          accessibilityLabel={captureMode === 'photo' ? 'Take photo' : recording ? 'Stop recording' : 'Start recording'}
           style={[styles.recordOuter, !cameraReady && styles.btnDisabled]}
         >
-          <View style={recording ? styles.recordInnerStop : styles.recordInner} />
+          <View style={captureMode === 'photo' ? styles.photoInner : recording ? styles.recordInnerStop : styles.recordInner} />
         </Pressable>
 
-        <View style={styles.sideControl} />
+        <Pressable
+          onPress={() => setCaptureMode((m) => (m === 'photo' ? 'video' : 'photo'))}
+          disabled={recording}
+          accessibilityRole="button"
+          accessibilityLabel={captureMode === 'photo' ? 'Switch to video' : 'Switch to photo'}
+          style={styles.sideControl}
+        >
+          <Ionicons name={captureMode === 'photo' ? 'videocam' : 'camera'} size={26} color={recording ? colors.muted : colors.text} />
+          <Text style={styles.sideLabel}>{captureMode === 'photo' ? 'Video' : 'Photo'}</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -831,6 +871,7 @@ const styles = StyleSheet.create({
   },
   reviewTitle: { color: colors.text, fontSize: 17, fontWeight: '700' },
   preview: { width: '100%', aspectRatio: 9 / 16, maxHeight: 420, backgroundColor: '#000' },
+  photoInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#fff' },
   form: { paddingHorizontal: 16, paddingTop: 16, gap: 8 },
   label: { color: colors.text, fontSize: 15, fontWeight: '600', marginTop: 8 },
   input: {

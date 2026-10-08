@@ -35,6 +35,7 @@ interface FeedRow {
   liked_by_me: number;
   is_blu: number;
   promoted_by: string | null;
+  media_type: 'video' | 'image' | null;
 }
 
 const PAGE = 20;
@@ -47,7 +48,7 @@ const FEED_SELECT = `
     u.display_name AS creator_name, u.avatar_url AS creator_avatar, u.verified AS creator_verified,
     cp.handle AS creator_handle, t.poster_url,
     t.is_blu AS is_blu, t.promoted_by AS promoted_by,
-    e.id AS episode_id, e.video_url, t.published_at,
+    e.id AS episode_id, e.video_url, e.media_type, t.published_at,
     COALESCE(s.plays, 0) AS views, COALESCE(s.likes, 0) AS likes,
     (SELECT COUNT(*) FROM comments co WHERE co.title_id = t.id AND co.status = 'visible') AS comment_count,
     (SELECT COUNT(*) FROM likes l WHERE l.title_id = t.id AND l.user_id = ?1) AS liked_by_me
@@ -84,6 +85,7 @@ function toFeedItem(row: FeedRow): FeedItem {
     likedByMe: row.liked_by_me > 0,
     isBlu: row.is_blu === 1,
     promotedBy: row.promoted_by,
+    mediaType: row.media_type === 'image' ? 'image' : 'video',
   };
 }
 

@@ -604,6 +604,17 @@ export const clipCreateSchema = z.object({
   releaseDate: releaseDate.default(null),
   /** Cover image for the clip: mandatory (an uploaded /media image). */
   posterUrl: coverArt,
+  /** 'image' posts a still photo (promotional, never monetized); default is a video clip. */
+  mediaType: z.enum(['video', 'image']).default('video'),
+}).superRefine((v, ctx) => {
+  if (v.mediaType === 'image') {
+    if (!/\.(jpe?g|png|webp)$/i.test(v.sourceUrl)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['sourceUrl'], message: 'Upload a JPG, PNG or WebP image.' });
+    }
+    if (v.bluTierId) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['bluTierId'], message: 'Images cannot be Sweam Blu. They are promotional and never monetized.' });
+    }
+  }
 });
 
 /** An admin's decision on a clip in the review queue. */

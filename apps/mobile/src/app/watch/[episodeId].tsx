@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { api, videoSource } from '../../lib/api';
+import { api, mediaUrl, videoSource } from '../../lib/api';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { colors } from '../../lib/theme';
@@ -31,7 +32,7 @@ export default function WatchScreen() {
   }, [episodeId, authLoading]);
 
   const player = useVideoPlayer(
-    payload ? videoSource(payload.episode.videoUrl, token) : null,
+    payload && payload.episode.mediaType !== 'image' ? videoSource(payload.episode.videoUrl, token) : null,
     (p) => {
       p.play();
     },
@@ -106,7 +107,16 @@ export default function WatchScreen() {
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={styles.playerWrap}>
-        <VideoView style={styles.player} player={player} contentFit="contain" nativeControls />
+        {episode.mediaType === 'image' ? (
+          <Image
+            source={{ uri: mediaUrl(episode.videoUrl) ?? undefined }}
+            style={styles.player}
+            contentFit="contain"
+            accessibilityLabel={`${title.name}: ${episode.name}`}
+          />
+        ) : (
+          <VideoView style={styles.player} player={player} contentFit="contain" nativeControls />
+        )}
         <Pressable style={styles.back} onPress={() => router.back()} accessibilityLabel="Back">
           <Ionicons name="chevron-down" size={28} color="#fff" />
         </Pressable>

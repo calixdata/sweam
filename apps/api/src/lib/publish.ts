@@ -185,6 +185,8 @@ export interface ClipToPublish {
   releaseDate?: string | null;
   /** Cover image chosen at post time (mandatory). */
   posterUrl: string;
+  /** 'image' = a still photo post: promotional only, never monetized. */
+  mediaType?: 'video' | 'image';
 }
 
 /** A clip's title name is its caption, trimmed to a display-friendly length. */
@@ -211,6 +213,7 @@ export async function publishClip(
   const advisory = RATING_TO_ADVISORY[clip.rating];
   const name = clipTitleName(clip.caption);
   const genres = JSON.stringify(clip.genre ? [clip.genre] : []);
+  const isImage = clip.mediaType === 'image';
 
   let titleId: string;
   let slug: string;
@@ -259,10 +262,10 @@ export async function publishClip(
         .prepare(
           `INSERT INTO titles
              (id, creator_id, kind, name, slug, synopsis, genre, audiences, genres, subgenres, advisory, poster_url,
-              published, published_at, admin_locked, series_id, review_state, is_blu, blu_price_cents, blu_changed_at, ever_blu, created_at)
-           VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, ?, 1, ?, 1, NULL, 'pending', ?, ?, ?, ?, ?)`,
+              published, published_at, admin_locked, series_id, review_state, is_blu, blu_price_cents, blu_changed_at, ever_blu, created_at, promo_only)
+           VALUES (?, ?, 'short', ?, ?, ?, ?, ?, ?, '[]', ?, ?, 1, ?, 1, NULL, 'pending', ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), genres, advisory, clip.posterUrl ?? null, now, isBlu ? 1 : 0, clip.bluPriceCents, isBlu ? now : null, isBlu ? 1 : 0, now),
+        .bind(titleId, clip.userId, name, slug, clip.caption, clip.genre, JSON.stringify(clip.audiences), genres, advisory, clip.posterUrl ?? null, now, isBlu && !isImage ? 1 : 0, isImage ? null : clip.bluPriceCents, isBlu && !isImage ? now : null, isBlu && !isImage ? 1 : 0, now, isImage ? 1 : 0),
       env.DB.prepare('INSERT INTO title_stats (title_id) VALUES (?)').bind(titleId),
     ]);
 
@@ -286,12 +289,13 @@ export async function publishClip(
   const releaseAt = clip.releaseDate ? easternMidnightUtc(clip.releaseDate) : null;
   await env.DB.prepare(
     `INSERT INTO episodes
-       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at, thumbnail_url)
-     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at, thumbnail_url, media_type)
+     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
   )
-    .bind(episodeId, titleId, episode, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now, releaseAt, clip.posterUrl ?? null)
+    .bind(episodeId, titleId, episode, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now, releaseAt, clip.posterUrl ?? clip.sourceUrl, isImage ? 'image' : 'video')
     .run();
-  await enqueueTranscode(env.DB, episodeId, clip.sourceUrl);
+  // A still image has nothing to transcode.
+  if (!isImage) await enqueueTranscode(env.DB, episodeId, clip.sourceUrl);
 
   return { titleId, slug, episodeId, name, attachedToSeries };
 }

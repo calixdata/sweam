@@ -118,6 +118,7 @@ clipRoutes.post('/', async (c) => {
       seriesId: body.seriesId,
       releaseDate: body.releaseDate,
       posterUrl: body.posterUrl,
+      mediaType: body.mediaType,
     },
     user.displayName,
   );

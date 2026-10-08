@@ -218,22 +218,23 @@ function FeedCard({
 
   // Load the video only for the active clip and the next one (single stream while
   // watching), so the feed does not buffer on many videos at once.
+  const isImage = item.mediaType === 'image';
   useEffect(() => {
-    if (isNear) {
+    if (isNear && !isImage) {
       try {
         player.replace(videoSource(item.videoUrl, token));
       } catch {
         /* player may be released mid-scroll */
       }
     }
-  }, [isNear, item.videoUrl, token, player]);
+  }, [isNear, isImage, item.videoUrl, token, player]);
 
   // Only the active, un-paused card plays — and only while the screen is focused,
   // so leaving the tab/screen stops the audio.
   useEffect(() => {
-    if (isActive && !paused && screenFocused) player.play();
+    if (isActive && !paused && screenFocused && !isImage) player.play();
     else player.pause();
-  }, [isActive, paused, screenFocused, player]);
+  }, [isActive, paused, screenFocused, player, isImage]);
 
   // Choose the fit from the video's real shape once its source metadata loads:
   // portrait clips fill the screen; landscape clips show the whole frame. Falls
@@ -313,7 +314,15 @@ function FeedCard({
       )}
       <GestureDetector gesture={gesture}>
         <View style={StyleSheet.absoluteFill}>
-          {isNear && (
+          {isNear && isImage && (
+            <Image
+              source={{ uri: mediaUrl(item.videoUrl) ?? undefined }}
+              style={StyleSheet.absoluteFill}
+              contentFit="contain"
+              accessibilityLabel={item.name}
+            />
+          )}
+          {isNear && !isImage && (
             <VideoView
               // Vertical clips fill the screen (cover); wider clips show the
               // whole frame (contain) over the blurred backdrop — chosen per

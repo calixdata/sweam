@@ -61,6 +61,26 @@ export function Record() {
   const [releaseDate, setReleaseDate] = useState('');
   // Cover image for the clip (mandatory).
   const [posterUrl, setPosterUrl] = useState('');
+  // 'photo' posts a still image: promotional only, never monetized.
+  const [mode, setMode] = useState<'video' | 'photo'>('video');
+  const [photo, setPhoto] = useState<{ file: File; url: string } | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const onPickPhoto = useCallback((file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Choose a JPG, PNG or WebP image.');
+      return;
+    }
+    if (file.size > UPLOAD_SPECS.poster.maxBytes) {
+      setError('That image is over the size limit. Try a smaller one.');
+      return;
+    }
+    setError(null);
+    if (photo) URL.revokeObjectURL(photo.url);
+    setPhoto({ file, url: URL.createObjectURL(file) });
+    setStatus('Photo ready. Add a caption and post.');
+  }, [photo]);
+
 
   const [posting, setPosting] = useState(false);
   const [progress, setProgress] = useState<UploadProgress | null>(null);
@@ -240,6 +260,41 @@ export function Record() {
     }
   }, [clip, caption, rating, genre, audience, bluMode, bluTierId, seriesId, releaseDate, posterUrl, navigate, stopStream]);
 
+  const postPhoto = useCallback(async () => {
+    if (!photo) return;
+    if (!caption.trim()) {
+      setError('Add a caption for your photo.');
+      return;
+    }
+    if (!rating) {
+      setError('Choose a maturity rating.');
+      return;
+    }
+    setPosting(true);
+    setError(null);
+    try {
+      const { url } = await uploadMedia(photo.file, setProgress, INTAKE_UPLOAD_BASE);
+      const result = await apiSend<{ slug: string; episodeId: string }>('POST', '/api/clips', {
+        caption: caption.trim(),
+        rating,
+        genre,
+        audiences: audience ? [audience] : [],
+        sourceUrl: url,
+        bluTierId: null,
+        seriesId: seriesId || null,
+        releaseDate: releaseDate || null,
+        posterUrl: url,
+        mediaType: 'image',
+      });
+      stopStream();
+      navigate(`/watch/${result.episodeId}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not post your photo.');
+      setPosting(false);
+      setProgress(null);
+    }
+  }, [photo, caption, rating, genre, audience, seriesId, releaseDate, navigate, stopStream]);
+
   if (!user) {
     return (
       <div className="page page-narrow">
@@ -259,7 +314,7 @@ export function Record() {
 
   return (
     <div className="page page-narrow">
-      <h1>Record a clip</h1>
+      <h1>{mode === 'photo' ? 'Post a photo' : 'Record a clip'}</h1>
       <p className="page-intro">
         Film something now and post it straight to Sweam. Clips go live immediately, then our
         moderators review them. Keep it within the{' '}
@@ -277,7 +332,85 @@ export function Record() {
         </ul>
       </aside>
 
-      <section aria-label="Camera" className="record-stage">
+      <div className="record-mode" role="group" aria-label="What to post">
+        <button
+          type="button"
+          className={mode === 'video' ? 'button' : 'button button-quiet'}
+          aria-pressed={mode === 'video'}
+          onClick={() => setMode('video')}
+          disabled={posting}
+        >
+          Video clip
+        </button>{' '}
+        <button
+          type="button"
+          className={mode === 'photo' ? 'button' : 'button button-quiet'}
+          aria-pressed={mode === 'photo'}
+          onClick={() => setMode('photo')}
+          disabled={posting}
+        >
+          Photo
+        </button>
+      </div>
+
+      {mode === 'photo' && (
+        <section aria-label="Photo" className="record-stage">
+          {photo ? (
+            <img className="player" src={photo.url} alt="Your photo, ready to post" />
+          ) : (
+            <p className="status">Take a photo with your camera or choose one from your device.</p>
+          )}
+          <p className="status" role="status" aria-live="polite">
+            {status}
+          </p>
+          <div className="record-controls">
+            <label className="button" htmlFor="photo-capture">
+              Take a photo
+            </label>
+            <input
+              id="photo-capture"
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="visually-hidden"
+              disabled={posting}
+              onChange={(event) => onPickPhoto(event.target.files?.[0])}
+            />
+            <label className="button button-quiet" htmlFor="photo-file">
+              Choose from device
+            </label>
+            <input
+              id="photo-file"
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="visually-hidden"
+              disabled={posting}
+              onChange={(event) => onPickPhoto(event.target.files?.[0])}
+            />
+            {photo && (
+              <button
+                type="button"
+                className="button button-quiet"
+                disabled={posting}
+                onClick={() => {
+                  URL.revokeObjectURL(photo.url);
+                  setPhoto(null);
+                }}
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          <p className="field-hint">
+            Photos promote your work. They appear in the feed and on your profile, but they are not
+            eligible for any monetization: no ads, no Sweam Blu, and they do not count toward the
+            monetization thresholds.
+          </p>
+        </section>
+      )}
+
+      <section aria-label="Camera" className="record-stage" hidden={mode === 'photo'}>
         <video
           ref={liveRef}
           className="player"
@@ -537,7 +670,7 @@ export function Record() {
           </p>
         )}
 
-        <button type="button" className="button" onClick={() => void post()} disabled={!clip || posting}>
+        <button type="button" className="button" onClick={() => void (mode === 'photo' ? postPhoto() : post())} disabled={mode === 'photo' ? (!photo || posting) : (!clip || posting)}>
           {posting ? 'Posting…' : 'Post now'}
         </button>
       </section>

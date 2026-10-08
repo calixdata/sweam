@@ -21,12 +21,12 @@ export async function getCreatorEligibility(
       .prepare(
         `SELECT COALESCE(SUM(s.watch_seconds), 0) AS n
          FROM title_stats s JOIN titles t ON t.id = s.title_id
-         WHERE t.creator_id = ? AND t.published = 1`,
+         WHERE t.creator_id = ? AND t.published = 1 AND t.promo_only = 0`,
       )
       .bind(creatorId)
       .first<{ n: number }>(),
     db
-      .prepare('SELECT COUNT(*) AS n FROM titles WHERE creator_id = ? AND published = 1')
+      .prepare('SELECT COUNT(*) AS n FROM titles WHERE creator_id = ? AND published = 1 AND promo_only = 0')
       .bind(creatorId)
       .first<{ n: number }>(),
     activeStrikeCount(db, creatorId),
