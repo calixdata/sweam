@@ -285,7 +285,10 @@ function FeedCard({
   }, [heart, liked, like]);
 
   const doubleTap = Gesture.Tap().numberOfTaps(2).maxDuration(300).onEnd(() => runOnJS(burstLike)());
-  const singleTap = Gesture.Tap().numberOfTaps(1).onEnd(() => runOnJS(setPaused)((p) => !p));
+  // runOnJS cannot carry a function argument across the worklet boundary, so
+  // the updater form of setPaused never arrived and taps did nothing.
+  const togglePaused = useCallback(() => setPaused((p) => !p), []);
+  const singleTap = Gesture.Tap().numberOfTaps(1).onEnd(() => runOnJS(togglePaused)());
   const gesture = Gesture.Exclusive(doubleTap, singleTap);
 
   return (
