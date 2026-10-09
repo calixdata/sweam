@@ -22,7 +22,7 @@
     },
     "android": {
       "package": "co.sweam.app",
-      "versionCode": 6,
+      "versionCode": 7,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#1759F5",
