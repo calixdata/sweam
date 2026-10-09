@@ -73,11 +73,7 @@ function ProfilePictureSection({
 
   async function pickAndUpload() {
     setStatus(null);
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      setStatus({ ok: false, text: 'Allow photo access to choose a picture.' });
-      return;
-    }
+    // The system photo picker needs no storage permission, so none is requested.
     const res = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       allowsEditing: true,
