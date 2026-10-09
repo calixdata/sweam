@@ -222,14 +222,16 @@ function FeedCard({
   const isImage = item.mediaType === 'image';
   const introDone = useIntroDone();
   useEffect(() => {
-    if (isNear && !isImage) {
+    // Not before the launch animation hands off: a loaded video surface would
+    // show through it even while paused.
+    if (isNear && !isImage && introDone) {
       try {
         player.replace(videoSource(item.videoUrl, token));
       } catch {
         /* player may be released mid-scroll */
       }
     }
-  }, [isNear, isImage, item.videoUrl, token, player]);
+  }, [isNear, isImage, introDone, item.videoUrl, token, player]);
 
   // Only the active, un-paused card plays — and only while the screen is focused,
   // so leaving the tab/screen stops the audio.

@@ -13,7 +13,9 @@ import { markIntroDone } from '../lib/intro';
  * indistinguishable from the launch screen and the S appears to grow out of it.
  *
  * The video is 9:16 and is shown "contain" on the same blue, so taller phones
- * get invisible blue bands instead of a cropped wordmark.
+ * get invisible blue bands instead of a cropped wordmark. The feed does not
+ * load or play its video until this hands off (see lib/intro), so no second
+ * video surface can show through the animation.
  *
  * Timing: the approved 6 s animation at 1.25x, handed off as "NOW STREAMING"
  * lands (video time 4.2 s = about 3.4 s on the clock) with a 350 ms dissolve.
@@ -39,6 +41,9 @@ const INTRO_POSTER = require('../../assets/intro/sweam-intro-poster.png');
 export function IntroOverlay() {
   const [done, setDone] = useState(false);
   const [reduceMotion, setReduceMotion] = useState<boolean | null>(null);
+  // During the dissolve the video is swapped for its own last frame: a video
+  // surface ignores view opacity, a plain image fades properly.
+  const [fading, setFading] = useState(false);
   const opacity = useSharedValue(1);
   const dismissed = useRef(false);
 
@@ -54,6 +59,7 @@ export function IntroOverlay() {
   const dismiss = useCallback(() => {
     if (dismissed.current) return;
     dismissed.current = true;
+    setFading(true);
     // Let the feed start under the dissolve, so the hand-off lands on motion.
     markIntroDone();
     try {
@@ -130,16 +136,13 @@ export function IntroOverlay() {
         accessibilityRole="button"
         accessibilityLabel="Sweam. Opening animation. Tap to skip."
       >
-        {reduceMotion === false ? (
+        {reduceMotion === false && !fading ? (
           <VideoView
             player={player}
             style={StyleSheet.absoluteFill}
             contentFit="contain"
             nativeControls={false}
             allowsPictureInPicture={false}
-            // A texture, not a surface: stays above the feed's video surface and
-            // fades with the overlay instead of punching a hole through it.
-            surfaceType="textureView"
           />
         ) : (
           <Image
