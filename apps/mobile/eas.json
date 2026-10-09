@@ -35,9 +35,9 @@
         "releaseStatus": "draft"
       },
       "ios": {
-        "appleId": "YOUR_APPLE_ID_EMAIL",
-        "ascAppId": "APP_STORE_CONNECT_APP_ID",
-        "appleTeamId": "YOUR_TEAM_ID"
+        "appleId": "developer@falcyn.dev",
+        "ascAppId": "6821174083",
+        "appleTeamId": "FUQALXD9NB"
       }
     }
   }
