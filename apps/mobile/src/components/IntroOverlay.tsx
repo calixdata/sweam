@@ -4,6 +4,7 @@ import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import * as SplashScreen from 'expo-splash-screen';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { markIntroDone } from '../lib/intro';
 
 /**
  * The motion opening: Sweam's brand animation plays once on cold start, full
@@ -53,6 +54,8 @@ export function IntroOverlay() {
   const dismiss = useCallback(() => {
     if (dismissed.current) return;
     dismissed.current = true;
+    // Let the feed start under the dissolve, so the hand-off lands on motion.
+    markIntroDone();
     try {
       player.pause();
     } catch {
@@ -134,6 +137,9 @@ export function IntroOverlay() {
             contentFit="contain"
             nativeControls={false}
             allowsPictureInPicture={false}
+            // A texture, not a surface: stays above the feed's video surface and
+            // fades with the overlay instead of punching a hole through it.
+            surfaceType="textureView"
           />
         ) : (
           <Image

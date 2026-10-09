@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Link, router, useFocusEffect } from 'expo-router';
 import { api, mediaUrl, videoSource } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useIntroDone } from '../../lib/intro';
 import { colors } from '../../lib/theme';
 import type { FeedItem } from '../../lib/types';
 import { CommentsSheet } from '../../components/CommentsSheet';
@@ -219,6 +220,7 @@ function FeedCard({
   // Load the video only for the active clip and the next one (single stream while
   // watching), so the feed does not buffer on many videos at once.
   const isImage = item.mediaType === 'image';
+  const introDone = useIntroDone();
   useEffect(() => {
     if (isNear && !isImage) {
       try {
@@ -232,9 +234,10 @@ function FeedCard({
   // Only the active, un-paused card plays — and only while the screen is focused,
   // so leaving the tab/screen stops the audio.
   useEffect(() => {
-    if (isActive && !paused && screenFocused && !isImage) player.play();
+    // Nothing plays (or sounds) under the launch animation.
+    if (isActive && !paused && screenFocused && !isImage && introDone) player.play();
     else player.pause();
-  }, [isActive, paused, screenFocused, player, isImage]);
+  }, [isActive, paused, screenFocused, player, isImage, introDone]);
 
   // Choose the fit from the video's real shape once its source metadata loads:
   // portrait clips fill the screen; landscape clips show the whole frame. Falls
