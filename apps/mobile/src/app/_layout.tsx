@@ -5,16 +5,16 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from '../lib/auth';
+import { IntroOverlay } from '../components/IntroOverlay';
 import { registerForPush } from '../lib/push';
 import { colors } from '../lib/theme';
 
 SplashScreen.preventAutoHideAsync().catch(() => undefined);
 
 export default function RootLayout() {
-  useEffect(() => {
-    SplashScreen.hideAsync().catch(() => undefined);
-  }, []);
-
+  // The native splash is hidden by IntroOverlay once the opening animation's
+  // first frame is on screen (or by its own fallback timer), so the hand-off
+  // from launch screen to motion opening is seamless.
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.bg }}>
       <AuthProvider>
@@ -41,6 +41,7 @@ export default function RootLayout() {
           <Stack.Screen name="signin" options={{ presentation: 'modal' }} />
           <Stack.Screen name="signup" options={{ presentation: 'modal' }} />
         </Stack>
+        <IntroOverlay />
       </AuthProvider>
     </GestureHandlerRootView>
   );
