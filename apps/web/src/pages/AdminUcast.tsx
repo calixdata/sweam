@@ -40,7 +40,10 @@ function defaultClose(): string {
   return toLocalInput(d.toISOString());
 }
 
-function CoverField({ id, value, onChange }: { id: string; value: string | null; onChange: (url: string | null) => void }) {
+/** Covers render at 16:9 everywhere (cards and the poll page), so this is the one size to make. */
+export const UCAST_COVER_HINT = 'Ideal size 1280 by 720 pixels (16:9, landscape). Minimum 800 by 450. JPEG or WebP under 300 KB, PNG also accepted, up to 8 MB. The image is shown edge to edge, so keep faces and titles away from the outer 5 percent.';
+
+function CoverField({ id, value, onChange, saving }: { id: string; value: string | null; onChange: (url: string | null) => void; saving?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   async function pick(event: ChangeEvent<HTMLInputElement>) {
@@ -59,17 +62,23 @@ function CoverField({ id, value, onChange }: { id: string; value: string | null;
   }
   return (
     <div className="field">
-      <label htmlFor={id}>Cover image (JPEG, PNG or WebP, up to 8 MB; jogs the memory of who, what and when)</label>
-      <input id={id} type="file" accept="image/jpeg,image/png,image/webp" onChange={pick} disabled={busy} />
-      {value && (
-        <p className="field-hint">
-          <img src={value} alt="" className="ucast-admin-cover" /> Cover set.{' '}
-          <button type="button" className="button button-quiet" onClick={() => onChange(null)}>
-            Remove cover
-          </button>
-        </p>
-      )}
-      {busy && <p className="field-hint">Uploading…</p>}
+      <label htmlFor={id}>{value ? 'Replace the cover image' : 'Add a cover image'} (jogs the memory of who, what and when)</label>
+      <input id={id} type="file" accept="image/jpeg,image/png,image/webp" onChange={pick} disabled={busy || saving} aria-describedby={`${id}-hint`} />
+      <p className="field-hint" id={`${id}-hint`}>{UCAST_COVER_HINT}</p>
+      <p className="field-hint" role="status">
+        {value ? (
+          <>
+            <img src={value} alt="" className="ucast-admin-cover" /> Cover set.{' '}
+            <button type="button" className="button button-quiet" disabled={busy || saving} onClick={() => onChange(null)}>
+              Remove cover
+            </button>
+          </>
+        ) : (
+          'No cover yet.'
+        )}
+        {busy && ' Uploading…'}
+        {saving && ' Saving…'}
+      </p>
       {err && <ErrorNote message={err} />}
     </div>
   );
@@ -162,9 +171,25 @@ function PollRow({ poll, onDone }: { poll: AdminUcastPoll; onDone: (msg: string)
   const [hook, setHook] = useState(poll.hook);
   const [roles, setRoles] = useState(rolesToText(poll.roles));
   const [cover, setCover] = useState<string | null>(poll.coverUrl);
+  const [coverSaving, setCoverSaving] = useState(false);
   const [resultsNote, setResultsNote] = useState(poll.resultsNote);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  /** A cover change saves on its own; no need to open the editor or press Save. */
+  async function saveCover(url: string | null) {
+    setCover(url);
+    setCoverSaving(true);
+    setErr(null);
+    try {
+      await apiSend('PATCH', `/api/admin/ucast/${poll.id}`, { coverUrl: url });
+      onDone(`${url ? 'Cover set' : 'Cover removed'}: ${poll.title} (${poll.year}).`);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Could not save the cover.');
+    } finally {
+      setCoverSaving(false);
+    }
+  }
 
   async function run(label: string, fn: () => Promise<unknown>) {
     setErr(null);
@@ -191,9 +216,11 @@ function PollRow({ poll, onDone }: { poll: AdminUcastPoll; onDone: (msg: string)
           {poll.resultsAt && ` · results posted ${formatWhen(poll.resultsAt)}`}
         </div>
         <button type="button" className="button button-quiet" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-          {open ? 'Close editor' : 'Edit'}
+          {open ? 'Close editor' : 'Edit window, roles or results'}
         </button>
       </div>
+      <CoverField id={`pcover-${poll.id}`} value={cover} onChange={saveCover} saving={coverSaving} />
+      {err && !open && <ErrorNote message={err} />}
       {open && (
         <div className="ucast-admin-editor">
           <div className="field-row">
@@ -210,10 +237,9 @@ function PollRow({ poll, onDone }: { poll: AdminUcastPoll; onDone: (msg: string)
             <label htmlFor={`proles-${poll.id}`}>Roles (renaming keeps ballots; removing a role drops its picks)</label>
             <textarea id={`proles-${poll.id}`} rows={5} value={roles} onChange={(e) => setRoles(e.target.value)} />
           </div>
-          <CoverField id={`pcover-${poll.id}`} value={cover} onChange={setCover} />
           {err && <ErrorNote message={err} />}
           <div className="ucast-actions">
-            <button type="button" className="button" disabled={busy} onClick={() => run('Saved', () => apiSend('PATCH', `/api/admin/ucast/${poll.id}`, { closesAt: closesAt ? new Date(closesAt).toISOString() : undefined, hook, roles: textToRoles(roles), coverUrl: cover }))}>
+            <button type="button" className="button" disabled={busy} onClick={() => run('Saved', () => apiSend('PATCH', `/api/admin/ucast/${poll.id}`, { closesAt: closesAt ? new Date(closesAt).toISOString() : undefined, hook, roles: textToRoles(roles) }))}>
               Save changes
             </button>
             {poll.phase === 'open' && (
