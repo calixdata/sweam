@@ -345,12 +345,20 @@ export function AdminUcast() {
   }
   const pending = polls?.filter((p) => p.status === 'pending') ?? [];
   const live = polls?.filter((p) => p.status === 'open' || p.status === 'closed') ?? [];
+  const groups: { id: string; title: string; hint: string; items: AdminUcastPoll[] }[] = [
+    { id: 'au-open', title: 'Open for casting', hint: 'Edit the window or roles, add a cover, or close early.', items: live.filter((p) => p.phase === 'open' || p.phase === 'scheduled') },
+    { id: 'au-closed', title: 'Closed, results due', hint: 'Post results with a note; otherwise they go public automatically 48 hours after closing.', items: live.filter((p) => p.phase === 'closed') },
+    { id: 'au-results', title: 'Results posted', hint: 'Done. The results note can still be edited.', items: live.filter((p) => p.phase === 'results') },
+  ];
   const rejected = polls?.filter((p) => p.status === 'rejected') ?? [];
 
   return (
     <div className="page">
       <h1>UCast</h1>
       <AdminNav />
+      <p className="page-intro">
+        Everything UCast lives on this tab and nowhere else in the console: requests to review, open polls to tend, closed polls awaiting results, and opening a poll as @ucast.
+      </p>
       {notice && (
         <p className="status status-ok" role="status">
           {notice}
@@ -365,14 +373,23 @@ export function AdminUcast() {
             <p className="field-hint">Nothing opens for polling until you open it here. Set the roles and the window; the duplicate check result is shown for each request.</p>
             {pending.length === 0 ? <p className="ucast-empty">No requests waiting.</p> : <ul className="ucast-admin-list">{pending.map((p) => <RequestCard key={p.id} poll={p} onDone={done} />)}</ul>}
           </section>
-          <section aria-labelledby="au-live">
-            <h2 id="au-live">Polls ({live.length})</h2>
-            <ul className="ucast-admin-list">
-              {live.map((p) => (
-                <PollRow key={p.id} poll={p} onDone={done} />
-              ))}
-            </ul>
-          </section>
+          {groups.map((g) => (
+            <section key={g.id} aria-labelledby={g.id}>
+              <h2 id={g.id}>
+                {g.title} ({g.items.length})
+              </h2>
+              <p className="field-hint">{g.hint}</p>
+              {g.items.length === 0 ? (
+                <p className="ucast-empty">None.</p>
+              ) : (
+                <ul className="ucast-admin-list">
+                  {g.items.map((p) => (
+                    <PollRow key={p.id} poll={p} onDone={done} />
+                  ))}
+                </ul>
+              )}
+            </section>
+          ))}
           <section aria-labelledby="au-new">
             <h2 id="au-new">Open a poll as @ucast</h2>
             <NewPollForm onDone={done} />
