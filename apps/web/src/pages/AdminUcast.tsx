@@ -183,7 +183,7 @@ function PollRow({ poll, onDone }: { poll: AdminUcastPoll; onDone: (msg: string)
     <li className="ucast-admin-row">
       <div className="ucast-admin-row-head">
         <div>
-          <Link to={`/ucast/p/${poll.slug}`}>
+          <Link to={`/ucast/p/${poll.slug}`} aria-label={`${poll.title} (${poll.year}), open the poll page`}>
             <strong>{poll.title}</strong> ({poll.year})
           </Link>{' '}
           · {UCAST_WORK_KIND_LABELS[poll.kind]} · {UCAST_PHASE_LABELS[poll.phase]}
