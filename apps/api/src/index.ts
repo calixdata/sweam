@@ -25,6 +25,7 @@ import { studioRoutes } from './routes/studio';
 import { stripeRoutes } from './routes/stripe';
 import { submissionRoutes } from './routes/submissions';
 import { transcodeRoutes } from './routes/transcode';
+import { ucastRoutes } from './routes/ucast';
 import { titleRoutes } from './routes/titles';
 import { verbatiimStudioRoutes, verbatiimWebhookRoutes } from './routes/verbatiim';
 import { watchRoutes } from './routes/watch';
@@ -66,6 +67,7 @@ app.route('/api/submissions', submissionRoutes);
 app.route('/api/clips', clipRoutes);
 app.route('/api/blu', bluRoutes);
 app.route('/api/stripe', stripeRoutes);
+app.route('/api/ucast', ucastRoutes);
 // Media (posters, video, HLS) is content: gated to signed-in accounts, with the
 // transcoder service allowed through by its Bearer token.
 app.use('/media/*', requireContentAccess);

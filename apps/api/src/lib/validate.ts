@@ -14,6 +14,8 @@ import {
   SCOUT_OFFER_KINDS,
   SCOUT_PROMO_MAX_PERCENT,
   SUBGENRES,
+  UCAST_MAX_PICKS,
+  UCAST_WORK_KINDS,
   USERNAME_HINT,
   USERNAME_RE,
   VERBATIIM_MAX_TEXT,
@@ -701,4 +703,32 @@ export const deleteAccountSchema = z.object({
   confirm: z.literal('DELETE', {
     errorMap: () => ({ message: 'Type DELETE to confirm.' }),
   }),
+});
+
+/* ------------------------------------------------------------------ UCast */
+
+const ucastName = (what: string, max = 80) =>
+  z.string().trim().min(1, `${what} is required.`).max(max, `${what} must be ${max} characters or fewer.`);
+
+export const ucastWorkCreateSchema = z.object({
+  kind: z.enum(UCAST_WORK_KINDS),
+  title: ucastName('Title', 120),
+  year: z.number().int().min(1900, 'Enter a year from 1900 on.').max(2100),
+  hook: z.string().trim().max(300, 'Keep the hook to 300 characters.').default(''),
+});
+
+export const ucastPickSchema = z.object({
+  role: ucastName('Role'),
+  originalPerformer: z.string().trim().max(80).optional().default(''),
+  pick: ucastName('Your pick'),
+  note: z.string().trim().max(280, 'Keep each note to 280 characters.').default(''),
+});
+
+export const ucastRecastCreateSchema = z.object({
+  headline: z.string().trim().max(160, 'Keep the headline to 160 characters.').default(''),
+  note: z.string().trim().max(1200, 'Keep the note to 1200 characters.').default(''),
+  picks: z
+    .array(ucastPickSchema)
+    .min(1, 'Cast at least one role.')
+    .max(UCAST_MAX_PICKS, `Cast at most ${UCAST_MAX_PICKS} roles in one recast.`),
 });

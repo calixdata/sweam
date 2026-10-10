@@ -60,6 +60,10 @@ export const RATE_LIMITS = {
   clip: { name: 'clip', limit: 20, windowS: 24 * 60 * 60 },
   /** Verbatiim film jobs a creator may start per day (each one renders a whole episode). */
   verbatiim: { name: 'verbatiim', limit: 10, windowS: 24 * 60 * 60 },
+  /** UCast: works opened, recasts posted, and pick votes per member. */
+  ucastWork: { name: 'ucast-work', limit: 10, windowS: 24 * 60 * 60 },
+  ucastRecast: { name: 'ucast-recast', limit: 15, windowS: 24 * 60 * 60 },
+  ucastVote: { name: 'ucast-vote', limit: 300, windowS: 60 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /** Start of the fixed window containing nowMs, in epoch seconds. */

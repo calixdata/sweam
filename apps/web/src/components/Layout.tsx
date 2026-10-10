@@ -97,6 +97,9 @@ export function Layout() {
                 <NavLink to="/browse">Browse</NavLink>
               </li>
               <li>
+                <NavLink to="/ucast">UCast</NavLink>
+              </li>
+              <li>
                 <NavLink to="/submit">Submit</NavLink>
               </li>
               {user && (
@@ -204,6 +207,9 @@ export function Layout() {
                 </li>
                 <li>
                   <Link to="/browse">Browse</Link>
+                </li>
+                <li>
+                  <Link to="/ucast">UCast recasting room</Link>
                 </li>
                 <li>
                   <Link to="/faq">FAQ</Link>

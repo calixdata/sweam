@@ -2637,3 +2637,202 @@ input[type='checkbox'] {
 .legal-table thead th {
   border-bottom-width: 2px;
 }
+
+/* ------------------------------------------------------------------- UCast */
+/* The recasting room. Text-only cards (no art, by rule), the disclaimer on
+   every page, and a pick table that reuses the Studio table. */
+.ucast-hero h1 {
+  margin-bottom: 0.35rem;
+}
+
+.ucast-disclaimer {
+  display: inline-block;
+  margin: 0.75rem 0 0;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.ucast-crumb {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.ucast-filter {
+  max-width: 16rem;
+}
+
+.ucast-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+
+.ucast-card-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  height: 100%;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.ucast-card-link:hover,
+.ucast-card-link:focus-visible {
+  border-color: var(--accent);
+}
+
+.ucast-card-kind {
+  color: var(--muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ucast-card-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+.ucast-card-year,
+.ucast-recast-when {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.ucast-card-hook {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.ucast-card-meta {
+  margin-top: auto;
+  font-size: 0.85rem;
+  color: var(--link);
+}
+
+.ucast-consensus {
+  padding-left: 1.2rem;
+}
+
+.ucast-consensus li {
+  margin-bottom: 0.4rem;
+}
+
+.ucast-recast-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.ucast-recast {
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.ucast-recast-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ucast-recast-head p {
+  margin: 0;
+}
+
+.ucast-recast-author {
+  font-weight: 600;
+}
+
+.ucast-recast-when {
+  font-size: 0.85rem;
+}
+
+.ucast-remove {
+  margin-left: auto;
+}
+
+.ucast-official-tag {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.ucast-recast-headline {
+  margin: 0.9rem 0 0.25rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+}
+
+.ucast-recast-note {
+  color: var(--muted);
+  margin: 0 0 0.5rem;
+}
+
+.ucast-picks {
+  white-space: normal;
+}
+
+.ucast-pick-name {
+  font-weight: 600;
+}
+
+.ucast-pick-note {
+  color: var(--muted);
+  min-width: 14rem;
+}
+
+.ucast-vote-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ucast-votes {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.ucast-pick-rows {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem 1rem;
+  margin: 0 0 1.15rem;
+}
+
+.ucast-pick-rows legend {
+  padding: 0 0.4rem;
+  color: var(--muted);
+}
+
+.ucast-pick-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.ucast-pick-row .field {
+  margin-bottom: 0;
+}

@@ -896,7 +896,8 @@ export type NotificationKind =
   | 'video_update'
   | 'blu'
   | 'release'
-  | 'verification';
+  | 'verification'
+  | 'ucast';
 
 export interface NotificationItem {
   id: string;
@@ -1482,4 +1483,96 @@ export interface VerbatiimJob {
 export interface VerbatiimStatus {
   connected: boolean;
   name: string;
+}
+
+/* ------------------------------------------------------------------ UCast */
+
+/**
+ * UCast: Sweam's fancast room. Members recast older films, TV series, songs,
+ * musicals and music videos by naming who they would cast in each role for a
+ * remake or rendition, and vote on each other's picks. Text only: no key art,
+ * no faces, no AI likenesses. The room is hosted by Sweam's own official
+ * account, @ucast, which posts the open calls.
+ */
+export const UCAST_HANDLE = 'ucast';
+export const UCAST_NAME = 'UCast';
+/** The same words on every recast, exactly as the fancast house rules put them. */
+export const UCAST_DISCLAIMER =
+  'Fan concept. Not a real project. No artist attached. No AI faces or voices.';
+
+export const UCAST_WORK_KINDS = ['film', 'tv', 'song', 'musical', 'music_video'] as const;
+export type UcastWorkKind = (typeof UCAST_WORK_KINDS)[number];
+export const UCAST_WORK_KIND_LABELS: Record<UcastWorkKind, string> = {
+  film: 'Film',
+  tv: 'TV series',
+  song: 'Song',
+  musical: 'Musical',
+  music_video: 'Music video',
+};
+
+/** Roles per recast: enough for an ensemble, a brake on list spam. */
+export const UCAST_MAX_PICKS = 12;
+/** A work must be older than this many years to be recast (it is a room for classics). */
+export const UCAST_MIN_WORK_AGE_YEARS = 5;
+
+export interface UcastAuthor {
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  verified: boolean;
+  /** True for Sweam's own accounts (@ucast posts the open calls). */
+  official: boolean;
+}
+
+export interface UcastWorkSummary {
+  id: string;
+  slug: string;
+  kind: UcastWorkKind;
+  title: string;
+  year: number;
+  /** One line on why this work is up for a recast; set by whoever opened it. */
+  hook: string;
+  /** Posted by @ucast as an open call. */
+  official: boolean;
+  recastCount: number;
+  createdAt: string;
+}
+
+export interface UcastPick {
+  id: string;
+  role: string;
+  originalPerformer: string | null;
+  pick: string;
+  note: string;
+  votes: number;
+  votedByMe: boolean;
+}
+
+export interface UcastRecast {
+  id: string;
+  headline: string;
+  note: string;
+  author: UcastAuthor;
+  picks: UcastPick[];
+  /** Sum of votes across the recast's picks. */
+  votes: number;
+  isMine: boolean;
+  createdAt: string;
+}
+
+/** For one role of a work: who the room would cast, most agreed first. */
+export interface UcastRoleConsensus {
+  role: string;
+  picks: { pick: string; votes: number; recasts: number }[];
+}
+
+export interface UcastBoard {
+  openCalls: UcastWorkSummary[];
+  works: UcastWorkSummary[];
+}
+
+export interface UcastWorkPage {
+  work: UcastWorkSummary;
+  roles: UcastRoleConsensus[];
+  recasts: UcastRecast[];
 }

@@ -45,6 +45,8 @@ import { StudioEarnings } from './pages/StudioEarnings';
 import { StudioTitle } from './pages/StudioTitle';
 import { Submit } from './pages/Submit';
 import { TitlePage } from './pages/TitlePage';
+import { Ucast } from './pages/Ucast';
+import { UcastWork } from './pages/UcastWork';
 import { Watch } from './pages/Watch';
 import { Watchlist } from './pages/Watchlist';
 
@@ -112,6 +114,8 @@ export function App() {
             </RequireAuth>
           }
         />
+        <Route path="/ucast" element={<Ucast />} />
+        <Route path="/ucast/w/:slug" element={<UcastWork />} />
         <Route path="/scout" element={<Scout />} />
         <Route
           path="/scout/t/:titleId"
