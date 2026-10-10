@@ -31,6 +31,8 @@ interface WatchRow extends EpisodeRow {
   release_at: string | null;
   creator_name: string;
   creator_handle: string;
+  views: number;
+  likes: number;
 }
 
 async function loadEpisode(db: D1Database, episodeId: string): Promise<WatchRow | null> {
@@ -40,11 +42,13 @@ async function loadEpisode(db: D1Database, episodeId: string): Promise<WatchRow 
         e.release_at,
         t.id AS title_id, t.slug AS title_slug, t.name AS title_name, t.kind AS title_kind,
         t.creator_id, t.published, t.suppressed, t.is_blu,
-        u.display_name AS creator_name, cp.handle AS creator_handle
+        u.display_name AS creator_name, cp.handle AS creator_handle,
+        COALESCE(s.plays, 0) AS views, COALESCE(s.likes, 0) AS likes
        FROM episodes e
        JOIN titles t ON t.id = e.title_id
        JOIN users u ON u.id = t.creator_id
        JOIN creator_profiles cp ON cp.user_id = t.creator_id
+       LEFT JOIN title_stats s ON s.title_id = t.id
        WHERE e.id = ?`,
     )
     .bind(episodeId)
@@ -124,6 +128,8 @@ watchRoutes.get('/:episodeId', async (c) => {
       name: row.title_name,
       kind: row.title_kind,
       creator: { handle: row.creator_handle, displayName: row.creator_name },
+      views: row.views,
+      likes: row.likes,
     },
     nextEpisode: nextEpisode ?? null,
     positionS,

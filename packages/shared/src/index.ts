@@ -617,6 +617,9 @@ export interface WatchPayload {
     name: string;
     kind: ContentKind;
     creator: CreatorRef;
+    /** Title-level counters (every episode of a title shares them). */
+    views: number;
+    likes: number;
   };
   nextEpisode: { id: string; season: number; episode: number; name: string } | null;
   positionS: number;

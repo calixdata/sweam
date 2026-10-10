@@ -278,6 +278,10 @@ export function Watch() {
           by {title.creator.displayName} (@{title.creator.handle}) ·{' '}
           <Link to={`/t/${title.slug}`}>Title page</Link>
         </p>
+        <p className="title-meta watch-stats">
+          {title.views.toLocaleString()} view{title.views === 1 ? '' : 's'} ·{' '}
+          {title.likes.toLocaleString()} like{title.likes === 1 ? '' : 's'}
+        </p>
       </header>
 
       {preroll && !adDone && (

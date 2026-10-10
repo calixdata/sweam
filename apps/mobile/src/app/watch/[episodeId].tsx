@@ -126,6 +126,9 @@ export default function WatchScreen() {
         <Text style={styles.muted}>
           {episode.name} · @{title.creator.handle}
         </Text>
+        <Text style={styles.muted} accessibilityLabel={`${title.views} views, ${title.likes} likes`}>
+          {title.views.toLocaleString()} views · {title.likes.toLocaleString()} likes
+        </Text>
         <View style={styles.actions}>
           <Pressable
             style={styles.actionBtn}

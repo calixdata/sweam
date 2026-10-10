@@ -29,6 +29,14 @@ import { colors } from '../../lib/theme';
 import type { FeedItem } from '../../lib/types';
 import { CommentsSheet } from '../../components/CommentsSheet';
 
+/** 12.3K-style counts for the feed rail, where space is tight. */
+function formatCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}K`;
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+}
+
 type FeedTab = 'following' | 'foryou';
 
 export default function FeedScreen() {
@@ -350,13 +358,17 @@ function FeedCard({
       </GestureDetector>
 
       <View style={styles.rail}>
+        <View style={styles.railBtn} accessibilityLabel={`${item.views} views`} accessible>
+          <Ionicons name="eye-outline" size={30} color="#fff" />
+          <Text style={styles.railText}>{formatCount(item.views)}</Text>
+        </View>
         <Pressable
           style={styles.railBtn}
           accessibilityLabel={liked ? `Unlike, ${likeCount} likes` : `Like, ${likeCount} likes`}
           onPress={() => void like(!liked)}
         >
           <Ionicons name={liked ? 'heart' : 'heart-outline'} size={34} color={liked ? colors.like : '#fff'} />
-          <Text style={styles.railText}>{likeCount}</Text>
+          <Text style={styles.railText}>{formatCount(likeCount)}</Text>
         </Pressable>
         <Pressable
           style={styles.railBtn}
@@ -364,7 +376,7 @@ function FeedCard({
           onPress={onOpenComments}
         >
           <Ionicons name="chatbubble-outline" size={32} color="#fff" />
-          <Text style={styles.railText}>{item.commentCount}</Text>
+          <Text style={styles.railText}>{formatCount(item.commentCount)}</Text>
         </Pressable>
         <Pressable
           style={styles.railBtn}

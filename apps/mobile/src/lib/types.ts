@@ -136,7 +136,7 @@ export interface CommentItem {
 
 export interface WatchPayload {
   episode: EpisodeSummary;
-  title: { id: string; slug: string; name: string; kind: string; creator: CreatorRef };
+  title: { id: string; slug: string; name: string; kind: string; creator: CreatorRef; views: number; likes: number };
   nextEpisode: { id: string; season: number; episode: number; name: string } | null;
   positionS: number;
 }
