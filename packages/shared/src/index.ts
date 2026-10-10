@@ -1488,15 +1488,18 @@ export interface VerbatiimStatus {
 /* ------------------------------------------------------------------ UCast */
 
 /**
- * UCast: Sweam's fancast room. Members recast older films, TV series, songs,
- * musicals and music videos by naming who they would cast in each role for a
- * remake or rendition, and vote on each other's picks. Text only: no key art,
- * no faces, no AI likenesses. The room is hosted by Sweam's own official
- * account, @ucast, which posts the open calls.
+ * UCast: Sweam's recasting polls. A poll is an older film, TV series, song,
+ * musical or music video with a fixed list of roles. Members submit one
+ * ballot each (who they would cast per role) and agree with other members'
+ * picks. Members may request a poll; every request is de-duplicated and
+ * reviewed by a Sweam/UCast admin before it opens. Polls close on an
+ * admin-set date and results are posted within 48 hours. The room is hosted
+ * by Sweam's own official account, @ucast. Text only: no faces, no AI
+ * likenesses. Results are the product; scouts get every poll's full results.
  */
 export const UCAST_HANDLE = 'ucast';
 export const UCAST_NAME = 'UCast';
-/** The same words on every recast, exactly as the fancast house rules put them. */
+/** The same words on every poll, exactly as the fancast house rules put them. */
 export const UCAST_DISCLAIMER =
   'Fan concept. Not a real project. No artist attached. No AI faces or voices.';
 
@@ -1510,69 +1513,167 @@ export const UCAST_WORK_KIND_LABELS: Record<UcastWorkKind, string> = {
   music_video: 'Music video',
 };
 
-/** Roles per recast: enough for an ensemble, a brake on list spam. */
-export const UCAST_MAX_PICKS = 12;
-/** A work must be older than this many years to be recast (it is a room for classics). */
+/** Roles per poll: enough for an ensemble, a brake on list spam. */
+export const UCAST_MAX_ROLES = 12;
+/** A work must be older than this many years to be polled (it is a room for classics). */
 export const UCAST_MIN_WORK_AGE_YEARS = 5;
+/** Results are posted no later than this many hours after a poll closes. */
+export const UCAST_RESULTS_WITHIN_HOURS = 48;
+/** Default polling window an admin starts from, in days. */
+export const UCAST_DEFAULT_WINDOW_DAYS = 30;
+
+/** Where a poll is in its life. Derived from status and the window, never stored. */
+export type UcastPhase = 'pending' | 'rejected' | 'scheduled' | 'open' | 'closed' | 'results';
+export const UCAST_PHASE_LABELS: Record<UcastPhase, string> = {
+  pending: 'Awaiting review',
+  rejected: 'Not opened',
+  scheduled: 'Opens soon',
+  open: 'Open for casting',
+  closed: 'Closed, results coming',
+  results: 'Results posted',
+};
+
+export interface UcastRole {
+  id: string;
+  name: string;
+  originalPerformer: string;
+}
 
 export interface UcastAuthor {
   username: string;
   displayName: string;
   avatarUrl: string | null;
   verified: boolean;
-  /** True for Sweam's own accounts (@ucast posts the open calls). */
+  /** True for Sweam's own accounts (@ucast posts the launch polls). */
   official: boolean;
 }
 
-export interface UcastWorkSummary {
+export interface UcastPollSummary {
   id: string;
   slug: string;
   kind: UcastWorkKind;
   title: string;
   year: number;
-  /** One line on why this work is up for a recast; set by whoever opened it. */
   hook: string;
-  /** Posted by @ucast as an open call. */
+  coverUrl: string | null;
+  phase: UcastPhase;
+  /** Posted by @ucast rather than requested by a member. */
   official: boolean;
-  recastCount: number;
+  opensAt: string | null;
+  closesAt: string | null;
+  /** When results were (or will at the latest be) posted: results_at, else closesAt + 48 h. */
+  resultsDueAt: string | null;
+  roleCount: number;
+  /** Ballots submitted. */
+  ballotCount: number;
   createdAt: string;
 }
 
 export interface UcastPick {
   id: string;
-  role: string;
-  originalPerformer: string | null;
+  roleId: string;
   pick: string;
   note: string;
   votes: number;
   votedByMe: boolean;
 }
 
-export interface UcastRecast {
+export interface UcastBallot {
   id: string;
-  headline: string;
   note: string;
   author: UcastAuthor;
   picks: UcastPick[];
-  /** Sum of votes across the recast's picks. */
+  /** Sum of votes across the ballot's picks. */
   votes: number;
   isMine: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
-/** For one role of a work: who the room would cast, most agreed first. */
-export interface UcastRoleConsensus {
-  role: string;
-  picks: { pick: string; votes: number; recasts: number }[];
+/** One performer's standing for one role. */
+export interface UcastStanding {
+  pick: string;
+  /** Ballots that named this performer for the role. */
+  ballots: number;
+  /** Agreements gathered across those ballots. */
+  votes: number;
+  /** ballots / all ballots naming anyone for the role, 0..1. */
+  share: number;
+}
+
+export interface UcastRoleResult {
+  role: UcastRole;
+  /** Ballots that cast this role at all. */
+  ballots: number;
+  standings: UcastStanding[];
+}
+
+export interface UcastPollPage {
+  poll: UcastPollSummary;
+  roles: UcastRole[];
+  results: UcastRoleResult[];
+  /** Null while results are withheld from the public (closed, not yet posted). */
+  resultsNote: string;
+  ballots: UcastBallot[];
+  myBallot: UcastBallot | null;
+  /** For the requester and admins on a pending/rejected poll. */
+  adminNote: string;
 }
 
 export interface UcastBoard {
-  openCalls: UcastWorkSummary[];
-  works: UcastWorkSummary[];
+  open: UcastPollSummary[];
+  closingSoon: UcastPollSummary[];
+  awaitingResults: UcastPollSummary[];
+  results: UcastPollSummary[];
+  scheduled: UcastPollSummary[];
 }
 
-export interface UcastWorkPage {
-  work: UcastWorkSummary;
-  roles: UcastRoleConsensus[];
-  recasts: UcastRecast[];
+/** A possible duplicate found when a member requests a poll. */
+export interface UcastDuplicateCandidate {
+  slug: string;
+  title: string;
+  year: number;
+  kind: UcastWorkKind;
+  phase: UcastPhase;
+  /** Why it was matched: 'same work' (exact slug), 'similar title', or the AI's one-line reason. */
+  reason: string;
+  /** 0..1, how sure the matcher is this is the same work. */
+  confidence: number;
+}
+
+export interface UcastDuplicateCheck {
+  /** The matcher used: deterministic fuzzy matching, or Claude on top of it. */
+  method: 'fuzzy' | 'ai';
+  candidates: UcastDuplicateCandidate[];
+}
+
+export interface UcastMyRequest {
+  id: string;
+  slug: string;
+  title: string;
+  year: number;
+  kind: UcastWorkKind;
+  phase: UcastPhase;
+  adminNote: string;
+  createdAt: string;
+}
+
+/** Admin queue row: a request or a poll, with everything the admin edits. */
+export interface AdminUcastPoll extends UcastPollSummary {
+  status: 'pending' | 'open' | 'closed' | 'rejected';
+  requester: UcastAuthor;
+  requesterNote: string;
+  dedupeNote: string;
+  adminNote: string;
+  resultsNote: string;
+  resultsAt: string | null;
+  roles: UcastRole[];
+}
+
+/** Scout view of one poll: the full results table plus how much data stands behind it. */
+export interface ScoutUcastPoll {
+  poll: UcastPollSummary;
+  results: UcastRoleResult[];
+  participants: number;
+  totalVotes: number;
 }

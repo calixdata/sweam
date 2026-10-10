@@ -45,8 +45,11 @@ import { StudioEarnings } from './pages/StudioEarnings';
 import { StudioTitle } from './pages/StudioTitle';
 import { Submit } from './pages/Submit';
 import { TitlePage } from './pages/TitlePage';
-import { Ucast } from './pages/Ucast';
-import { UcastWork } from './pages/UcastWork';
+import { Ucast, UcastResults } from './pages/Ucast';
+import { UcastPoll } from './pages/UcastPoll';
+import { UcastRequest } from './pages/UcastRequest';
+import { AdminUcast } from './pages/AdminUcast';
+import { ScoutUcast } from './pages/ScoutUcast';
 import { Watch } from './pages/Watch';
 import { Watchlist } from './pages/Watchlist';
 
@@ -115,7 +118,10 @@ export function App() {
           }
         />
         <Route path="/ucast" element={<Ucast />} />
-        <Route path="/ucast/w/:slug" element={<UcastWork />} />
+        <Route path="/ucast/results" element={<UcastResults />} />
+        <Route path="/ucast/request" element={<UcastRequest />} />
+        <Route path="/ucast/p/:slug" element={<UcastPoll />} />
+        <Route path="/scout/ucast" element={<ScoutUcast />} />
         <Route path="/scout" element={<Scout />} />
         <Route
           path="/scout/t/:titleId"
@@ -148,6 +154,7 @@ export function App() {
         <Route path="/admin/moderation" element={<AdminModeration />} />
         <Route path="/admin/monetization" element={<AdminMonetization />} />
         <Route path="/admin/video" element={<AdminVideo />} />
+        <Route path="/admin/ucast" element={<AdminUcast />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />

@@ -14,7 +14,7 @@ import {
   SCOUT_OFFER_KINDS,
   SCOUT_PROMO_MAX_PERCENT,
   SUBGENRES,
-  UCAST_MAX_PICKS,
+  UCAST_MAX_ROLES,
   UCAST_WORK_KINDS,
   USERNAME_HINT,
   USERNAME_RE,
@@ -710,25 +710,89 @@ export const deleteAccountSchema = z.object({
 const ucastName = (what: string, max = 80) =>
   z.string().trim().min(1, `${what} is required.`).max(max, `${what} must be ${max} characters or fewer.`);
 
-export const ucastWorkCreateSchema = z.object({
+export const ucastRoleSchema = z.object({
+  name: ucastName('Role'),
+  originalPerformer: z.string().trim().max(80).default(''),
+});
+
+const ucastRoles = z
+  .array(ucastRoleSchema)
+  .min(1, 'A poll needs at least one role.')
+  .max(UCAST_MAX_ROLES, `A poll has at most ${UCAST_MAX_ROLES} roles.`);
+
+/** The duplicate check a request runs before it is sent. */
+export const ucastDuplicateCheckSchema = z.object({
   kind: z.enum(UCAST_WORK_KINDS),
   title: ucastName('Title', 120),
   year: z.number().int().min(1900, 'Enter a year from 1900 on.').max(2100),
-  hook: z.string().trim().max(300, 'Keep the hook to 300 characters.').default(''),
 });
 
-export const ucastPickSchema = z.object({
-  role: ucastName('Role'),
-  originalPerformer: z.string().trim().max(80).optional().default(''),
+/** A member's request for a new poll. */
+export const ucastRequestSchema = ucastDuplicateCheckSchema.extend({
+  hook: z.string().trim().max(300, 'Keep the one-liner to 300 characters.').default(''),
+  note: z.string().trim().max(1000, 'Keep the note to 1000 characters.').default(''),
+  roles: z.array(ucastRoleSchema).max(UCAST_MAX_ROLES).default([]),
+  /** The member saw the possible duplicates and says this is a different work. */
+  confirmDifferent: z.boolean().default(false),
+});
+
+export const ucastBallotPickSchema = z.object({
+  roleId: z.string().trim().min(1).max(64),
   pick: ucastName('Your pick'),
   note: z.string().trim().max(280, 'Keep each note to 280 characters.').default(''),
 });
 
-export const ucastRecastCreateSchema = z.object({
-  headline: z.string().trim().max(160, 'Keep the headline to 160 characters.').default(''),
-  note: z.string().trim().max(1200, 'Keep the note to 1200 characters.').default(''),
-  picks: z
-    .array(ucastPickSchema)
-    .min(1, 'Cast at least one role.')
-    .max(UCAST_MAX_PICKS, `Cast at most ${UCAST_MAX_PICKS} roles in one recast.`),
+/** One ballot: at least one role cast, each role at most once (checked in the route). */
+export const ucastBallotSchema = z.object({
+  note: z.string().trim().max(1000, 'Keep the note to 1000 characters.').default(''),
+  picks: z.array(ucastBallotPickSchema).min(1, 'Cast at least one role.').max(UCAST_MAX_ROLES),
+});
+
+const isoInstant = z
+  .string()
+  .trim()
+  .refine((v) => !Number.isNaN(Date.parse(v)), 'Enter a valid date and time.')
+  .transform((v) => new Date(v).toISOString());
+
+/** Admin: open (approve) or reject a request. Approval sets the roles and the window. */
+export const adminUcastDecideSchema = z.discriminatedUnion('approve', [
+  z.object({
+    approve: z.literal(true),
+    roles: ucastRoles,
+    opensAt: isoInstant.optional(),
+    closesAt: isoInstant,
+    hook: z.string().trim().max(300).optional(),
+    coverUrl: z.string().trim().max(500).nullable().optional(),
+    adminNote: z.string().trim().max(1000).default(''),
+  }),
+  z.object({
+    approve: z.literal(false),
+    adminNote: z.string().trim().max(1000).default(''),
+  }),
+]);
+
+/** Admin: edit an opened poll (window, cover, hook, roles) or close it now. */
+export const adminUcastUpdateSchema = z.object({
+  closesAt: isoInstant.optional(),
+  opensAt: isoInstant.optional(),
+  hook: z.string().trim().max(300).optional(),
+  coverUrl: z.string().trim().max(500).nullable().optional(),
+  adminNote: z.string().trim().max(1000).optional(),
+  roles: ucastRoles.optional(),
+  closeNow: z.boolean().optional(),
+});
+
+/** Admin: post the results of a closed poll (makes them public immediately). */
+export const adminUcastResultsSchema = z.object({
+  resultsNote: z.string().trim().max(2000).default(''),
+});
+
+/** Admin: open a new poll directly (no request step), as @ucast or the admin. */
+export const adminUcastCreateSchema = ucastDuplicateCheckSchema.extend({
+  hook: z.string().trim().max(300).default(''),
+  roles: ucastRoles,
+  opensAt: isoInstant.optional(),
+  closesAt: isoInstant,
+  coverUrl: z.string().trim().max(500).nullable().optional(),
+  asHost: z.boolean().default(true),
 });

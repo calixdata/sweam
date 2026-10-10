@@ -440,6 +440,15 @@ function ScoutBoards({ orgName, membership }: { orgName: string; membership: Sco
 
       <ScoutPreferencesPanel />
 
+      <section aria-labelledby="board-ucast">
+        <h2 id="board-ucast">UCast casting data</h2>
+        <p>
+          Who audiences would cast in remakes and renditions of the classics, role by role, from every UCast poll:
+          ballots per performer, share, and agreements, live while a poll runs and final when it closes, with CSV export.{' '}
+          <Link to="/scout/ucast">Open the UCast data</Link>.
+        </p>
+      </section>
+
       <section aria-labelledby="board-growth">
         <h2 id="board-growth">Fastest growing</h2>
         {boards.fastestGrowing.length === 0 ? (

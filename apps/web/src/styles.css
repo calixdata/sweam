@@ -2639,16 +2639,106 @@ input[type='checkbox'] {
 }
 
 /* ------------------------------------------------------------------- UCast */
-/* The recasting room. Text-only cards (no art, by rule), the disclaimer on
-   every page, and a pick table that reuses the Studio table. */
-.ucast-hero h1 {
-  margin-bottom: 0.35rem;
+/* The recasting polls. One masthead with the mark and the room's own
+   sub-navigation, poll cards with covers and a single clear action, a
+   status strip on every poll, numbered ballot rows, and share bars. */
+.ucast-masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.ucast-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.ucast-brand img {
+  border-radius: 12px;
+}
+
+.ucast-brand-name {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+
+.ucast-brand-tag {
+  display: block;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.ucast-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ucast-nav a {
+  display: inline-block;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.ucast-nav a[aria-current='page'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06111c;
+  font-weight: 600;
+}
+
+.ucast-howto {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.ucast-howto h2 {
+  margin-top: 0;
+  font-size: 1.05rem;
+}
+
+.ucast-howto ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.75rem 1.5rem;
+  padding-left: 1.2rem;
+  margin: 0 0 0.75rem;
+}
+
+.ucast-howto p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.ucast-filter {
+  max-width: 14rem;
+}
+
+.ucast-empty {
+  color: var(--muted);
 }
 
 .ucast-disclaimer {
-  display: inline-block;
-  margin: 0.75rem 0 0;
-  padding: 0.45rem 0.8rem;
+  margin: 2rem 0 0;
+  padding: 0.6rem 0.9rem;
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   background: var(--surface);
@@ -2661,35 +2751,79 @@ input[type='checkbox'] {
   font-size: 0.9rem;
 }
 
-.ucast-filter {
-  max-width: 16rem;
-}
-
+/* Cards */
 .ucast-grid {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   gap: 1rem;
 }
 
 .ucast-card-link {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
   height: 100%;
-  padding: 1rem 1.1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--text);
   text-decoration: none;
+  overflow: hidden;
 }
 
 .ucast-card-link:hover,
 .ucast-card-link:focus-visible {
   border-color: var(--accent);
+}
+
+.ucast-cover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--surface-2);
+}
+
+.ucast-cover-blank {
+  display: flex;
+  align-items: flex-end;
+  padding: 0.75rem 0.9rem;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: #fff;
+  background: linear-gradient(160deg, #1d2f4a, #0e1830);
+}
+
+.ucast-kind-film {
+  background: linear-gradient(160deg, #1f3b63, #0e1830);
+}
+.ucast-kind-tv {
+  background: linear-gradient(160deg, #3b2a63, #150e30);
+}
+.ucast-kind-song {
+  background: linear-gradient(160deg, #5a2a52, #2a0e30);
+}
+.ucast-kind-musical {
+  background: linear-gradient(160deg, #6a4a1e, #30200e);
+}
+.ucast-kind-music_video {
+  background: linear-gradient(160deg, #1e5a4a, #0e3028);
+}
+
+.ucast-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.85rem 1rem 1rem;
+  flex: 1;
+}
+
+.ucast-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .ucast-card-kind {
@@ -2701,66 +2835,249 @@ input[type='checkbox'] {
 
 .ucast-card-title {
   font-family: var(--font-display);
-  font-size: 1.25rem;
+  font-size: 1.2rem;
   line-height: 1.25;
 }
 
 .ucast-card-year,
-.ucast-recast-when {
+.ucast-orig,
+.ucast-ballot-when {
   color: var(--muted);
   font-weight: 400;
 }
 
-.ucast-card-hook {
-  color: var(--muted);
-  font-size: 0.95rem;
+.ucast-card-status {
+  font-size: 0.9rem;
 }
 
 .ucast-card-meta {
-  margin-top: auto;
+  color: var(--muted);
   font-size: 0.85rem;
+}
+
+.ucast-card-action {
+  margin-top: auto;
+  padding-top: 0.5rem;
   color: var(--link);
+  font-weight: 600;
+  font-size: 0.9rem;
 }
 
-.ucast-consensus {
-  padding-left: 1.2rem;
+/* Phase pills: never color alone, the words carry the meaning. */
+.ucast-pill {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+.ucast-pill-open {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ucast-pill-results {
+  border-color: #7fe0a8;
+  color: #7fe0a8;
+}
+.ucast-pill-closed,
+.ucast-pill-scheduled,
+.ucast-pill-pending {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.ucast-pill-rejected {
+  color: var(--muted);
 }
 
-.ucast-consensus li {
-  margin-bottom: 0.4rem;
-}
-
-.ucast-recast-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* Poll page */
+.ucast-poll-hero {
   display: grid;
-  gap: 1.25rem;
+  grid-template-columns: minmax(10rem, 18rem) 1fr;
+  gap: 1.5rem;
+  align-items: start;
 }
 
-.ucast-recast {
-  padding: 1.1rem 1.25rem;
+.ucast-poll-hero h1 {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.ucast-poll-cover {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.ucast-status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.75rem;
+  margin: 1rem 0 0;
+  padding: 0.85rem 1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
 }
 
-.ucast-recast-head {
+.ucast-status-strip div {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+}
+
+.ucast-status-strip dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ucast-status-strip dd {
+  margin: 0.15rem 0 0;
+}
+
+.ucast-section {
+  margin-top: 2rem;
+}
+
+.ucast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+/* Ballot form: one numbered row per role. */
+.ucast-ballot-rows {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.ucast-ballot-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) 1.2fr 1.2fr;
   gap: 0.75rem;
+  align-items: end;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
 }
 
-.ucast-recast-head p {
+.ucast-ballot-row .field {
+  margin-bottom: 0;
+}
+
+.ucast-ballot-role-label {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding-bottom: 0.55rem;
+}
+
+.ucast-ballot-role-num,
+.ucast-standing-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.8rem;
+  flex: none;
+}
+
+/* Standings / results */
+.ucast-results {
+  list-style: none;
   margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
 }
 
-.ucast-recast-author {
+.ucast-results > li {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.ucast-results h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.ucast-standings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.ucast-standings li {
+  display: grid;
+  grid-template-columns: auto minmax(8rem, 14rem) 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ucast-standing-name {
   font-weight: 600;
 }
 
-.ucast-recast-when {
+.ucast-standing-bar {
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.ucast-standing-bar span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.ucast-standing-nums,
+.ucast-votes,
+.ucast-pick-note {
+  color: var(--muted);
   font-size: 0.85rem;
+}
+
+/* Ballots from the room */
+.ucast-ballot-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.ucast-ballot,
+.ucast-myballot {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.ucast-ballot-head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.ucast-ballot-head p {
+  margin: 0;
+}
+
+.ucast-ballot-author {
+  font-weight: 600;
 }
 
 .ucast-remove {
@@ -2768,8 +3085,8 @@ input[type='checkbox'] {
 }
 
 .ucast-official-tag {
-  margin-left: 0.5rem;
-  padding: 0.1rem 0.5rem;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--muted);
@@ -2777,28 +3094,26 @@ input[type='checkbox'] {
   font-weight: 500;
 }
 
-.ucast-recast-headline {
-  margin: 0.9rem 0 0.25rem;
-  font-family: var(--font-display);
-  font-size: 1.15rem;
-}
-
-.ucast-recast-note {
+.ucast-ballot-note {
   color: var(--muted);
-  margin: 0 0 0.5rem;
+  margin: 0.5rem 0;
 }
 
-.ucast-picks {
-  white-space: normal;
+.ucast-ballot-picks {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
 }
 
-.ucast-pick-name {
-  font-weight: 600;
-}
-
-.ucast-pick-note {
+.ucast-ballot-role {
   color: var(--muted);
-  min-width: 14rem;
+}
+
+.ucast-vote {
+  padding: 0.15rem 0.6rem;
+  font-size: 0.85rem;
 }
 
 .ucast-vote-on {
@@ -2806,33 +3121,67 @@ input[type='checkbox'] {
   color: var(--accent);
 }
 
-.ucast-votes {
-  color: var(--muted);
-  font-size: 0.9rem;
+.ucast-request-list {
+  padding-left: 1.2rem;
 }
 
-.ucast-pick-rows {
+/* Admin + scout lists */
+.ucast-admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.ucast-admin-card,
+.ucast-admin-row {
+  padding: 1rem 1.1rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0.75rem 1rem 1rem;
-  margin: 0 0 1.15rem;
+  background: var(--surface);
 }
 
-.ucast-pick-rows legend {
-  padding: 0 0.4rem;
-  color: var(--muted);
+.ucast-admin-card h3 {
+  margin-top: 0;
 }
 
-.ucast-pick-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 0.75rem;
-  align-items: end;
-  padding-bottom: 0.75rem;
-  margin-bottom: 0.75rem;
-  border-bottom: 1px solid var(--border);
+.ucast-admin-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.ucast-pick-row .field {
-  margin-bottom: 0;
+.ucast-admin-editor {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.ucast-admin-cover {
+  display: inline-block;
+  width: 6rem;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  vertical-align: middle;
+  border-radius: 6px;
+  margin-right: 0.5rem;
+}
+
+@media (max-width: 720px) {
+  .ucast-poll-hero,
+  .ucast-ballot-row {
+    grid-template-columns: 1fr;
+  }
+  .ucast-standings li {
+    grid-template-columns: auto 1fr;
+  }
+  .ucast-standing-bar {
+    grid-column: 2;
+  }
+  .ucast-standing-nums {
+    grid-column: 2;
+  }
 }

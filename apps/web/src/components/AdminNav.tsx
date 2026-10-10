@@ -9,6 +9,7 @@ const SECTIONS: ReadonlyArray<{ to: string; label: string }> = [
   { to: '/admin/moderation', label: 'Moderation' },
   { to: '/admin/monetization', label: 'Monetization' },
   { to: '/admin/video', label: 'Video' },
+  { to: '/admin/ucast', label: 'UCast' },
 ];
 
 /**
