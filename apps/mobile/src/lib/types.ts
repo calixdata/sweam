@@ -221,3 +221,151 @@ export interface SeriesSummary {
   id: string;
   name: string;
 }
+
+// ---------------------------------------------------------------------------
+// UCast: the recasting room, built as polls. Mirrors the Ucast* shapes and
+// UCAST_* constants in packages/shared/src/index.ts.
+// ---------------------------------------------------------------------------
+
+export const UCAST_NAME = 'UCast';
+/** The same words on every UCast screen, exactly as the house rules put them. */
+export const UCAST_DISCLAIMER =
+  'Fan concept. Not a real project. No artist attached. No AI faces or voices.';
+
+export const UCAST_WORK_KINDS = ['film', 'tv', 'song', 'musical', 'music_video'] as const;
+export type UcastWorkKind = (typeof UCAST_WORK_KINDS)[number];
+export const UCAST_WORK_KIND_LABELS: Record<UcastWorkKind, string> = {
+  film: 'Film',
+  tv: 'TV series',
+  song: 'Song',
+  musical: 'Musical',
+  music_video: 'Music video',
+};
+
+/** Roles per poll: enough for an ensemble, a brake on list spam. */
+export const UCAST_MAX_ROLES = 12;
+/** A work must be older than this many years to be polled (it is a room for classics). */
+export const UCAST_MIN_WORK_AGE_YEARS = 5;
+/** Results are posted no later than this many hours after a poll closes. */
+export const UCAST_RESULTS_WITHIN_HOURS = 48;
+
+export type UcastPhase = 'pending' | 'rejected' | 'scheduled' | 'open' | 'closed' | 'results';
+export const UCAST_PHASE_LABELS: Record<UcastPhase, string> = {
+  pending: 'Awaiting review',
+  rejected: 'Not opened',
+  scheduled: 'Opens soon',
+  open: 'Open for casting',
+  closed: 'Closed, results coming',
+  results: 'Results posted',
+};
+
+export interface UcastRole {
+  id: string;
+  name: string;
+  originalPerformer: string;
+}
+
+export interface UcastAuthor {
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+  verified: boolean;
+  official: boolean;
+}
+
+export interface UcastPollSummary {
+  id: string;
+  slug: string;
+  kind: UcastWorkKind;
+  title: string;
+  year: number;
+  hook: string;
+  coverUrl: string | null;
+  phase: UcastPhase;
+  official: boolean;
+  opensAt: string | null;
+  closesAt: string | null;
+  resultsDueAt: string | null;
+  roleCount: number;
+  ballotCount: number;
+  createdAt: string;
+}
+
+export interface UcastPick {
+  id: string;
+  roleId: string;
+  pick: string;
+  note: string;
+  votes: number;
+  votedByMe: boolean;
+}
+
+export interface UcastBallot {
+  id: string;
+  note: string;
+  author: UcastAuthor;
+  picks: UcastPick[];
+  votes: number;
+  isMine: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UcastStanding {
+  pick: string;
+  ballots: number;
+  votes: number;
+  /** 0..1 */
+  share: number;
+}
+
+export interface UcastRoleResult {
+  role: UcastRole;
+  ballots: number;
+  standings: UcastStanding[];
+}
+
+export interface UcastPollPage {
+  poll: UcastPollSummary;
+  roles: UcastRole[];
+  results: UcastRoleResult[];
+  resultsNote: string;
+  ballots: UcastBallot[];
+  myBallot: UcastBallot | null;
+  adminNote: string;
+}
+
+export interface UcastBoard {
+  open: UcastPollSummary[];
+  closingSoon: UcastPollSummary[];
+  awaitingResults: UcastPollSummary[];
+  results: UcastPollSummary[];
+  scheduled: UcastPollSummary[];
+}
+
+export interface UcastDuplicateCandidate {
+  slug: string;
+  title: string;
+  year: number;
+  kind: UcastWorkKind;
+  phase: UcastPhase;
+  reason: string;
+  confidence: number;
+}
+
+/** Body of PUT /api/ucast/polls/:slug/ballot. */
+export interface UcastBallotInput {
+  note: string;
+  picks: { roleId: string; pick: string; note: string }[];
+}
+
+/** Body of POST /api/ucast/requests. */
+export interface UcastRequestInput {
+  kind: UcastWorkKind;
+  title: string;
+  year: number;
+  hook: string;
+  note: string;
+  roles: { name: string; originalPerformer: string }[];
+  confirmDifferent: boolean;
+}

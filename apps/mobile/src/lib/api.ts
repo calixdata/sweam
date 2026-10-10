@@ -36,6 +36,8 @@ export class ApiError extends Error {
     public status: number,
     public code: string,
     message: string,
+    /** The full error response, for endpoints that return more than a code (UCast duplicate candidates). */
+    public body: unknown = null,
   ) {
     super(message);
   }
@@ -55,7 +57,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {
     const err = (data as { error?: { code?: string; message?: string } } | null)?.error;
-    throw new ApiError(res.status, err?.code ?? 'error', err?.message ?? `Request failed (${res.status}).`);
+    throw new ApiError(res.status, err?.code ?? 'error', err?.message ?? `Request failed (${res.status}).`, data);
   }
   return data as T;
 }

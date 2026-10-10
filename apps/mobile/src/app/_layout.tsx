@@ -34,6 +34,9 @@ export default function RootLayout() {
           <Stack.Screen name="watch/[episodeId]" options={{ animation: 'fade' }} />
           <Stack.Screen name="t/[slug]" options={{ headerShown: false }} />
           <Stack.Screen name="c/[handle]" />
+          <Stack.Screen name="ucast/index" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ucast/p/[slug]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="ucast/request" options={{ presentation: 'modal' }} />
           <Stack.Screen name="search" options={{ animation: 'slide_from_bottom' }} />
           <Stack.Screen name="notifications" />
           <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
@@ -67,6 +70,8 @@ function PushManager() {
       if (link.startsWith('/c/')) router.push(`/c/${link.slice(3)}`);
       else if (link.startsWith('/t/')) router.push(`/t/${link.slice(3)}`);
       else if (link.startsWith('/watch/')) router.push(`/watch/${link.slice(7)}`);
+      else if (link.startsWith('/ucast/p/')) router.push(`/ucast/p/${link.slice(9)}`);
+      else if (link.startsWith('/ucast')) router.push('/ucast');
       else router.push('/notifications');
     });
     return () => sub.remove();

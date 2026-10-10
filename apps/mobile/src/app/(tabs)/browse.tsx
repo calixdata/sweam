@@ -37,8 +37,30 @@ export default function BrowseScreen() {
         <Ionicons name="search" size={18} color={colors.muted} />
         <Text style={styles.searchText}>Search @usernames, titles, and creators</Text>
       </Pressable>
+      <Pressable
+        style={styles.ucastEntry}
+        onPress={() => router.push('/ucast')}
+        accessibilityRole="button"
+        accessibilityLabel="UCast, the recasting room. Cast classics and agree with other members' picks."
+      >
+        <View style={styles.ucastMark}>
+          <Ionicons name="people" size={20} color={colors.bg} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.ucastTitle}>UCast</Text>
+          <Text style={styles.ucastSub} numberOfLines={2}>
+            The recasting room. Who would you cast in a classic?
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+      </Pressable>
       {feature && (
-        <Pressable style={styles.hero} onPress={() => router.push(`/t/${feature.slug}`)}>
+        <Pressable
+          style={styles.hero}
+          onPress={() => router.push(`/t/${feature.slug}`)}
+          accessibilityRole="button"
+          accessibilityLabel={`Featured: ${feature.name}`}
+        >
           {feature.heroUrl || feature.posterUrl ? (
             <Image
               source={{ uri: mediaUrl(feature.heroUrl ?? feature.posterUrl) ?? undefined }}
@@ -134,6 +156,28 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   searchText: { color: colors.muted, fontSize: 15 },
+  ucastEntry: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  ucastMark: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  ucastTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  ucastSub: { color: colors.muted, fontSize: 13, marginTop: 2 },
   hero: { margin: 12, borderRadius: radius.md, overflow: 'hidden', backgroundColor: colors.surface },
   heroImg: { width: '100%', aspectRatio: 16 / 10 },
   heroOverlay: {

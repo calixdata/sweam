@@ -120,4 +120,24 @@ Admin (`/api/admin/ucast`, admins only):
   from the Scout portal.
 
 The UCast mark and favicon live at `apps/web/public/brand/ucast-*.svg`; UCast
-pages swap the tab icon while open. The mobile app has no UCast screens yet.
+pages swap the tab icon while open.
+
+## Mobile (Expo)
+
+- `/ucast` (`apps/mobile/src/app/ucast/index.tsx`): the board, reached from the
+  Explore tab. Disclaimer, "How it works", kind filter (tabs with selected
+  state), sections in the web order; every card is one button whose label
+  reads title, year, kind, phase, timing, roles and ballots.
+- `/ucast/p/:slug` (`ucast/p/[slug].tsx`): disclaimer, status strip, your
+  ballot (one labelled pick row per role; submit, edit, withdraw), live
+  standings or results, ballots from the room with an Agree toggle
+  (`accessibilityState.selected` mirrors `votedByMe`).
+- `/ucast/request` (`ucast/request.tsx`): the request form with dynamic
+  suggested-role rows, the duplicate candidates on a 409, and the
+  "different work" confirmation; a 201 opens the new poll.
+- Types and constants are mirrored in `apps/mobile/src/lib/types.ts`
+  (`Ucast*`, `UCAST_*`); helpers in `src/lib/ucast.ts`; shared pieces in
+  `src/components/UcastBits.tsx`. Push links `/ucast/p/:slug` and `/ucast`
+  route to the matching screen. For local work set
+  `EXPO_PUBLIC_API_BASE=http://localhost:8787` (the web preview also needs a
+  CORS shim in front of wrangler, since the API has none).
