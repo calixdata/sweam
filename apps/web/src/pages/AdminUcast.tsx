@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ChangeEvent, FormEvent } from 'react';
+import type { FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import type { AdminUcastPoll, UcastWorkKind } from '@sweam/shared';
 import { UCAST_DEFAULT_WINDOW_DAYS, UCAST_MAX_ROLES, UCAST_PHASE_LABELS, UCAST_WORK_KINDS, UCAST_WORK_KIND_LABELS } from '@sweam/shared';
-import { ApiError, apiGet, apiSend, apiUpload } from '../api';
+import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { AdminNav } from '../components/AdminNav';
 import { ErrorNote, Loading } from '../components/Status';
 import { formatWhen } from '../components/UcastShell';
+import { UcastCoverField as CoverField } from '../components/UcastCoverField';
 import { usePageTitle } from '../hooks';
 
 /** Roles as "Name - Original" lines for a textarea, and back. */
@@ -38,50 +39,6 @@ function defaultClose(): string {
   const d = new Date(Date.now() + UCAST_DEFAULT_WINDOW_DAYS * 86_400_000);
   d.setHours(23, 59, 0, 0);
   return toLocalInput(d.toISOString());
-}
-
-/** Covers render at 16:9 everywhere (cards and the poll page), so this is the one size to make. */
-export const UCAST_COVER_HINT = 'Ideal size 1280 by 720 pixels (16:9, landscape). Minimum 800 by 450. JPEG or WebP under 300 KB, PNG also accepted, up to 8 MB. The image is shown edge to edge, so keep faces and titles away from the outer 5 percent.';
-
-function CoverField({ id, value, onChange, saving }: { id: string; value: string | null; onChange: (url: string | null) => void; saving?: boolean }) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  async function pick(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setBusy(true);
-    setErr(null);
-    try {
-      const { url } = await apiUpload(file, '/api/admin/ucast/cover');
-      onChange(url);
-    } catch (e) {
-      setErr(e instanceof ApiError ? e.message : 'Upload failed.');
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="field">
-      <label htmlFor={id}>{value ? 'Replace the cover image' : 'Add a cover image'} (jogs the memory of who, what and when)</label>
-      <input id={id} type="file" accept="image/jpeg,image/png,image/webp" onChange={pick} disabled={busy || saving} aria-describedby={`${id}-hint`} />
-      <p className="field-hint" id={`${id}-hint`}>{UCAST_COVER_HINT}</p>
-      <p className="field-hint" role="status">
-        {value ? (
-          <>
-            <img src={value} alt="" className="ucast-admin-cover" /> Cover set.{' '}
-            <button type="button" className="button button-quiet" disabled={busy || saving} onClick={() => onChange(null)}>
-              Remove cover
-            </button>
-          </>
-        ) : (
-          'No cover yet.'
-        )}
-        {busy && ' Uploading…'}
-        {saving && ' Saving…'}
-      </p>
-      {err && <ErrorNote message={err} />}
-    </div>
-  );
 }
 
 /** One pending request with everything the admin sets before opening it. */

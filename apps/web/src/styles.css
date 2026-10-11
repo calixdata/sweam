@@ -3185,3 +3185,16 @@ input[type='checkbox'] {
     grid-column: 2;
   }
 }
+
+/* Admin-only cover control shown on the poll page itself. */
+.ucast-admin-inline {
+  margin: 1rem 0 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 12px;
+}
+
+.ucast-admin-inline-heading {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}

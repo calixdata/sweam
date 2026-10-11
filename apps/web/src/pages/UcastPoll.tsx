@@ -9,6 +9,7 @@ import { Avatar } from '../components/Avatar';
 import { ErrorNote, Loading } from '../components/Status';
 import { PhasePill, UcastShell, formatDay, formatWhen, pollStatusLine, timeLeft } from '../components/UcastShell';
 import { VerifiedBadge } from '../components/VerifiedBadge';
+import { UcastCoverField } from '../components/UcastCoverField';
 import { usePageTitle } from '../hooks';
 
 function percent(share: number): string {
@@ -124,6 +125,22 @@ export function UcastPoll() {
 
   usePageTitle(page ? `${page.poll.title} (${page.poll.year}) · ${UCAST_NAME}` : UCAST_NAME);
 
+  const [coverSaving, setCoverSaving] = useState(false);
+  const [coverErr, setCoverErr] = useState<string | null>(null);
+  /** Admin cover change: the file is already uploaded; store its URL on the poll, then refresh. */
+  async function saveCover(url: string | null) {
+    if (!page) return;
+    setCoverSaving(true);
+    setCoverErr(null);
+    try {
+      await apiSend('PATCH', `/api/admin/ucast/${page.poll.id}`, { coverUrl: url });
+      await load();
+    } catch (e) {
+      setCoverErr(e instanceof ApiError ? e.message : 'Could not save the cover.');
+    } finally {
+      setCoverSaving(false);
+    }
+  }
   const load = useCallback(async () => {
     if (!slug) return;
     try {
@@ -248,6 +265,13 @@ export function UcastPoll() {
           {page.adminNote && (poll.phase === 'pending' || poll.phase === 'rejected') && <p className="notice">Note from UCast: {page.adminNote}</p>}
         </div>
       </section>
+      {user?.isAdmin && (
+        <section className="ucast-admin-inline" aria-labelledby="ucast-cover-heading">
+          <h2 id="ucast-cover-heading" className="ucast-admin-inline-heading">Cover photo (admins only)</h2>
+          <UcastCoverField id="poll-cover" value={poll.coverUrl} onChange={(url) => void saveCover(url)} saving={coverSaving} />
+          {coverErr && <ErrorNote message={coverErr} />}
+        </section>
+      )}
 
       {/* 1. Your ballot */}
       <section aria-labelledby="ucast-ballot-heading" className="ucast-section">
