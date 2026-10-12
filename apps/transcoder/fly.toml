@@ -3,7 +3,7 @@
 #   fly deploy --config apps/transcoder/fly.toml --dockerfile apps/transcoder/Dockerfile .
 # Secrets (set once): fly secrets set TRANSCODER_TOKEN=... -a sweam-transcoder
 app = "sweam-transcoder"
-primary_region = "sea"
+primary_region = "sjc"
 
 [build]
   dockerfile = "Dockerfile"
