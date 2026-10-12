@@ -239,6 +239,50 @@ ucastAdminRoutes.post('/', async (c) => {
   return c.json({ id, slug }, 201);
 });
 
+/**
+ * Delete a poll completely, in any state: the work, its roles, every ballot,
+ * pick and Agree vote, and its uploaded cover. There is no undo. Children are
+ * removed explicitly (not left to cascades) so the result never depends on the
+ * database's foreign-key setting.
+ */
+ucastAdminRoutes.delete('/:id', async (c) => {
+  const work = await c.env.DB.prepare('SELECT id, title, year, cover_url FROM ucast_works WHERE id = ?')
+    .bind(c.req.param('id'))
+    .first<{ id: string; title: string; year: number; cover_url: string | null }>();
+  if (!work) fail(404, 'poll_not_found', 'No such poll.');
+
+  const counts = await c.env.DB.prepare(
+    `SELECT (SELECT COUNT(*) FROM ucast_recasts WHERE work_id = ?1) AS ballots,
+            (SELECT COUNT(*) FROM ucast_roles WHERE work_id = ?1) AS roles`,
+  )
+    .bind(work.id)
+    .first<{ ballots: number; roles: number }>();
+
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `DELETE FROM ucast_votes WHERE pick_id IN (
+         SELECT p.id FROM ucast_picks p JOIN ucast_recasts r ON r.id = p.recast_id WHERE r.work_id = ?)`,
+    ).bind(work.id),
+    c.env.DB.prepare(
+      'DELETE FROM ucast_picks WHERE recast_id IN (SELECT id FROM ucast_recasts WHERE work_id = ?)',
+    ).bind(work.id),
+    c.env.DB.prepare('DELETE FROM ucast_recasts WHERE work_id = ?').bind(work.id),
+    c.env.DB.prepare('DELETE FROM ucast_roles WHERE work_id = ?').bind(work.id),
+    c.env.DB.prepare('DELETE FROM ucast_works WHERE id = ?').bind(work.id),
+  ]);
+
+  // Remove the uploaded cover too, unless another poll still points at it.
+  const prefix = '/media/ucast/covers/';
+  if (work.cover_url && work.cover_url.startsWith(prefix)) {
+    const shared = await c.env.DB.prepare('SELECT 1 AS x FROM ucast_works WHERE cover_url = ? LIMIT 1')
+      .bind(work.cover_url)
+      .first();
+    if (!shared) await c.env.MEDIA.delete(work.cover_url.slice('/media/'.length)).catch(() => undefined);
+  }
+
+  return c.json({ deleted: true, title: work.title, year: work.year, ballots: counts?.ballots ?? 0, roles: counts?.roles ?? 0 });
+});
+
 const COVER_TYPES: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 const COVER_MAX_BYTES = 8 * 1024 * 1024;
 

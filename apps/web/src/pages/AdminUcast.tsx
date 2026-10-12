@@ -41,6 +41,46 @@ function defaultClose(): string {
   return toLocalInput(d.toISOString());
 }
 
+/**
+ * Delete a poll completely (any state). Confirms first, naming what goes with
+ * it; there is no undo.
+ */
+function DeletePollButton({ poll, onDone, disabled }: { poll: AdminUcastPoll; onDone: (msg: string) => void; disabled?: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  async function remove() {
+    const ballots = poll.ballotCount;
+    const what =
+      ballots > 0
+        ? `its ${poll.roles.length} roles and ${ballots === 1 ? 'its 1 ballot' : `all ${ballots} ballots`} with their picks and Agree votes`
+        : `its ${poll.roles.length} roles`;
+    if (!window.confirm(`Delete ${poll.title} (${poll.year}) completely? This removes the poll, ${what}, and its cover. It cannot be undone.`)) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await apiSend('DELETE', `/api/admin/ucast/${poll.id}`);
+      onDone(`Deleted ${poll.title} (${poll.year}).`);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Could not delete the poll.');
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="button button-danger"
+        disabled={busy || disabled}
+        onClick={() => void remove()}
+        aria-label={`Delete ${poll.title} (${poll.year}) completely`}
+      >
+        {busy ? 'Deleting…' : 'Delete poll'}
+      </button>
+      {err && <ErrorNote message={err} />}
+    </>
+  );
+}
+
 /** One pending request with everything the admin sets before opening it. */
 function RequestCard({ poll, onDone }: { poll: AdminUcastPoll; onDone: (msg: string) => void }) {
   const [roles, setRoles] = useState(rolesToText(poll.roles));
@@ -116,6 +156,7 @@ function RequestCard({ poll, onDone }: { poll: AdminUcastPoll; onDone: (msg: str
         <button type="button" className="button button-quiet" disabled={busy} onClick={() => decide(false)}>
           Reject
         </button>
+        <DeletePollButton poll={poll} onDone={onDone} disabled={busy} />
       </div>
     </li>
   );
@@ -177,6 +218,9 @@ function PollRow({ poll, onDone }: { poll: AdminUcastPoll; onDone: (msg: string)
         </button>
       </div>
       <CoverField id={`pcover-${poll.id}`} value={cover} onChange={saveCover} saving={coverSaving} />
+      <div className="ucast-actions">
+        <DeletePollButton poll={poll} onDone={onDone} disabled={busy || coverSaving} />
+      </div>
       {err && !open && <ErrorNote message={err} />}
       {open && (
         <div className="ucast-admin-editor">
@@ -329,9 +373,9 @@ export function AdminUcast() {
   const pending = polls?.filter((p) => p.status === 'pending') ?? [];
   const live = polls?.filter((p) => p.status === 'open' || p.status === 'closed') ?? [];
   const groups: { id: string; title: string; hint: string; items: AdminUcastPoll[] }[] = [
-    { id: 'au-open', title: 'Open for casting', hint: 'Edit the window or roles, add a cover, or close early.', items: live.filter((p) => p.phase === 'open' || p.phase === 'scheduled') },
+    { id: 'au-open', title: 'Open for casting', hint: 'Edit the window or roles, add a cover, close early, or delete the poll.', items: live.filter((p) => p.phase === 'open' || p.phase === 'scheduled') },
     { id: 'au-closed', title: 'Closed, results due', hint: 'Post results with a note; otherwise they go public automatically 48 hours after closing.', items: live.filter((p) => p.phase === 'closed') },
-    { id: 'au-results', title: 'Results posted', hint: 'Done. The results note can still be edited.', items: live.filter((p) => p.phase === 'results') },
+    { id: 'au-results', title: 'Results posted', hint: 'Done. The results note can still be edited, and the poll can be deleted.', items: live.filter((p) => p.phase === 'results') },
   ];
   const rejected = polls?.filter((p) => p.status === 'rejected') ?? [];
 
@@ -383,7 +427,8 @@ export function AdminUcast() {
               <ul className="ucast-request-list">
                 {rejected.map((p) => (
                   <li key={p.id}>
-                    {p.title} ({p.year}) · @{p.requester.username} · {p.adminNote || 'no note'}
+                    {p.title} ({p.year}) · @{p.requester.username} · {p.adminNote || 'no note'}{' '}
+                    <DeletePollButton poll={p} onDone={done} />
                   </li>
                 ))}
               </ul>
