@@ -87,6 +87,12 @@ export interface EpisodeSummary {
   durationS: number;
   /** 'image' for a still photo post. */
   mediaType?: 'video' | 'image';
+  /** Where the sound came from: the recording, a library track, silence, or an upload. */
+  audioSource?: 'original' | 'library' | 'none' | 'upload';
+  /** True when Sweam muted the sound (unlicensed music in an upload). */
+  audioMuted?: boolean;
+  /** The Sweam library track under the picture, when audioSource is 'library'. */
+  musicTrack?: { id: string; title: string; composer: string } | null;
   /** Scheduled release instant (ISO), or null when released on publish. */
   releaseAt?: string | null;
   /** False while a scheduled episode is still locked. */
@@ -368,4 +374,18 @@ export interface UcastRequestInput {
   note: string;
   roles: { name: string; originalPerformer: string }[];
   confirmDifferent: boolean;
+}
+
+/** One track in the licensed music library (public-domain recording, at most 60 seconds). */
+export interface MusicTrack {
+  id: string;
+  title: string;
+  composer: string;
+  performer: string;
+  url: string;
+  durationS: number;
+  mood: string;
+  license: 'public-domain';
+  licenseNote: string;
+  sourceUrl: string;
 }

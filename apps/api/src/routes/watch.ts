@@ -39,7 +39,7 @@ async function loadEpisode(db: D1Database, episodeId: string): Promise<WatchRow 
   return db
     .prepare(
       `SELECT e.id, e.season, e.episode, e.name, e.synopsis, e.video_url, e.captions_url, e.duration_s, e.ai_credits, e.media_type,
-        e.release_at,
+        e.release_at, e.audio_source, e.audio_muted_at, e.music_track_id, mt.title AS music_title, mt.composer AS music_composer,
         t.id AS title_id, t.slug AS title_slug, t.name AS title_name, t.kind AS title_kind,
         t.creator_id, t.published, t.suppressed, t.is_blu,
         u.display_name AS creator_name, cp.handle AS creator_handle,
@@ -49,6 +49,7 @@ async function loadEpisode(db: D1Database, episodeId: string): Promise<WatchRow 
        JOIN users u ON u.id = t.creator_id
        JOIN creator_profiles cp ON cp.user_id = t.creator_id
        LEFT JOIN title_stats s ON s.title_id = t.id
+       LEFT JOIN music_tracks mt ON mt.id = e.music_track_id
        WHERE e.id = ?`,
     )
     .bind(episodeId)

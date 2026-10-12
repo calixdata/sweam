@@ -3198,3 +3198,34 @@ input[type='checkbox'] {
   margin: 0 0 0.5rem;
   font-size: 1rem;
 }
+
+/* Sound choice on the recorder: radios stacked, preview player full width. */
+.record-sound {
+  margin: 1rem 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 12px;
+}
+
+.record-sound h3,
+.record-sound legend {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.record-sound fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0 0 0.75rem;
+}
+
+.record-sound .mon-option {
+  display: block;
+  padding: 0.35rem 0;
+}
+
+.record-sound audio {
+  display: block;
+  width: 100%;
+  margin: 0.5rem 0;
+}

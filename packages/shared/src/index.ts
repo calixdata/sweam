@@ -471,6 +471,12 @@ export interface EpisodeSummary {
   reminderSet?: boolean;
   /** Episode cover image (creator-chosen, or a frame from the transcode), or null. */
   thumbnailUrl: string | null;
+  /** Where the sound came from (clips only); older episodes default to 'original'. */
+  audioSource?: AudioSource;
+  /** True when Sweam muted the sound (unlicensed music in an upload). */
+  audioMuted?: boolean;
+  /** The library track laid under the picture, when audioSource is 'library'. */
+  musicTrack?: { id: string; title: string; composer: string } | null;
   /** 'image' for a still photo post (promotional, never monetized); otherwise 'video'. */
   mediaType: 'video' | 'image';
 }
@@ -654,7 +660,13 @@ export interface TranscodeJobClaim {
   episodeId: string;
   sourceUrl: string;
   attempts: number;
+  /** keep = carry the source audio; mute = drop it; replace = drop it and lay musicUrl under the picture. */
+  audioMode: TranscodeAudioMode;
+  /** The library track (a /media URL) for audioMode 'replace'; null otherwise. */
+  musicUrl: string | null;
 }
+
+export type TranscodeAudioMode = 'keep' | 'mute' | 'replace';
 
 export interface MultipartInit {
   key: string;
@@ -1339,6 +1351,55 @@ export interface ClipReviewItem {
   /** Set when the AI review could not be run. */
   aiError: string | null;
   decidedAt: string | null;
+  /** Where the clip's sound came from. */
+  audioSource: AudioSource;
+  /** The licensing check on that sound: none (nothing to check), needed, cleared, or muted. */
+  audioReview: AudioReviewState;
+  /** When Sweam muted the clip, or null. */
+  audioMutedAt: string | null;
+  /** True once the muted (silent) copy is the playback file. */
+  audioMuteApplied: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Music library and audio provenance
+// ---------------------------------------------------------------------------
+
+/**
+ * Where a clip's sound came from. Only 'upload' (a file from the device) can
+ * carry music Sweam has not licensed, so only uploads get the licensing check.
+ */
+export type AudioSource = 'original' | 'library' | 'none' | 'upload';
+
+export const AUDIO_SOURCES: readonly AudioSource[] = ['original', 'library', 'none', 'upload'];
+
+export const AUDIO_SOURCE_LABELS: Record<AudioSource, string> = {
+  original: 'Your recording’s own sound',
+  library: 'Music from the Sweam library',
+  none: 'No sound',
+  upload: 'The uploaded file’s own sound',
+};
+
+export type AudioReviewState = 'none' | 'needed' | 'cleared' | 'muted';
+
+/** The licensed music library: public-domain recordings, each at most 60 seconds. */
+export const MUSIC_LIBRARY = {
+  maxSeconds: 60,
+  license: 'public-domain',
+} as const;
+
+export interface MusicTrack {
+  id: string;
+  title: string;
+  composer: string;
+  performer: string;
+  /** Playback/preview URL (public, /media/music/...). */
+  url: string;
+  durationS: number;
+  mood: string;
+  license: 'public-domain';
+  licenseNote: string;
+  sourceUrl: string;
 }
 
 // ---------------------------------------------------------------------------

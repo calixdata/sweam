@@ -371,6 +371,23 @@ export function Watch() {
         <ReportControl titleId={title.id} titleSlug={title.slug} signedIn={user !== null} />
       </div>
 
+      {episode.audioMuted && (
+        <p className="notice" role="note">
+          Sound removed by Sweam: this upload used music that is not licensed for Sweam. The clip
+          stays up without sound.
+        </p>
+      )}
+      {!episode.audioMuted && episode.musicTrack && (
+        <p className="field-hint">
+          Music: {episode.musicTrack.title}
+          {episode.musicTrack.composer ? ` (${episode.musicTrack.composer})` : ''}, from the Sweam
+          music library, public domain.
+        </p>
+      )}
+      {!episode.audioMuted && episode.audioSource === 'none' && (
+        <p className="field-hint">This clip has no sound by the creator's choice.</p>
+      )}
+
       <p className="visually-hidden" role="status" aria-live="polite">
         {announcement}
       </p>

@@ -52,7 +52,7 @@ export class SweamApi {
     });
   }
 
-  async complete(jobId: string, body: { durationS: number; master: string; poster: string | null }): Promise<void> {
+  async complete(jobId: string, body: { durationS: number; hasAudio: boolean; master: string; poster: string | null }): Promise<void> {
     await this.request(`/api/transcode/jobs/${jobId}/complete`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

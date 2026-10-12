@@ -1,4 +1,4 @@
-import type { Advisory, ContentKind, EpisodeSummary, Genre, TitleSummary } from '@sweam/shared';
+import type { AudioSource, Advisory, ContentKind, EpisodeSummary, Genre, TitleSummary } from '@sweam/shared';
 import { isReleased } from '@sweam/shared';
 
 /**
@@ -103,6 +103,12 @@ export interface EpisodeRow {
   /** Episode cover, when the query selects it. */
   thumbnail_url?: string | null;
   media_type?: 'video' | 'image' | null;
+  /** Audio provenance, when the query selects it (watch page). */
+  audio_source?: AudioSource | null;
+  audio_muted_at?: string | null;
+  music_track_id?: string | null;
+  music_title?: string | null;
+  music_composer?: string | null;
 }
 
 /**
@@ -128,6 +134,16 @@ export function mapEpisode(row: EpisodeRow, opts: { reveal?: boolean } = {}): Ep
     released,
     thumbnailUrl: row.thumbnail_url ?? null,
     mediaType: row.media_type === 'image' ? 'image' : 'video',
+    ...(row.audio_source !== undefined
+      ? {
+          audioSource: row.audio_source ?? 'original',
+          audioMuted: Boolean(row.audio_muted_at),
+          musicTrack:
+            row.music_track_id && row.music_title
+              ? { id: row.music_track_id, title: row.music_title, composer: row.music_composer ?? '' }
+              : null,
+        }
+      : {}),
   };
 }
 

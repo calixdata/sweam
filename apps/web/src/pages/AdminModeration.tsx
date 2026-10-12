@@ -8,7 +8,7 @@ import type {
   AdminTakedown,
   ClipReviewItem,
 } from '@sweam/shared';
-import { AI_RECOMMENDATION_LABELS, REPORT_REASON_LABELS } from '@sweam/shared';
+import { AI_RECOMMENDATION_LABELS, AUDIO_SOURCE_LABELS, REPORT_REASON_LABELS } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { AdminNav } from '../components/AdminNav';
@@ -68,10 +68,15 @@ function ModerationQueue() {
     return <Loading label="Loading the moderation queue" />;
   }
 
-  async function decideClip(clip: ClipReviewItem, action: 'clear' | 'remove') {
+  async function decideClip(clip: ClipReviewItem, action: 'clear' | 'remove' | 'mute') {
+    if (action === 'mute' && !window.confirm(`Mute "${clip.title.name}"? The clip stays up; a silent copy replaces its sound and the creator is told why.`)) return;
     await apiSend('POST', `/api/admin/clip-reviews/${clip.id}/decide`, { action });
     setNotice(
-      action === 'remove' ? `Removed the clip "${clip.title.name}".` : `Cleared "${clip.title.name}".`,
+      action === 'remove'
+        ? `Removed the clip "${clip.title.name}".`
+        : action === 'mute'
+          ? `Muted "${clip.title.name}". The silent copy is being made; the creator was notified.`
+          : `Cleared "${clip.title.name}".`,
     );
     await load();
   }
@@ -102,7 +107,10 @@ function ModerationQueue() {
         <p className="field-hint">
           Instant clips are live the moment they are posted. Claude reads the caption and metadata
           only, so this is a triage aid, not the decision: watch anything uncertain before you clear
-          or remove it. Flagged clips are already hidden.
+          or remove it. Flagged clips are already hidden. Clips marked "sound needs a licensing
+          check" were uploaded from a device with their own sound: listen, and if the music is not
+          licensed for Sweam, mute the clip. Recordings made in the app only carry their own sound,
+          a Sweam library track, or silence, so they need no check.
         </p>
         {clips.length === 0 ? (
           <p>No clips awaiting review.</p>
@@ -121,6 +129,16 @@ function ModerationQueue() {
                   {clip.title.published ? 'currently live' : 'currently hidden'}
                 </p>
                 {clip.caption && <blockquote>{clip.caption}</blockquote>}
+                <p className={clip.audioReview === 'needed' ? 'status status-error' : 'status'}>
+                  Sound: {AUDIO_SOURCE_LABELS[clip.audioSource]}.{' '}
+                  {clip.audioReview === 'needed' && 'Sound needs a licensing check.'}
+                  {clip.audioReview === 'cleared' && 'Sound cleared.'}
+                  {clip.audioReview === 'muted' &&
+                    (clip.audioMuteApplied
+                      ? 'Muted by Sweam; the silent copy is live.'
+                      : 'Muted by Sweam; the silent copy is still being made (the original sound plays until then).')}
+                  {clip.audioReview === 'none' && 'No licensing check needed.'}
+                </p>
                 {clip.ai ? (
                   <p className="status">
                     AI: {AI_RECOMMENDATION_LABELS[clip.ai.recommendation]} (confidence{' '}
@@ -147,6 +165,15 @@ function ModerationQueue() {
                   >
                     Clear (keep live)
                   </button>
+                  {clip.audioReview === 'needed' && !clip.audioMutedAt && (
+                    <button
+                      type="button"
+                      className="button button-quiet"
+                      onClick={() => decideClip(clip, 'mute')}
+                    >
+                      Mute sound (unlicensed music)
+                    </button>
+                  )}
                 </div>
               </li>
             ))}

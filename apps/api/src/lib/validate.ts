@@ -323,6 +323,8 @@ const outputFilename = /^[A-Za-z0-9_.-]+$/;
 
 export const transcodeCompleteSchema = z.object({
   durationS: z.number().int().min(0).max(86_400),
+  /** Whether the source file carried an audio stream (drives the licensing check on uploads). */
+  hasAudio: z.boolean().optional(),
   master: z
     .string()
     .regex(outputFilename)
@@ -608,7 +610,14 @@ export const clipCreateSchema = z.object({
   posterUrl: coverArt,
   /** 'image' posts a still photo (promotional, never monetized); default is a video clip. */
   mediaType: z.enum(['video', 'image']).default('video'),
+  /** Where the sound comes from: the recording, a library track, silence, or an uploaded file's own sound. */
+  audioSource: z.enum(['original', 'library', 'none', 'upload']).default('original'),
+  /** The library track to lay under the picture; required when audioSource is 'library'. */
+  musicTrackId: z.string().trim().min(1).max(64).nullable().default(null),
 }).superRefine((v, ctx) => {
+  if (v.mediaType === 'video' && v.audioSource === 'library' && !v.musicTrackId) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['musicTrackId'], message: 'Pick a track from the Sweam music library.' });
+  }
   if (v.mediaType === 'image') {
     if (!/\.(jpe?g|png|webp)$/i.test(v.sourceUrl)) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['sourceUrl'], message: 'Upload a JPG, PNG or WebP image.' });
@@ -621,7 +630,8 @@ export const clipCreateSchema = z.object({
 
 /** An admin's decision on a clip in the review queue. */
 export const clipDecideSchema = z.object({
-  action: z.enum(['clear', 'remove']),
+  /** mute = keep the clip live but strip its sound (unlicensed music in an upload). */
+  action: z.enum(['clear', 'remove', 'mute']),
   note: z.string().trim().max(1000).default(''),
 });
 

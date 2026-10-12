@@ -8,10 +8,11 @@ import {
   BLU_TIERS,
   CLIP_SPEC,
   GENRES,
+  MUSIC_LIBRARY,
   RATINGS,
   UPLOAD_SPECS,
 } from '@sweam/shared';
-import type { BluFundStatus, SeriesSummary } from '@sweam/shared';
+import type { BluFundStatus, MusicTrack, SeriesSummary } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
 import { BluBadge } from '../components/BluBadge';
@@ -61,6 +62,26 @@ export function Record() {
   const [releaseDate, setReleaseDate] = useState('');
   // Cover image for the clip (mandatory).
   const [posterUrl, setPosterUrl] = useState('');
+  // Sound for an in-app recording: the recording's own sound, a track from the
+  // licensed library (replaces the recorded sound), or silence. A file uploaded
+  // from the device keeps its own sound and is checked for licensing by Sweam.
+  const [audioSource, setAudioSource] = useState<'original' | 'library' | 'none'>('original');
+  const [musicTrackId, setMusicTrackId] = useState('');
+  const [tracks, setTracks] = useState<MusicTrack[]>([]);
+  const [clipFromUpload, setClipFromUpload] = useState(false);
+  const previewRef = useRef<HTMLAudioElement>(null);
+  const selectedTrack = tracks.find((t) => t.id === musicTrackId) ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<{ tracks: MusicTrack[] }>('/api/music')
+      .then((data) => {
+        if (!cancelled) setTracks(data.tracks);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   // 'photo' posts a still image: promotional only, never monetized.
   const [mode, setMode] = useState<'video' | 'photo'>('video');
   const [photo, setPhoto] = useState<{ file: File; url: string } | null>(null);
@@ -183,7 +204,8 @@ export function Record() {
       const blob = new Blob(chunksRef.current, { type });
       const url = URL.createObjectURL(blob);
       setClip({ blob, url, name: `clip.${ext}` });
-      setStatus('Recording ready to review.');
+      setClipFromUpload(false);
+      setStatus('Recording ready to review. Choose the sound below.');
     };
     recorderRef.current = recorder;
     recorder.start();
@@ -209,7 +231,8 @@ export function Record() {
       if (clip) URL.revokeObjectURL(clip.url);
       const url = URL.createObjectURL(file);
       setClip({ blob: file, url, name: file.name });
-      setStatus('Video ready to review.');
+      setClipFromUpload(true);
+      setStatus('Video ready to review. It keeps its own sound; Sweam checks uploaded sound for licensing.');
     },
     [clip],
   );
@@ -234,6 +257,10 @@ export function Record() {
       setError(`This clip is over the ${CLIP_SPEC.maxLabel} limit.`);
       return;
     }
+    if (!clipFromUpload && audioSource === 'library' && !musicTrackId) {
+      setError('Pick a track from the Sweam music library, or choose a different sound option.');
+      return;
+    }
     setPosting(true);
     setError(null);
     try {
@@ -250,6 +277,8 @@ export function Record() {
         seriesId: seriesId || null,
         releaseDate: releaseDate || null,
         posterUrl,
+        audioSource: clipFromUpload ? 'upload' : audioSource,
+        musicTrackId: !clipFromUpload && audioSource === 'library' ? musicTrackId : null,
       });
       stopStream();
       navigate(`/watch/${result.episodeId}`);
@@ -258,7 +287,7 @@ export function Record() {
       setPosting(false);
       setProgress(null);
     }
-  }, [clip, caption, rating, genre, audience, bluMode, bluTierId, seriesId, releaseDate, posterUrl, navigate, stopStream]);
+  }, [clip, caption, rating, genre, audience, bluMode, bluTierId, seriesId, releaseDate, posterUrl, navigate, stopStream, clipFromUpload, audioSource, musicTrackId]);
 
   const postPhoto = useCallback(async () => {
     if (!photo) return;
@@ -329,6 +358,12 @@ export function Record() {
           <li>Recorded here, or upload a {UPLOAD_SPECS.video.formats} file.</li>
           <li>{UPLOAD_SPECS.video.recommended}</li>
           <li>A caption and a maturity rating are required.</li>
+          <li>
+            Sound: a recording made here uses its own sound, a track from the Sweam music library
+            (public-domain recordings, up to {MUSIC_LIBRARY.maxSeconds} seconds), or no sound.
+            Uploaded files keep their own sound, which Sweam checks for licensing; unlicensed music
+            gets the clip muted.
+          </li>
         </ul>
       </aside>
 
@@ -463,6 +498,98 @@ export function Record() {
           />
         </div>
       </section>
+
+      {mode === 'video' && clip && clipFromUpload && (
+        <section aria-label="Sound" className="record-sound">
+          <h3>Sound</h3>
+          <p className="field-hint">
+            An uploaded video keeps its own sound. Sweam's team checks uploaded sound for licensing:
+            if it contains music that is not licensed for Sweam, the clip is muted and stays up
+            without sound. To use music safely, record in the app and pick a track from the Sweam
+            music library.
+          </p>
+        </section>
+      )}
+      {mode === 'video' && clip && !clipFromUpload && (
+        <section aria-label="Sound" className="record-sound">
+          <fieldset className="field">
+            <legend>Sound</legend>
+            <label className="mon-option">
+              <input
+                type="radio"
+                name="clip-audio"
+                value="original"
+                checked={audioSource === 'original'}
+                disabled={posting}
+                onChange={() => setAudioSource('original')}
+              />{' '}
+              Keep the recording's own sound
+            </label>
+            <label className="mon-option">
+              <input
+                type="radio"
+                name="clip-audio"
+                value="library"
+                checked={audioSource === 'library'}
+                disabled={posting}
+                onChange={() => setAudioSource('library')}
+              />{' '}
+              Music from the Sweam library (replaces the recorded sound)
+            </label>
+            <label className="mon-option">
+              <input
+                type="radio"
+                name="clip-audio"
+                value="none"
+                checked={audioSource === 'none'}
+                disabled={posting}
+                onChange={() => setAudioSource('none')}
+              />{' '}
+              No sound
+            </label>
+          </fieldset>
+          {audioSource === 'library' && (
+            <div className="field">
+              <label htmlFor="clip-track">Track</label>
+              <select
+                id="clip-track"
+                value={musicTrackId}
+                disabled={posting}
+                onChange={(event) => {
+                  setMusicTrackId(event.target.value);
+                  previewRef.current?.pause();
+                }}
+              >
+                <option value="">Choose a track</option>
+                {tracks.map((track) => (
+                  <option key={track.id} value={track.id}>
+                    {track.title} · {track.composer} · {track.durationS}s
+                  </option>
+                ))}
+              </select>
+              {tracks.length === 0 && <p className="field-hint">The library is loading, or is empty right now.</p>}
+              {selectedTrack && (
+                <>
+                  <p className="field-hint">
+                    {selectedTrack.performer}. Public domain: {selectedTrack.licenseNote}
+                  </p>
+                  <audio
+                    ref={previewRef}
+                    controls
+                    preload="none"
+                    src={selectedTrack.url}
+                    aria-label={`Preview of ${selectedTrack.title}`}
+                  />
+                  <p className="field-hint">
+                    The track is laid under your picture from the start and cut at the end of your clip.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+          {audioSource === 'none' && <p className="field-hint">Your clip will play silently.</p>}
+        </section>
+      )}
 
       <section aria-label="Clip details" className="record-details">
         <div className="field">

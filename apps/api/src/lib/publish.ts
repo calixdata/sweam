@@ -1,4 +1,4 @@
-import type { ContentKind, Rating } from '@sweam/shared';
+import type { AudioSource, ContentKind, Rating } from '@sweam/shared';
 import { RATING_TO_ADVISORY, easternMidnightUtc } from '@sweam/shared';
 import type { Env } from '../env';
 import { nowIso } from './http';
@@ -187,6 +187,10 @@ export interface ClipToPublish {
   posterUrl: string;
   /** 'image' = a still photo post: promotional only, never monetized. */
   mediaType?: 'video' | 'image';
+  /** Where the sound comes from; default 'original' (the recording's own sound). */
+  audioSource?: AudioSource;
+  /** The library track laid under the picture when audioSource is 'library'. */
+  musicTrack?: { id: string; url: string } | null;
 }
 
 /** A clip's title name is its caption, trimmed to a display-friendly length. */
@@ -287,15 +291,25 @@ export async function publishClip(
   const episode = (maxRow?.m ?? 0) + 1;
   const episodeId = crypto.randomUUID();
   const releaseAt = clip.releaseDate ? easternMidnightUtc(clip.releaseDate) : null;
+  const audioSource: AudioSource = isImage ? 'none' : (clip.audioSource ?? 'original');
+  const musicTrack = !isImage && audioSource === 'library' ? (clip.musicTrack ?? null) : null;
+  if (audioSource === 'library' && !musicTrack) throw new PublishError('Pick a track from the Sweam music library.');
   await env.DB.prepare(
     `INSERT INTO episodes
-       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at, thumbnail_url, media_type)
-     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at, thumbnail_url, media_type, audio_source, music_track_id)
+     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
   )
-    .bind(episodeId, titleId, episode, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now, releaseAt, clip.posterUrl ?? clip.sourceUrl, isImage ? 'image' : 'video')
+    .bind(episodeId, titleId, episode, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now, releaseAt, clip.posterUrl ?? clip.sourceUrl, isImage ? 'image' : 'video', audioSource, musicTrack ? musicTrack.id : null)
     .run();
-  // A still image has nothing to transcode.
-  if (!isImage) await enqueueTranscode(env.DB, episodeId, clip.sourceUrl);
+  // A still image has nothing to transcode. A video's sound is decided here:
+  // the library track replaces the recorded audio, 'none' goes silent, and the
+  // recording's own sound or an upload's sound is carried through.
+  if (!isImage) {
+    await enqueueTranscode(env.DB, episodeId, clip.sourceUrl, {
+      audioMode: audioSource === 'library' ? 'replace' : audioSource === 'none' ? 'mute' : 'keep',
+      musicUrl: musicTrack ? musicTrack.url : null,
+    });
+  }
 
   return { titleId, slug, episodeId, name, attachedToSeries };
 }

@@ -1,0 +1,24 @@
+# Sweam transcoder on Fly.io: one always-on machine polling sweam.co for jobs.
+# Deploy from the repository root (the Dockerfile copies the shared package):
+#   fly deploy --config apps/transcoder/fly.toml --dockerfile apps/transcoder/Dockerfile .
+# Secrets (set once): fly secrets set TRANSCODER_TOKEN=... -a sweam-transcoder
+app = "sweam-transcoder"
+primary_region = "sea"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  SWEAM_API_URL = "https://sweam.co"
+  POLL_MS = "5000"
+
+# No HTTP service: the worker only makes outbound calls. Keep one machine up.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+[processes]
+  worker = "npx tsx src/index.ts"
+
+[[restart]]
+  policy = "always"

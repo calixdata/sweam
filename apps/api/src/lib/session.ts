@@ -124,7 +124,8 @@ export const requireContentAccess = createMiddleware<AppEnv>(async (c, next) => 
     return;
   }
   // Images (posters, cover art, the hero) are public so browsing works signed-out.
-  if (PUBLIC_MEDIA_RE.test(c.req.path)) {
+  // The licensed music library previews in the recorder, signed in or not.
+  if (PUBLIC_MEDIA_RE.test(c.req.path) || c.req.path.startsWith('/media/music/')) {
     await next();
     return;
   }

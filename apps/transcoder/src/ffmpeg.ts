@@ -18,13 +18,28 @@ const SEGMENT_SECONDS = 6;
  * split and scaled once per rendition, muxed as VOD HLS with independent
  * segments, and ffmpeg writes the master playlist itself.
  */
+export type AudioPlan =
+  /** Carry the source audio through (only when the source has an audio stream). */
+  | { kind: 'source' }
+  /** No audio at all: silent by choice, or muted by an admin. */
+  | { kind: 'none' }
+  /** Drop the source audio and lay a music file under the picture, looped and cut to the video's length. */
+  | { kind: 'replace'; musicPath: string };
+
 export function buildHlsArgs(opts: {
   inputPath: string;
   renditions: Rendition[];
   hasAudio: boolean;
+  /** Defaults to the source audio when present, else none. */
+  audio?: AudioPlan;
 }): string[] {
-  const { inputPath, renditions, hasAudio } = opts;
+  const { inputPath, renditions } = opts;
   if (renditions.length === 0) throw new Error('At least one rendition is required.');
+  const audio: AudioPlan = opts.audio ?? (opts.hasAudio ? { kind: 'source' } : { kind: 'none' });
+  // Source audio can only be carried when the file has some.
+  const hasAudio = audio.kind === 'replace' || (audio.kind === 'source' && opts.hasAudio);
+  // Audio comes from input 0 (the source) or input 1 (the music file).
+  const audioMap = audio.kind === 'replace' ? '1:a:0' : '0:a:0';
 
   const splitLabels = renditions.map((_, i) => `[v${i}]`).join('');
   const filters = [
@@ -35,12 +50,19 @@ export function buildHlsArgs(opts: {
     ),
   ].join(';');
 
-  const args = ['-y', '-i', inputPath, '-filter_complex', filters];
+  const args = ['-y', '-i', inputPath];
+  if (audio.kind === 'replace') {
+    // Loop the track so a clip longer than the music is still covered; -shortest
+    // (below) cuts the audio at the video's end.
+    args.push('-stream_loop', '-1', '-i', audio.musicPath);
+  }
+  args.push('-filter_complex', filters);
 
   for (let i = 0; i < renditions.length; i++) {
     args.push('-map', `[v${i}o]`);
-    if (hasAudio) args.push('-map', '0:a:0');
+    if (hasAudio) args.push('-map', audioMap);
   }
+  if (audio.kind === 'replace') args.push('-shortest');
 
   renditions.forEach((rendition, i) => {
     args.push(

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
-import type { TranscodeJobClaim } from '@sweam/shared';
+import type { TranscodeAudioMode, TranscodeJobClaim } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { sha256Hex } from '../lib/auth';
 import { fail, nowIso, parseBody } from '../lib/http';
@@ -63,6 +63,14 @@ interface JobRow {
   source_url: string;
   status: string;
   attempts: number;
+  audio_mode: TranscodeAudioMode;
+  music_url: string | null;
+}
+
+export interface TranscodeAudioOptions {
+  /** keep (default) carries the source audio; mute drops it; replace lays musicUrl under the picture. */
+  audioMode?: TranscodeAudioMode;
+  musicUrl?: string | null;
 }
 
 /** Enqueue a transcode for an episode, superseding any active job for it. */
@@ -70,8 +78,12 @@ export async function enqueueTranscode(
   db: D1Database,
   episodeId: string,
   sourceUrl: string,
+  audio: TranscodeAudioOptions = {},
 ): Promise<void> {
   const now = nowIso();
+  const audioMode = audio.audioMode ?? 'keep';
+  const musicUrl = audioMode === 'replace' ? (audio.musicUrl ?? null) : null;
+  if (audioMode === 'replace' && !musicUrl) throw new Error('A replace job needs a music track URL.');
   await db.batch([
     db
       .prepare(
@@ -81,10 +93,10 @@ export async function enqueueTranscode(
       .bind(now, episodeId),
     db
       .prepare(
-        `INSERT INTO transcode_jobs (id, episode_id, source_url, status, attempts, created_at, updated_at)
-         VALUES (?, ?, ?, 'queued', 0, ?, ?)`,
+        `INSERT INTO transcode_jobs (id, episode_id, source_url, status, attempts, created_at, updated_at, audio_mode, music_url)
+         VALUES (?, ?, ?, 'queued', 0, ?, ?, ?, ?)`,
       )
-      .bind(crypto.randomUUID(), episodeId, sourceUrl, now, now),
+      .bind(crypto.randomUUID(), episodeId, sourceUrl, now, now, audioMode, musicUrl),
   ]);
 }
 
@@ -102,7 +114,7 @@ transcodeRoutes.post('/claim', async (c) => {
        ORDER BY created_at
        LIMIT 1
      )
-     RETURNING id, episode_id, source_url, attempts`,
+     RETURNING id, episode_id, source_url, attempts, audio_mode, music_url`,
   )
     .bind(body.workerId, nowIso(), nowIso(), staleCutoff)
     .first<JobRow>();
@@ -113,13 +125,15 @@ transcodeRoutes.post('/claim', async (c) => {
     episodeId: row.episode_id,
     sourceUrl: row.source_url,
     attempts: row.attempts,
+    audioMode: row.audio_mode ?? 'keep',
+    musicUrl: row.music_url ?? null,
   };
   return c.json({ job });
 });
 
 async function runningJob(db: D1Database, jobId: string): Promise<JobRow> {
   const row = await db
-    .prepare('SELECT id, episode_id, source_url, status, attempts FROM transcode_jobs WHERE id = ?')
+    .prepare('SELECT id, episode_id, source_url, status, attempts, audio_mode, music_url FROM transcode_jobs WHERE id = ?')
     .bind(jobId)
     .first<JobRow>();
   if (!row) fail(404, 'job_not_found', 'No such transcode job.');
@@ -174,8 +188,8 @@ transcodeRoutes.post('/jobs/:jobId/complete', async (c) => {
 
   const statements = [
     c.env.DB.prepare(
-      `UPDATE transcode_jobs SET status = 'done', error = NULL, updated_at = ? WHERE id = ?`,
-    ).bind(now, job.id),
+      `UPDATE transcode_jobs SET status = 'done', error = NULL, updated_at = ?, source_has_audio = ? WHERE id = ?`,
+    ).bind(now, body.hasAudio === undefined ? null : body.hasAudio ? 1 : 0, job.id),
     // A generated frame fills in or refreshes an earlier generated frame, but
     // never replaces a cover the creator chose (an upload under /media/u or /media/sub).
     c.env.DB.prepare(
@@ -188,6 +202,14 @@ transcodeRoutes.post('/jobs/:jobId/complete', async (c) => {
        WHERE id = ?`,
     ).bind(masterUrl, posterUrl, body.durationS, body.durationS, job.episode_id),
   ];
+  if (body.hasAudio === false && job.audio_mode === 'keep') {
+    // A silent upload has no music to check: drop it from the licensing queue.
+    statements.push(
+      c.env.DB.prepare(
+        `UPDATE clip_reviews SET audio_review = 'none' WHERE episode_id = ? AND audio_review = 'needed'`,
+      ).bind(job.episode_id),
+    );
+  }
   if (posterUrl) {
     // First generated thumbnail becomes the title poster if the creator has not set one.
     statements.push(

@@ -66,6 +66,7 @@ import {
 import { grantFreeMembership } from '../lib/scoutMembership';
 import { cancelSubscription, stripeConfigured } from '../lib/stripe';
 import { AiReviewError, aiReviewConfigured, reviewSubmission } from '../lib/aiReview';
+import { enqueueTranscode } from './transcode';
 import { PublishError, publishSubmission, type PublishableSubmission } from '../lib/publish';
 import { SUBMISSION_SELECT, mapSubmission, type SubmissionRow } from './submissions';
 
@@ -353,6 +354,10 @@ interface ClipReviewRow {
   episode_id: string;
   display_name: string;
   handle: string | null;
+  audio_review: ClipReviewItem['audioReview'];
+  audio_source: ClipReviewItem['audioSource'] | null;
+  audio_muted_at: string | null;
+  mute_applied: number;
 }
 
 function mapClipReview(row: ClipReviewRow): ClipReviewItem {
@@ -375,6 +380,10 @@ function mapClipReview(row: ClipReviewRow): ClipReviewItem {
     ai,
     aiError: row.ai_error,
     decidedAt: row.decided_at,
+    audioSource: row.audio_source ?? 'original',
+    audioReview: row.audio_review ?? 'none',
+    audioMutedAt: row.audio_muted_at,
+    audioMuteApplied: row.mute_applied === 1,
   };
 }
 
@@ -383,32 +392,74 @@ adminRoutes.get('/clip-reviews', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT cr.id, cr.state, cr.caption, cr.created_at, cr.ai_review, cr.ai_error, cr.decided_at,
        cr.episode_id, t.id AS title_id, t.name AS title_name, t.slug, t.published,
-       u.display_name, cp.handle
+       u.display_name, cp.handle,
+       cr.audio_review, e.audio_source, e.audio_muted_at,
+       EXISTS (SELECT 1 FROM transcode_jobs tj WHERE tj.episode_id = cr.episode_id AND tj.audio_mode = 'mute' AND tj.status = 'done') AS mute_applied
      FROM clip_reviews cr
      JOIN titles t ON t.id = cr.title_id
      JOIN users u ON u.id = cr.creator_id
+     JOIN episodes e ON e.id = cr.episode_id
      LEFT JOIN creator_profiles cp ON cp.user_id = cr.creator_id
-     WHERE cr.state IN ('pending', 'flagged')
-     ORDER BY (cr.state = 'flagged') DESC, cr.created_at
+     WHERE cr.state IN ('pending', 'flagged') OR cr.audio_review = 'needed'
+     ORDER BY (cr.state = 'flagged') DESC, (cr.audio_review = 'needed') DESC, cr.created_at
      LIMIT 100`,
   ).all<ClipReviewRow>();
   return c.json({ clips: results.map(mapClipReview) });
 });
 
-/** Clear a clip (keep it live) or remove it (hide it). Only Sweam decides. */
+/**
+ * Clear a clip (keep it live), remove it (hide it), or mute it: the clip stays
+ * live but a silent copy replaces its playback file, for an upload that used
+ * music Sweam has not licensed. Only Sweam decides.
+ */
 adminRoutes.post('/clip-reviews/:reviewId/decide', async (c) => {
   const admin = currentUser(c);
   const body = await parseBody(c, clipDecideSchema);
   const review = await c.env.DB.prepare(
-    `SELECT cr.id, cr.title_id, cr.creator_id, t.name AS title_name, t.slug
-     FROM clip_reviews cr JOIN titles t ON t.id = cr.title_id
-     WHERE cr.id = ? AND cr.state IN ('pending', 'flagged')`,
+    `SELECT cr.id, cr.title_id, cr.creator_id, cr.episode_id, cr.audio_review, t.name AS title_name, t.slug,
+       e.source_url, e.video_url, e.media_type, e.audio_muted_at
+     FROM clip_reviews cr JOIN titles t ON t.id = cr.title_id JOIN episodes e ON e.id = cr.episode_id
+     WHERE cr.id = ? AND (cr.state IN ('pending', 'flagged') OR cr.audio_review = 'needed')`,
   )
     .bind(c.req.param('reviewId'))
-    .first<{ id: string; title_id: string; creator_id: string; title_name: string; slug: string }>();
+    .first<{
+      id: string;
+      title_id: string;
+      creator_id: string;
+      episode_id: string;
+      audio_review: string;
+      title_name: string;
+      slug: string;
+      source_url: string | null;
+      video_url: string;
+      media_type: string;
+      audio_muted_at: string | null;
+    }>();
   if (!review) fail(404, 'clip_not_found', 'No open clip review with that id.');
 
   const now = nowIso();
+  if (body.action === 'mute') {
+    if (review.media_type === 'image') fail(400, 'no_audio', 'A photo has no sound to mute.');
+    if (review.audio_muted_at) fail(409, 'already_muted', 'This clip is already muted.');
+    // The silent copy is produced by the transcoder from the original upload.
+    const source = review.source_url ?? review.video_url;
+    await c.env.DB.batch([
+      c.env.DB
+        .prepare('UPDATE episodes SET audio_muted_at = ?, audio_muted_by = ? WHERE id = ?')
+        .bind(now, admin.id, review.episode_id),
+      c.env.DB
+        .prepare("UPDATE clip_reviews SET audio_review = 'muted' WHERE id = ?")
+        .bind(review.id),
+    ]);
+    await enqueueTranscode(c.env.DB, review.episode_id, source, { audioMode: 'mute' });
+    await notify(
+      c.env.DB,
+      review.creator_id,
+      'takedown',
+      `The sound on your clip "${review.title_name}" was removed by Sweam because the upload used music that is not licensed for Sweam.${body.note ? ` Note: ${body.note}` : ''} The clip stays up without sound. Next time, record in the app and pick a track from the Sweam music library.`,
+    );
+    return c.json({ status: 'muted' });
+  }
   if (body.action === 'remove') {
     await c.env.DB.batch([
       c.env.DB
@@ -435,7 +486,9 @@ adminRoutes.post('/clip-reviews/:reviewId/decide', async (c) => {
       .bind(review.title_id),
     c.env.DB
       .prepare(
-        "UPDATE clip_reviews SET state = 'cleared', decided_by = ?, decided_at = ? WHERE id = ?",
+        `UPDATE clip_reviews SET state = 'cleared', decided_by = ?, decided_at = ?,
+           audio_review = CASE WHEN audio_review = 'needed' THEN 'cleared' ELSE audio_review END
+         WHERE id = ?`,
       )
       .bind(admin.id, now, review.id),
   ]);

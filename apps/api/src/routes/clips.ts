@@ -9,6 +9,7 @@ import { requireUser, currentUser } from '../lib/session';
 import { clipCreateSchema } from '../lib/validate';
 import { publishClip } from '../lib/publish';
 import { AiReviewError, aiReviewConfigured, reviewSubmission } from '../lib/aiReview';
+import { findActiveTrack } from './music';
 
 /**
  * Instant clips: a signed-in creator records in the browser and posts on the
@@ -104,6 +105,17 @@ clipRoutes.post('/', async (c) => {
     bluPriceCents = tier.priceCents;
   }
 
+  // The sound under the picture is a Sweam-licensed library track, the
+  // recording's own sound, silence, or (for a device upload) whatever the file
+  // carried, which an admin then checks for licensing.
+  const audioSource = body.mediaType === 'image' ? 'none' : body.audioSource;
+  let musicTrack: { id: string; url: string } | null = null;
+  if (audioSource === 'library') {
+    const track = body.musicTrackId ? await findActiveTrack(c.env.DB, body.musicTrackId) : null;
+    if (!track) fail(400, 'track_not_found', 'That track is not in the Sweam music library.');
+    musicTrack = { id: track.id, url: track.url };
+  }
+
   const published = await publishClip(
     c.env,
     {
@@ -119,16 +131,19 @@ clipRoutes.post('/', async (c) => {
       releaseDate: body.releaseDate,
       posterUrl: body.posterUrl,
       mediaType: body.mediaType,
+      audioSource,
+      musicTrack,
     },
     user.displayName,
   );
 
   const reviewId = crypto.randomUUID();
   await c.env.DB.prepare(
-    `INSERT INTO clip_reviews (id, title_id, episode_id, creator_id, caption, state, created_at)
-     VALUES (?, ?, ?, ?, ?, 'pending', ?)`,
+    `INSERT INTO clip_reviews (id, title_id, episode_id, creator_id, caption, state, created_at, audio_review)
+     VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`,
   )
-    .bind(reviewId, published.titleId, published.episodeId, user.id, body.caption, nowIso())
+    // Only an uploaded file can carry music Sweam has not licensed.
+    .bind(reviewId, published.titleId, published.episodeId, user.id, body.caption, nowIso(), audioSource === 'upload' ? 'needed' : 'none')
     .run();
 
   if (aiReviewConfigured(c.env)) {

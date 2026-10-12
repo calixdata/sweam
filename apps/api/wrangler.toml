@@ -66,8 +66,10 @@ binding = "MEDIA"
 bucket_name = "sweam-media"
 
 [env.preview.vars]
-ENVIRONMENT = "development"
-TRANSCODER_TOKEN = "dev-transcoder-token"
+ENVIRONMENT = "production"
+# TRANSCODER_TOKEN is a secret on this environment (wrangler secret put
+# TRANSCODER_TOKEN --env preview); the same value is set on the Fly app
+# sweam-transcoder. Never a var here, or the dev default would be live.
 
 # Monthly scout royalty distribution on the deployed Worker.
 [env.preview.triggers]

@@ -158,6 +158,17 @@ export default function WatchScreen() {
             <Text style={styles.actionText}>Share</Text>
           </Pressable>
         </View>
+        {episode.audioMuted ? (
+          <Text style={styles.muted} accessibilityRole="text">
+            Sound removed by Sweam: this upload used music that is not licensed for Sweam. The clip stays up without sound.
+          </Text>
+        ) : episode.musicTrack ? (
+          <Text style={styles.muted}>
+            Music: {episode.musicTrack.title}{episode.musicTrack.composer ? ` (${episode.musicTrack.composer})` : ''}, from the Sweam music library, public domain.
+          </Text>
+        ) : episode.audioSource === 'none' ? (
+          <Text style={styles.muted}>This clip has no sound by the creator's choice.</Text>
+        ) : null}
         {episode.synopsis ? <Text style={styles.synopsis}>{episode.synopsis}</Text> : null}
       </View>
     </ScrollView>

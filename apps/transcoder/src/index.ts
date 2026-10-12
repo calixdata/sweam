@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { TranscodeJobClaim } from '@sweam/shared';
 import { SweamApi, outputContentType } from './api';
 import { MASTER_PLAYLIST, POSTER_FILE, buildHlsArgs, buildPosterArgs, posterTimestamp } from './ffmpeg';
+import type { AudioPlan } from './ffmpeg';
 import { renditionsFor } from './ladder';
 import { probeFile } from './probe';
 import { runCommand } from './run';
@@ -53,8 +54,20 @@ async function processJob(job: TranscodeJobClaim): Promise<void> {
 
     const probe = await probeFile(inputPath);
     const renditions = renditionsFor(probe.height);
+
+    // The job says what to do with sound: carry it, drop it, or replace it
+    // with a library track (downloaded next to the source).
+    let audio: AudioPlan = probe.hasAudio ? { kind: 'source' } : { kind: 'none' };
+    if (job.audioMode === 'mute') audio = { kind: 'none' };
+    if (job.audioMode === 'replace') {
+      if (!job.musicUrl) throw new Error('Replace job has no music track URL.');
+      const music = await api.fetchSource(job.musicUrl);
+      const musicPath = join(workDir, 'music.bin');
+      await writeFile(musicPath, new Uint8Array(music));
+      audio = { kind: 'replace', musicPath };
+    }
     console.log(
-      `[${job.id}] ${probe.height}p source, ${probe.durationS}s, audio: ${probe.hasAudio}; ` +
+      `[${job.id}] ${probe.height}p source, ${probe.durationS}s, source audio: ${probe.hasAudio}, plan: ${audio.kind}; ` +
         `renditions: ${renditions.map((r) => r.name).join(', ')}`,
     );
 
@@ -63,7 +76,7 @@ async function processJob(job: TranscodeJobClaim): Promise<void> {
     await mkdir(outDir);
     await runCommand(
       'ffmpeg',
-      ['-hide_banner', ...buildHlsArgs({ inputPath, renditions, hasAudio: probe.hasAudio })],
+      ['-hide_banner', ...buildHlsArgs({ inputPath, renditions, hasAudio: probe.hasAudio, audio })],
       { cwd: outDir },
     );
     await runCommand(
@@ -86,6 +99,7 @@ async function processJob(job: TranscodeJobClaim): Promise<void> {
 
     await api.complete(job.id, {
       durationS: probe.durationS,
+      hasAudio: probe.hasAudio,
       master: MASTER_PLAYLIST,
       poster: files.includes(POSTER_FILE) ? POSTER_FILE : null,
     });

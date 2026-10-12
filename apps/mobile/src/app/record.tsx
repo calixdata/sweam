@@ -17,7 +17,7 @@ import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../lib/auth';
-import { api, ApiError } from '../lib/api';
+import { api, ApiError, mediaUrl } from '../lib/api';
 import { uploadVideo, UploadError } from '../lib/upload';
 import type { UploadProgress } from '../lib/upload';
 import {
@@ -31,7 +31,8 @@ import {
   RATINGS,
 } from '../lib/clipspec';
 import type { Audience, Genre, Rating } from '../lib/clipspec';
-import type { BluFundStatus, SeriesSummary } from '../lib/types';
+import type { BluFundStatus, MusicTrack, SeriesSummary } from '../lib/types';
+
 import { BluBadge } from '../components/BluBadge';
 import { colors, radius } from '../lib/theme';
 
@@ -45,7 +46,11 @@ interface Clip {
   name: string;
   /** True for a still photo (promotional post, never monetized). */
   image?: boolean;
+  /** True when the file came from the device library (keeps its own sound; Sweam checks it). */
+  upload?: boolean;
 }
+
+type AudioChoice = 'original' | 'library' | 'none';
 
 function extensionOf(uri: string): string {
   const path = uri.split('?')[0] ?? uri;
@@ -119,6 +124,48 @@ export default function RecordScreen() {
   // Optional scheduled release day, typed as YYYY-MM-DD (Eastern); empty posts right away.
   const [releaseDate, setReleaseDate] = useState('');
   // Cover image (mandatory), uploaded as soon as it is picked.
+  // Sound for an in-app recording: its own sound, a Sweam library track (replaces
+  // the recorded sound), or silence. Device uploads keep their sound and are
+  // checked for licensing by Sweam.
+  const [audioChoice, setAudioChoice] = useState<AudioChoice>('original');
+  const [tracks, setTracks] = useState<MusicTrack[]>([]);
+  const [musicTrackId, setMusicTrackId] = useState('');
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const selectedTrack = tracks.find((t) => t.id === musicTrackId) ?? null;
+  const previewPlayer = useVideoPlayer(null, (p) => {
+    p.loop = false;
+  });
+  useEffect(() => {
+    let alive = true;
+    api
+      .get<{ tracks: MusicTrack[] }>('/api/music')
+      .then((data) => {
+        if (alive) setTracks(data.tracks);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const togglePreview = useCallback(
+    (track: MusicTrack) => {
+      if (previewId === track.id) {
+        previewPlayer.pause();
+        setPreviewId(null);
+        return;
+      }
+      const src = mediaUrl(track.url);
+      if (!src) return;
+      previewPlayer.replace({ uri: src });
+      previewPlayer.play();
+      setPreviewId(track.id);
+    },
+    [previewId, previewPlayer],
+  );
+  useEffect(() => {
+    const sub = previewPlayer.addListener('playToEnd', () => setPreviewId(null));
+    return () => sub.remove();
+  }, [previewPlayer]);
   const [cover, setCover] = useState<{ name: string; url: string } | null>(null);
   const [coverBusy, setCoverBusy] = useState(false);
   const [coverNote, setCoverNote] = useState('');
@@ -256,6 +303,7 @@ export default function RecordScreen() {
       // default to MP4 — phone-gallery videos are MP4 and often report no mime.
       mime: mimeForUri(name, asset.mimeType || 'video/mp4'),
       name,
+      upload: true,
     });
     setPhase('review');
   }, []);
@@ -323,6 +371,11 @@ export default function RecordScreen() {
       setError('That video format is not supported yet. Record in the app, or pick an MP4 or WebM file.');
       return;
     }
+    if (!clip.image && !clip.upload && audioChoice === 'library' && !musicTrackId) {
+      setError('Pick a track from the Sweam music library, or choose a different sound option.');
+      return;
+    }
+    previewPlayer.pause();
     setPosting(true);
     setError(null);
     try {
@@ -338,6 +391,8 @@ export default function RecordScreen() {
         releaseDate: releaseDate.trim() || null,
         posterUrl: clip.image ? url : cover?.url,
         mediaType: clip.image ? 'image' : 'video',
+        audioSource: clip.image ? 'none' : clip.upload ? 'upload' : audioChoice,
+        musicTrackId: !clip.image && !clip.upload && audioChoice === 'library' ? musicTrackId : null,
       });
       player.pause();
       router.replace(`/watch/${result.episodeId}`);
@@ -423,6 +478,70 @@ export default function RecordScreen() {
               accessibilityLabel="Clip caption"
             />
             <Text style={styles.hint}>{captionLeft} characters left. This becomes the clip's title.</Text>
+
+            {!clip.image && clip.upload && (
+              <>
+                <Text style={styles.label}>Sound</Text>
+                <Text style={styles.hint}>
+                  An uploaded video keeps its own sound. Sweam checks uploaded sound for licensing: if it contains music that is not licensed for Sweam, the clip is muted and stays up without sound. To use music safely, record in the app and pick a track from the Sweam music library.
+                </Text>
+              </>
+            )}
+            {!clip.image && !clip.upload && (
+              <>
+                <Text style={styles.label}>Sound</Text>
+                <View style={styles.chipRow}>
+                  <Chip label="Own sound" selected={audioChoice === 'original'} disabled={posting} onPress={() => setAudioChoice('original')} />
+                  <Chip label="Sweam music" selected={audioChoice === 'library'} disabled={posting} onPress={() => setAudioChoice('library')} />
+                  <Chip label="No sound" selected={audioChoice === 'none'} disabled={posting} onPress={() => setAudioChoice('none')} />
+                </View>
+                <Text style={styles.hint}>
+                  {audioChoice === 'original'
+                    ? 'Keeps the sound your recording captured.'
+                    : audioChoice === 'library'
+                      ? 'A public-domain track from the Sweam library replaces the recorded sound, laid under the picture from the start and cut at the end of your clip.'
+                      : 'Your clip will play silently.'}
+                </Text>
+                {audioChoice === 'library' && (
+                  <View style={styles.trackList} accessibilityRole="radiogroup" accessibilityLabel="Sweam music library">
+                    {tracks.length === 0 && <Text style={styles.hint}>The library is loading, or is empty right now.</Text>}
+                    {tracks.map((track) => {
+                      const on = musicTrackId === track.id;
+                      return (
+                        <View key={track.id} style={[styles.trackRow, on && styles.trackRowOn]}>
+                          <Pressable
+                            style={styles.trackPick}
+                            onPress={() => setMusicTrackId(track.id)}
+                            disabled={posting}
+                            accessibilityRole="radio"
+                            accessibilityState={{ checked: on, disabled: posting }}
+                            accessibilityLabel={`${track.title}, ${track.composer}, ${track.durationS} seconds`}
+                          >
+                            <Ionicons name={on ? 'radio-button-on' : 'radio-button-off'} size={20} color={on ? colors.accent : colors.muted} />
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.trackTitle}>{track.title}</Text>
+                              <Text style={styles.trackMeta}>{track.composer} · {track.durationS}s</Text>
+                            </View>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => togglePreview(track)}
+                            disabled={posting}
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel={previewId === track.id ? `Stop preview of ${track.title}` : `Preview ${track.title}`}
+                          >
+                            <Ionicons name={previewId === track.id ? 'stop-circle' : 'play-circle'} size={30} color={colors.text} />
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                    {selectedTrack && (
+                      <Text style={styles.hint}>{selectedTrack.performer}. Public domain: {selectedTrack.licenseNote}</Text>
+                    )}
+                  </View>
+                )}
+              </>
+            )}
 
             {!clip.image && <Text style={styles.label}>Cover image (required)</Text>}
             <View style={styles.coverRow}>
@@ -907,6 +1026,21 @@ const styles = StyleSheet.create({
   hint: { color: colors.muted, fontSize: 12 },
   previewHint: { textAlign: 'center', paddingHorizontal: 16, marginTop: 8, lineHeight: 17 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  trackList: { gap: 6, marginTop: 8 },
+  trackRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  trackRowOn: { borderColor: colors.accent },
+  trackPick: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  trackTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  trackMeta: { color: colors.muted, fontSize: 12 },
   chipRowScroll: { flexDirection: 'row', gap: 8, paddingVertical: 2, paddingRight: 8 },
   chip: {
     paddingHorizontal: 14,

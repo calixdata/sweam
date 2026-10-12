@@ -41,6 +41,32 @@ describe('buildHlsArgs', () => {
     expect(args).toContain('-bufsize:v:0');
   });
 
+  it('drops all audio for a muted job even when the source has sound', () => {
+    const args = buildHlsArgs({ inputPath: 'source.bin', renditions, hasAudio: true, audio: { kind: 'none' } });
+    expect(args).not.toContain('0:a:0');
+    expect(args.join(' ')).not.toContain('aac');
+    expect(args[args.indexOf('-var_stream_map') + 1]).toBe('v:0 v:1 v:2');
+  });
+
+  it('replaces the source audio with a looped music track cut to the video', () => {
+    const args = buildHlsArgs({
+      inputPath: 'source.bin',
+      renditions,
+      hasAudio: true,
+      audio: { kind: 'replace', musicPath: 'music.bin' },
+    });
+    expect(args.slice(0, 7)).toEqual(['-y', '-i', 'source.bin', '-stream_loop', '-1', '-i', 'music.bin']);
+    expect(args).not.toContain('0:a:0');
+    expect(args.filter((a) => a === '1:a:0')).toHaveLength(3);
+    expect(args).toContain('-shortest');
+    expect(args[args.indexOf('-var_stream_map') + 1]).toBe('v:0,a:0 v:1,a:1 v:2,a:2');
+  });
+
+  it('lays music under a silent source too', () => {
+    const args = buildHlsArgs({ inputPath: 'source.bin', renditions, hasAudio: false, audio: { kind: 'replace', musicPath: 'music.bin' } });
+    expect(args.filter((a) => a === '1:a:0')).toHaveLength(3);
+  });
+
   it('refuses an empty rendition list', () => {
     expect(() => buildHlsArgs({ inputPath: 'x', renditions: [], hasAudio: true })).toThrow();
   });
