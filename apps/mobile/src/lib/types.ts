@@ -40,6 +40,8 @@ export interface FeedItem {
   promotedBy: string | null;
   /** 'image' for a still photo post; shown as a picture instead of a player. */
   mediaType?: 'video' | 'image';
+  /** Set when the feed plays a series' episode released in the last week. */
+  newEpisode?: { season: number; episode: number; name: string } | null;
 }
 
 export interface TitleSummary {
@@ -132,7 +134,7 @@ export interface CommentItem {
   body: string;
   status: string;
   createdAt: string;
-  author: { displayName: string; handle: string | null };
+  author: { displayName: string; handle: string | null; avatarUrl?: string | null };
   authorIsCreator: boolean;
   mine: boolean;
   likes: number;

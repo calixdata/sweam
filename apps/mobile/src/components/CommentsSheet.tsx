@@ -15,7 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { router } from 'expo-router';
-import { api } from '../lib/api';
+import { Image } from 'expo-image';
+import { api, mediaUrl } from '../lib/api';
 import { colors } from '../lib/theme';
 import type { CommentItem } from '../lib/types';
 
@@ -226,11 +227,20 @@ function SheetComment({
 
   return (
     <View style={[styles.row, isReply && styles.replyRow]}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>
-          {comment.author.displayName.slice(0, 1).toUpperCase()}
-        </Text>
-      </View>
+      {comment.author.avatarUrl ? (
+        <Image
+          source={{ uri: mediaUrl(comment.author.avatarUrl) ?? undefined }}
+          style={styles.avatar}
+          contentFit="cover"
+          accessible={false}
+        />
+      ) : (
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>
+            {comment.author.displayName.slice(0, 1).toUpperCase()}
+          </Text>
+        </View>
+      )}
       <View style={styles.rowBody}>
         {removed ? (
           <Text style={styles.removed}>Comment removed.</Text>

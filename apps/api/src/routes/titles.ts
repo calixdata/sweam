@@ -113,7 +113,7 @@ async function publishedTitleBySlug(
 
 const COMMENTS_QUERY = `
   SELECT co.id, co.parent_id, co.body, co.status, co.created_at,
-    u.id AS author_id, u.display_name AS author_name, cp.handle AS author_handle,
+    u.id AS author_id, u.display_name AS author_name, cp.handle AS author_handle, u.avatar_url AS author_avatar,
     (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = co.id) AS likes,
     (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id = co.id AND cl.user_id = ?1) AS liked_by_me
   FROM comments co

@@ -562,6 +562,8 @@ export interface ScoutRoyaltyRun {
  * everything needed to autoplay it and show engagement, in one payload.
  */
 export interface FeedItem {
+  /** Set when the feed plays an episode released in the last week (a series' new episode). */
+  newEpisode?: { season: number; episode: number; name: string } | null;
   titleId: string;
   slug: string;
   name: string;
@@ -1422,7 +1424,7 @@ export interface CommentItem {
   body: string;
   status: CommentStatus;
   createdAt: string;
-  author: { displayName: string; handle: string | null };
+  author: { displayName: string; handle: string | null; avatarUrl?: string | null };
   /** True when the title's own creator wrote it (shown as a badge). */
   authorIsCreator: boolean;
   /** True when the signed-in viewer wrote it. */

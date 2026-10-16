@@ -136,9 +136,18 @@ export default function CreatorScreen() {
         <Pressable style={styles.back} onPress={() => router.back()} hitSlop={12} accessibilityLabel="Back">
           <Ionicons name="chevron-back" size={26} color={colors.text} />
         </Pressable>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{page.displayName.slice(0, 1).toUpperCase()}</Text>
-        </View>
+        {page.avatarUrl ? (
+          <Image
+            source={{ uri: mediaUrl(page.avatarUrl) ?? undefined }}
+            style={styles.avatar}
+            contentFit="cover"
+            accessibilityLabel={`Profile picture of ${page.displayName}`}
+          />
+        ) : (
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{page.displayName.slice(0, 1).toUpperCase()}</Text>
+          </View>
+        )}
         <View style={styles.nameRow}>
           <Text style={styles.name}>{page.displayName}</Text>
           {page.verified && (

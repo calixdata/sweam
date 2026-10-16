@@ -36,6 +36,10 @@ interface FeedRow {
   is_blu: number;
   promoted_by: string | null;
   media_type: 'video' | 'image' | null;
+  episode_season: number;
+  episode_number: number;
+  episode_name: string;
+  episode_release_at: string | null;
 }
 
 const PAGE = 20;
@@ -49,6 +53,7 @@ const FEED_SELECT = `
     cp.handle AS creator_handle, t.poster_url,
     t.is_blu AS is_blu, t.promoted_by AS promoted_by,
     e.id AS episode_id, e.video_url, e.media_type, t.published_at,
+    e.season AS episode_season, e.episode AS episode_number, e.name AS episode_name, e.release_at AS episode_release_at,
     COALESCE(s.plays, 0) AS views, COALESCE(s.likes, 0) AS likes,
     (SELECT COUNT(*) FROM comments co WHERE co.title_id = t.id AND co.status = 'visible') AS comment_count,
     (SELECT COUNT(*) FROM likes l WHERE l.title_id = t.id AND l.user_id = ?1) AS liked_by_me
@@ -56,10 +61,17 @@ const FEED_SELECT = `
   JOIN users u ON u.id = t.creator_id
   JOIN creator_profiles cp ON cp.user_id = t.creator_id
   LEFT JOIN title_stats s ON s.title_id = t.id
-  JOIN episodes e ON e.id = (
-    SELECT id FROM episodes WHERE title_id = t.id
-      AND (release_at IS NULL OR release_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-    ORDER BY season, episode LIMIT 1
+  -- A series plays its newest episode for a week after that episode releases,
+  -- so a scheduled release shows up in the feed; otherwise the first episode.
+  JOIN episodes e ON e.id = COALESCE(
+    (SELECT id FROM episodes WHERE title_id = t.id
+       AND release_at IS NOT NULL
+       AND release_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+       AND release_at >= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-7 days')
+     ORDER BY release_at DESC, season DESC, episode DESC LIMIT 1),
+    (SELECT id FROM episodes WHERE title_id = t.id
+       AND (release_at IS NULL OR release_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+     ORDER BY season, episode LIMIT 1)
   )
 `;
 
@@ -86,6 +98,10 @@ function toFeedItem(row: FeedRow): FeedItem {
     isBlu: row.is_blu === 1,
     promotedBy: row.promoted_by,
     mediaType: row.media_type === 'image' ? 'image' : 'video',
+    newEpisode:
+      row.episode_release_at && Date.parse(row.episode_release_at) >= Date.now() - 7 * 86_400_000
+        ? { season: row.episode_season, episode: row.episode_number, name: row.episode_name }
+        : null,
   };
 }
 

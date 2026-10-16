@@ -3,12 +3,14 @@ import { ActivityIndicator, FlatList, Pressable, ScrollView, StyleSheet, Text, V
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, mediaUrl } from '../../lib/api';
 import { BluBadge } from '../../components/BluBadge';
 import { colors, radius } from '../../lib/theme';
 import type { HomePayload, TitleSummary } from '../../lib/types';
 
 export default function BrowseScreen() {
+  const insets = useSafeAreaInsets();
   const [payload, setPayload] = useState<HomePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +28,7 @@ export default function BrowseScreen() {
   const feature = spotlight?.titles[0] ?? payload.rails[0]?.titles[0] ?? null;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 40 }}>
+    <ScrollView style={styles.screen} contentContainerStyle={{ paddingTop: insets.top, paddingBottom: 40 }}>
       <Text style={styles.brand}>SWEAM</Text>
       <Pressable
         style={styles.searchBar}

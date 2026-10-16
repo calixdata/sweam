@@ -401,6 +401,11 @@ function FeedCard({
             <Ionicons name="checkmark-circle" size={16} color={colors.pink} accessibilityLabel="Verified account" />
           ) : null}
         </Pressable>
+        {item.newEpisode ? (
+          <Text style={styles.captionNew}>
+            New episode · S{item.newEpisode.season} E{item.newEpisode.episode} {item.newEpisode.name}
+          </Text>
+        ) : null}
         <Text style={styles.captionText} numberOfLines={2}>{item.name}</Text>
         {item.promotedBy ? (
           <Text style={styles.captionPromoted}>Promoted by {item.promotedBy}</Text>
@@ -472,6 +477,7 @@ const styles = StyleSheet.create({
   captionCreator: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   captionName: { color: '#fff', fontSize: 16, fontWeight: '700' },
   captionText: { color: 'rgba(255,255,255,0.9)', fontSize: 14 },
+  captionNew: { color: colors.accent, fontSize: 13, fontWeight: '800', marginBottom: 3 },
   captionPromoted: { color: '#f5c47c', fontSize: 12, fontWeight: '700', marginTop: 3 },
   feedAvatar: {
     width: 30,

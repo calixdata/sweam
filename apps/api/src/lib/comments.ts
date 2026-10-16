@@ -19,6 +19,7 @@ export interface CommentRow {
   author_id: string;
   author_name: string;
   author_handle: string | null;
+  author_avatar?: string | null;
   likes: number;
   liked_by_me: number;
 }
@@ -40,7 +41,7 @@ export function buildCommentTree(
     body: row.status === 'visible' ? row.body : '',
     status: row.status,
     createdAt: row.created_at,
-    author: { displayName: row.author_name, handle: row.author_handle },
+    author: { displayName: row.author_name, handle: row.author_handle, avatarUrl: row.author_avatar ?? null },
     authorIsCreator: row.author_id === opts.titleCreatorId,
     mine: opts.viewerId !== null && row.author_id === opts.viewerId,
     likes: row.likes,
