@@ -117,6 +117,12 @@ export default function TitleScreen() {
   const firstEpisode = title.episodes.find((ep) => ep.released !== false) ?? null;
   const firstUpcoming = title.episodes.find((ep) => ep.released === false) ?? null;
   const scheduled = title.episodes.filter((ep) => ep.released === false);
+  // Every episode that can stream now, so each release gets its own row.
+  const releasedEpisodes = title.episodes.filter((ep) => ep.released !== false);
+  const locked = title.isBlu && !title.bluAccess;
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const isNew = (releaseAt: string | null | undefined) =>
+    Boolean(releaseAt) && Date.parse(releaseAt as string) >= Date.now() - WEEK_MS;
 
   async function toggleReminder(episodeId: string, current: boolean | undefined) {
     if (!title) return;
@@ -183,7 +189,7 @@ export default function TitleScreen() {
         </Text>
         <Text style={styles.stats}>
           {title.views.toLocaleString()} views · {title.likes.toLocaleString()} likes ·{' '}
-          {title.commentCount.toLocaleString()} comments
+          {title.commentCount.toLocaleString()} {title.commentCount === 1 ? 'comment' : 'comments'}
         </Text>
         <Text style={styles.synopsis}>{title.synopsis}</Text>
 
@@ -227,9 +233,50 @@ export default function TitleScreen() {
           ) : (
             <Pressable style={styles.playBtn} onPress={() => router.push(`/watch/${firstEpisode.id}`)}>
               <Ionicons name="play" size={20} color="#04121a" />
-              <Text style={styles.playText}>{title.episodes.length > 1 ? 'Play S1 E1' : 'Play'}</Text>
+              <Text style={styles.playText}>
+                {title.episodes.length > 1 ? `Play S${firstEpisode.season} E${firstEpisode.episode}` : 'Play'}
+              </Text>
             </Pressable>
           ))}
+
+        {title.episodes.length > 1 && releasedEpisodes.length > 0 && (
+          <View>
+            <Text style={styles.sectionTitle}>Episodes</Text>
+            {releasedEpisodes.map((ep) => {
+              const fresh = isNew(ep.releaseAt);
+              const label = `S${ep.season} E${ep.episode}: ${ep.name}`;
+              return (
+                <Pressable
+                  key={ep.id}
+                  style={styles.upcomingRow}
+                  onPress={() => {
+                    if (locked) {
+                      if (Platform.OS !== 'ios') void subscribeBlu();
+                      return;
+                    }
+                    router.push(`/watch/${ep.id}`);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${fresh ? 'New. ' : ''}${label}${locked ? '. Sweam Blu, subscribers only' : '. Play'}`}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.upcomingName}>{label}</Text>
+                    {fresh && ep.releaseAt ? (
+                      <Text style={styles.newLine}>New · released {releaseDay(ep.releaseAt)}</Text>
+                    ) : ep.durationS > 0 ? (
+                      <Text style={styles.episodeMeta}>{Math.max(1, Math.round(ep.durationS / 60))} min</Text>
+                    ) : null}
+                  </View>
+                  <Ionicons
+                    name={locked ? 'lock-closed' : 'play-circle'}
+                    size={28}
+                    color={locked ? colors.muted : colors.accent}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
 
         {scheduled.length > 0 && (
           <View>
@@ -457,6 +504,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   upcomingName: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  newLine: { color: colors.accent, fontSize: 13, fontWeight: '700', marginTop: 4 },
+  episodeMeta: { color: colors.muted, fontSize: 13, marginTop: 4 },
   sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '700', marginTop: 20 },
   composer: { gap: 8 },
   input: {

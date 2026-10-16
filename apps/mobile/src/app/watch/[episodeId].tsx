@@ -169,6 +169,19 @@ export default function WatchScreen() {
         ) : episode.audioSource === 'none' ? (
           <Text style={styles.muted}>This clip has no sound by the creator's choice.</Text>
         ) : null}
+        {payload.nextEpisode ? (
+          <Pressable
+            style={styles.nextBtn}
+            onPress={() => router.replace(`/watch/${payload.nextEpisode!.id}`)}
+            accessibilityRole="button"
+            accessibilityLabel={`Next episode: S${payload.nextEpisode.season} E${payload.nextEpisode.episode}, ${payload.nextEpisode.name}`}
+          >
+            <Ionicons name="play-skip-forward" size={18} color="#04121a" />
+            <Text style={styles.nextText} numberOfLines={1}>
+              Next: S{payload.nextEpisode.season} E{payload.nextEpisode.episode} {payload.nextEpisode.name}
+            </Text>
+          </Pressable>
+        ) : null}
         {episode.synopsis ? <Text style={styles.synopsis}>{episode.synopsis}</Text> : null}
       </View>
     </ScrollView>
@@ -192,6 +205,19 @@ const styles = StyleSheet.create({
   actionBtn: { alignItems: 'center', gap: 4 },
   actionText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   synopsis: { color: colors.muted, fontSize: 15, lineHeight: 21, marginTop: 10 },
+  nextBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    marginTop: 14,
+    maxWidth: '100%',
+  },
+  nextText: { color: '#04121a', fontSize: 15, fontWeight: '700', flexShrink: 1 },
   title: { color: colors.text, fontSize: 22, fontWeight: '700', textAlign: 'center' },
   primaryBtn: { backgroundColor: colors.accent, paddingVertical: 12, paddingHorizontal: 28, borderRadius: 10 },
   primaryBtnText: { color: '#04121a', fontSize: 16, fontWeight: '700' },
