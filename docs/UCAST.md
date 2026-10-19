@@ -17,8 +17,8 @@ what UCast sells to media and film companies.
 
 - Text only. A ballot is roles and names; there is no image or media field.
   No faces, no AI likenesses or cloned voices. Covers are admin-set art.
-- The disclaimer appears on every UCast page:
-  "Fan concept. Not a real project. No artist attached. No AI faces or voices."
+- Every UCast page carries the host line: "Hosted by @ucast, Sweam's own
+  account." (No fan-concept disclaimer: removed 2026-10-19.)
 - Classics only: five years old or older (`UCAST_MIN_WORK_AGE_YEARS`).
 - One ballot per member per poll; resubmitting replaces it (and drops the
   agreements the old picks had gathered). Each role once per ballot.

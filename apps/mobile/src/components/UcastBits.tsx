@@ -6,15 +6,24 @@ import { router } from 'expo-router';
 import { mediaUrl } from '../lib/api';
 import { phaseLabel, plural, pollStatusLine } from '../lib/ucast';
 import { colors, radius } from '../lib/theme';
-import { UCAST_DISCLAIMER, UCAST_WORK_KIND_LABELS } from '../lib/types';
+import { UCAST_HANDLE, UCAST_WORK_KIND_LABELS } from '../lib/types';
 import type { UcastPollSummary } from '../lib/types';
 
-/** The house disclaimer, on every UCast screen, word for word. */
+/** The host line on every UCast screen: who runs the room. */
 export function UcastDisclaimer() {
   return (
     <View style={styles.disclaimer}>
-      <Text style={styles.disclaimerText} accessibilityRole="text">
-        {UCAST_DISCLAIMER}
+      <Text style={styles.disclaimerText}>
+        Hosted by{' '}
+        <Text
+          style={styles.hostLink}
+          onPress={() => router.push(`/c/${UCAST_HANDLE}`)}
+          accessibilityRole="link"
+          accessibilityLabel="@ucast, verified. View the UCast profile"
+        >
+          @{UCAST_HANDLE}
+        </Text>
+        , Sweam&apos;s own account.
       </Text>
     </View>
   );
@@ -99,6 +108,7 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
   },
   disclaimerText: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  hostLink: { color: colors.accent, fontWeight: '700' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

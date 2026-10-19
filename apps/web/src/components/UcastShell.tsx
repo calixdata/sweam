@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import type { UcastPhase, UcastPollSummary } from '@sweam/shared';
-import { UCAST_DISCLAIMER, UCAST_HANDLE, UCAST_NAME, UCAST_PHASE_LABELS, UCAST_WORK_KIND_LABELS } from '@sweam/shared';
+import { UCAST_HANDLE, UCAST_NAME, UCAST_PHASE_LABELS, UCAST_WORK_KIND_LABELS } from '@sweam/shared';
 import { useAuth } from '../auth';
 import { VerifiedBadge } from './VerifiedBadge';
 
@@ -142,7 +142,7 @@ export function UcastShell({ children, title }: { children: ReactNode; title?: s
       {title && <h1 className="visually-hidden">{title}</h1>}
       {children}
       <p className="ucast-disclaimer" role="note">
-        {UCAST_DISCLAIMER} Hosted by{' '}
+        Hosted by{' '}
         <Link to={`/c/${UCAST_HANDLE}`}>
           @{UCAST_HANDLE} <VerifiedBadge />
         </Link>

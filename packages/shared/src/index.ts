@@ -1562,9 +1562,6 @@ export interface VerbatiimStatus {
  */
 export const UCAST_HANDLE = 'ucast';
 export const UCAST_NAME = 'UCast';
-/** The same words on every poll, exactly as the fancast house rules put them. */
-export const UCAST_DISCLAIMER =
-  'Fan concept. Not a real project. No artist attached. No AI faces or voices.';
 
 export const UCAST_WORK_KINDS = ['film', 'tv', 'song', 'musical', 'music_video'] as const;
 export type UcastWorkKind = (typeof UCAST_WORK_KINDS)[number];
