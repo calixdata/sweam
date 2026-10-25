@@ -26,7 +26,7 @@ function escapeHtml(value: string): string {
 
 export async function sendEmail(
   env: Env,
-  message: { to: string; subject: string; html: string; text: string },
+  message: { to: string; subject: string; html: string; text: string; headers?: Record<string, string> },
 ): Promise<void> {
   if (!env.RESEND_API_KEY) throw new EmailError('Email sending is not configured.');
   let res: Response;
@@ -43,6 +43,7 @@ export async function sendEmail(
         subject: message.subject,
         html: message.html,
         text: message.text,
+        ...(message.headers ? { headers: message.headers } : {}),
       }),
     });
   } catch {

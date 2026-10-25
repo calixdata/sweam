@@ -1737,3 +1737,24 @@ export interface ScoutUcastPoll {
   participants: number;
   totalVotes: number;
 }
+
+// ---------------------------------------------------------------------------
+// Notification delivery
+// ---------------------------------------------------------------------------
+
+export interface NotificationPrefs {
+  /** Email when an episode the member asked about, or a followed creator's episode, releases. */
+  releaseEmails: boolean;
+  /** How many phones this account has registered for push. */
+  pushDevices: number;
+}
+
+/** What Firebase answered for one registered phone. */
+export interface PushTestDevice {
+  platform: string;
+  /** Last 8 characters of the device token. */
+  device: string;
+  ok: boolean;
+  status: number;
+  error: string | null;
+}

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { sendPushToUser } from '../lib/fcm';
 import { deleteCookie, getCookie } from 'hono/cookie';
 import type { BlockedAccount, MyVerification, NotificationItem, VerificationStatus } from '@sweam/shared';
 import { UPLOAD_SPECS } from '@sweam/shared';
@@ -22,6 +23,7 @@ import {
   reportCreateSchema,
   usernameSchema,
   verificationRequestSchema,
+  notificationPrefsSchema,
 } from '../lib/validate';
 import { mediaKeyFor, resolveUploadContentType } from './studio';
 
@@ -610,6 +612,48 @@ meRoutes.post('/notifications/read-all', async (c) => {
     .bind(currentUser(c).id)
     .run();
   return c.json({ ok: true });
+});
+
+/** Notification preferences: release emails on or off. */
+meRoutes.get('/notification-prefs', async (c) => {
+  const user = currentUser(c);
+  const row = await c.env.DB.prepare(
+    'SELECT release_emails, (SELECT COUNT(*) FROM push_tokens WHERE user_id = ?1) AS devices FROM users WHERE id = ?1',
+  )
+    .bind(user.id)
+    .first<{ release_emails: number; devices: number }>();
+  return c.json({ releaseEmails: (row?.release_emails ?? 1) === 1, pushDevices: row?.devices ?? 0 });
+});
+
+meRoutes.put('/notification-prefs', async (c) => {
+  const user = currentUser(c);
+  const body = await parseBody(c, notificationPrefsSchema);
+  await c.env.DB.prepare('UPDATE users SET release_emails = ? WHERE id = ?')
+    .bind(body.releaseEmails ? 1 : 0, user.id)
+    .run();
+  const devices = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM push_tokens WHERE user_id = ?')
+    .bind(user.id)
+    .first<{ n: number }>();
+  return c.json({ releaseEmails: body.releaseEmails, pushDevices: devices?.n ?? 0 });
+});
+
+/**
+ * Send a test push to every phone this account has registered and return what
+ * Firebase answered for each, so a member (or Sweam) can see at once whether
+ * phone notifications work. Limited to a few per hour.
+ */
+meRoutes.post('/push-test', async (c) => {
+  const user = currentUser(c);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.pushTest, user.id);
+  const results = await sendPushToUser(
+    c.env.DB,
+    user.id,
+    'Sweam',
+    'Test notification: phone notifications are working.',
+    '/notifications',
+    'test',
+  );
+  return c.json({ devices: results });
 });
 
 // The mobile app registers its FCM device token here after sign-in.

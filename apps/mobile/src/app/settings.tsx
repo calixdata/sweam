@@ -19,7 +19,8 @@ import { ApiError, api, getToken, mediaUrl } from '../lib/api';
 import { API_BASE } from '../lib/config';
 import { useAuth } from '../lib/auth';
 import { colors } from '../lib/theme';
-import type { AudienceSettings, BlockedAccount } from '../lib/types';
+import type { AudienceSettings, BlockedAccount, NotificationPrefs, PushTestDevice } from '../lib/types';
+import { registerForPush } from '../lib/push';
 
 /** Max profile picture size, mirrored from the API (UPLOAD_SPECS.avatar). */
 const AVATAR_MAX_BYTES = 5 * 1024 * 1024;
@@ -50,6 +51,7 @@ export default function SettingsScreen() {
         <ProfilePictureSection avatarUrl={user.avatarUrl} name={user.displayName} refresh={refresh} />
         <ChangeEmailSection currentEmail={user.email} />
         <ChangePasswordSection />
+        <NotificationsSection />
         <AudienceSection />
         <BlockedAccountsSection />
         <DeleteAccountSection />
@@ -408,6 +410,105 @@ const AUDIENCE_OPTIONS: ReadonlyArray<[AudienceSettings['feedAudience'], string]
   ['women', 'Women only'],
   ['men', 'Men only'],
 ];
+
+function NotificationsSection() {
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setPrefs(await api.get<NotificationPrefs>('/api/me/notification-prefs'));
+    } catch {
+      setNote('Could not load notification settings.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function setReleaseEmails(on: boolean) {
+    setBusy(true);
+    try {
+      setPrefs(await api.put<NotificationPrefs>('/api/me/notification-prefs', { releaseEmails: on }));
+    } catch (err) {
+      setNote(err instanceof ApiError ? err.message : 'Could not save.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendTest() {
+    setBusy(true);
+    setNote('Registering this phone and sending a test…');
+    try {
+      // Re-register first: asks for permission if needed and refreshes this phone's token.
+      await registerForPush();
+      const { devices } = await api.post<{ devices: PushTestDevice[] }>('/api/me/push-test');
+      if (devices.length === 0) {
+        setNote('This phone could not register. Allow notifications for Sweam in Android Settings, then try again.');
+      } else {
+        const ok = devices.filter((d) => d.ok).length;
+        setNote(
+          ok > 0
+            ? `Test sent to ${ok} phone${ok === 1 ? '' : 's'}. It should appear within a minute.`
+            : `The test could not be sent: ${devices[0]?.error ?? 'unknown error'}`,
+        );
+      }
+      await load();
+    } catch (err) {
+      setNote(err instanceof ApiError ? err.message : 'Could not send the test.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Notifications</Text>
+      <Text style={styles.sectionHint}>
+        When an episode you asked about, or a new episode from a creator you follow, releases, Sweam
+        tells you in the app, on this phone, and by email.
+      </Text>
+      {prefs === null ? (
+        <ActivityIndicator color={colors.accent} />
+      ) : (
+        <>
+          <Text style={styles.fieldLabel}>Release emails</Text>
+          <View style={styles.chipRow}>
+            {([true, false] as const).map((on) => (
+              <Pressable
+                key={String(on)}
+                style={[styles.chip, prefs.releaseEmails === on && styles.chipOn]}
+                disabled={busy}
+                onPress={() => void setReleaseEmails(on)}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: prefs.releaseEmails === on }}
+                accessibilityLabel={on ? 'Release emails on' : 'Release emails off'}
+              >
+                <Text style={[styles.chipText, prefs.releaseEmails === on && styles.chipTextOn]}>{on ? 'On' : 'Off'}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable
+            style={styles.primaryBtn}
+            disabled={busy}
+            onPress={() => void sendTest()}
+            accessibilityRole="button"
+          >
+            <Text style={styles.primaryBtnText}>Send a test notification</Text>
+          </Pressable>
+        </>
+      )}
+      {note && (
+        <Text style={styles.status} accessibilityLiveRegion="polite">
+          {note}
+        </Text>
+      )}
+    </View>
+  );
+}
 
 function AudienceSection() {
   const [data, setData] = useState<AudienceSettings | null>(null);

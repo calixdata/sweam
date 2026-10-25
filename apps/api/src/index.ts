@@ -3,7 +3,10 @@ import { HTTPException } from 'hono/http-exception';
 import type { ApiErrorBody } from '@sweam/shared';
 import type { AppEnv, Env } from './env';
 import { requireContentAccess, withUser } from './lib/session';
-import { setPushEnv } from './lib/fcm';
+import { pushSelfCheck, setPushEnv } from './lib/fcm';
+
+/** Run the push self-check once per Worker instance, on its first release-cron tick. */
+let pushSelfChecked = false;
 import { runBluFund } from './lib/fund';
 import { announceReleasedEpisodes } from './lib/release';
 import { previousMonthPeriod, runScoutRoyalty } from './lib/royalty';
@@ -28,6 +31,7 @@ import { transcodeRoutes } from './routes/transcode';
 import { ucastRoutes } from './routes/ucast';
 import { ucastAdminRoutes } from './routes/ucastAdmin';
 import { musicRoutes } from './routes/music';
+import { emailPrefsRoutes } from './routes/emailPrefs';
 import { titleRoutes } from './routes/titles';
 import { verbatiimStudioRoutes, verbatiimWebhookRoutes } from './routes/verbatiim';
 import { watchRoutes } from './routes/watch';
@@ -64,6 +68,7 @@ app.route('/api/scout', scoutRoutes);
 app.route('/api/transcode', transcodeRoutes);
 app.route('/api/admin/ucast', ucastAdminRoutes);
 app.route('/api/music', musicRoutes);
+app.route('/api/email', emailPrefsRoutes);
 app.route('/api/admin', adminRoutes);
 app.route('/api/admin/blu', royaltyRoutes);
 app.route('/api/ads', adRoutes);
@@ -126,8 +131,12 @@ export default {
     // the monthly one runs the payout distributions.
     if (event.cron === RELEASE_CRON) {
       setPushEnv(env);
+      if (!pushSelfChecked) {
+        pushSelfChecked = true;
+        ctx.waitUntil(pushSelfCheck(env.DB).catch((err) => console.error('push_selfcheck_failed', err)));
+      }
       ctx.waitUntil(
-        announceReleasedEpisodes(env.DB).catch((err) => console.error('release_announce_failed', err)),
+        announceReleasedEpisodes(env).catch((err) => console.error('release_announce_failed', err)),
       );
       return;
     }

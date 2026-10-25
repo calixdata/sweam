@@ -207,6 +207,11 @@ export const searchQuerySchema = z.object({
   q: z.string().trim().min(1, 'Enter a search term.').max(80),
 });
 
+/** Notification preferences the member controls in Settings. */
+export const notificationPrefsSchema = z.object({
+  releaseEmails: z.boolean(),
+});
+
 export const pushTokenSchema = z.object({
   token: z.string().trim().min(1).max(4096),
   platform: z.enum(['android', 'ios']).default('android'),

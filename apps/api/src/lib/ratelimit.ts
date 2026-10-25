@@ -18,6 +18,8 @@ export interface RateLimitRule {
 
 /** The abuse surfaces and their budgets. */
 export const RATE_LIMITS = {
+  /** Test pushes a member can send to their own phones. */
+  pushTest: { name: 'push-test', limit: 6, windowS: 60 * 60 },
   /** Credential guessing against one account. */
   signinEmail: { name: 'signin-email', limit: 10, windowS: 15 * 60 },
   /** Credential stuffing from one address. */

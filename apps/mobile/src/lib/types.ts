@@ -389,3 +389,16 @@ export interface MusicTrack {
   licenseNote: string;
   sourceUrl: string;
 }
+
+export interface NotificationPrefs {
+  releaseEmails: boolean;
+  pushDevices: number;
+}
+
+export interface PushTestDevice {
+  platform: string;
+  device: string;
+  ok: boolean;
+  status: number;
+  error: string | null;
+}

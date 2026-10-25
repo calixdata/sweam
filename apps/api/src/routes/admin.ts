@@ -1742,7 +1742,7 @@ const GC_JOBS_PER_RUN = 20;
  * (the same job the 10-minute cron runs), for ops and for testing.
  */
 adminRoutes.post('/maintenance/announce-releases', async (c) => {
-  const announced = await announceReleasedEpisodes(c.env.DB);
+  const announced = await announceReleasedEpisodes(c.env);
   return c.json({ announced });
 });
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { AudienceSettings, BlockedAccount, MyVerification } from '@sweam/shared';
+import type { AudienceSettings, BlockedAccount, MyVerification, NotificationPrefs, PushTestDevice } from '@sweam/shared';
 import { UPLOAD_SPECS, USERNAME_HINT, USERNAME_RE } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
@@ -156,6 +156,7 @@ export function Settings() {
 
       <ChangePasswordSection />
 
+      <NotificationsSection />
       <AudienceSection />
 
       <BlockedAccountsSection />
@@ -178,6 +179,92 @@ export function Settings() {
 }
 
 /** Self-declared sex and the For You / feed audience filter. */
+function NotificationsSection() {
+  const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    apiGet<NotificationPrefs>('/api/me/notification-prefs')
+      .then(setPrefs)
+      .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load notification settings.'));
+  }, []);
+
+  async function setReleaseEmails(on: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      setPrefs(await apiSend<NotificationPrefs>('PUT', '/api/me/notification-prefs', { releaseEmails: on }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not save. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendTest() {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const { devices } = await apiSend<{ devices: PushTestDevice[] }>('POST', '/api/me/push-test');
+      if (devices.length === 0) {
+        setTestResult('No phone is registered for this account yet. Open the Sweam app, sign in, and allow notifications when asked.');
+      } else {
+        setTestResult(
+          devices
+            .map((d) => (d.ok ? `Sent to your ${d.platform} phone (ending ${d.device}). It should arrive within a minute.` : `Could not send to your ${d.platform} phone (ending ${d.device}): ${d.error ?? `error ${d.status}`}`))
+            .join(' '),
+        );
+      }
+    } catch (err) {
+      setTestResult(err instanceof ApiError ? err.message : 'Could not send the test.');
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby="notify-heading">
+      <h2 id="notify-heading">Notifications</h2>
+      <p className="page-intro">
+        When an episode you asked to be notified about, or a new episode from a creator you follow,
+        releases, Sweam tells you in the app, on your phone, and by email.
+      </p>
+      {error && <p role="alert">{error}</p>}
+      {prefs === null ? (
+        <p>Loading…</p>
+      ) : (
+        <>
+          <div className="field field-checkbox">
+            <label>
+              <input
+                type="checkbox"
+                checked={prefs.releaseEmails}
+                disabled={busy}
+                onChange={(event) => void setReleaseEmails(event.target.checked)}
+              />{' '}
+              Email me when new episodes release
+            </label>
+          </div>
+          <p className="field-hint">
+            {prefs.pushDevices === 0
+              ? 'No phone is registered for notifications on this account.'
+              : `${prefs.pushDevices} phone${prefs.pushDevices === 1 ? '' : 's'} registered for notifications.`}
+          </p>
+          <button type="button" className="button button-quiet" disabled={testing} onClick={() => void sendTest()}>
+            {testing ? 'Sending…' : 'Send a test notification to my phone'}
+          </button>
+          <p className="status" role="status" aria-live="polite">
+            {testResult}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
+
 function AudienceSection() {
   const [data, setData] = useState<AudienceSettings | null>(null);
   const [error, setError] = useState<string | null>(null);

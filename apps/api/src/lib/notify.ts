@@ -25,7 +25,7 @@ export async function notify(
     .run();
   // Best-effort device push on top of the durable in-app notification.
   try {
-    await sendPushToUser(db, userId, 'Sweam', body, link);
+    await sendPushToUser(db, userId, 'Sweam', body, link, kind);
   } catch {
     /* push failures never break the write */
   }
