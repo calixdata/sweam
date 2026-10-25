@@ -67,9 +67,9 @@ bucket_name = "sweam-media"
 
 [env.preview.vars]
 ENVIRONMENT = "production"
-# Falcyn Inc mailing address for the release email footer (CAN-SPAM). Empty
-# until provided; the footer then shows the company name only.
-MAIL_POSTAL_ADDRESS = ""
+# Falcyn Inc mailing address for the release email footer (CAN-SPAM). While it
+# is empty, only Notify-me release emails are sent.
+MAIL_POSTAL_ADDRESS = "1207 Delaware Ave #4777, Wilmington, DE 19806"
 # TRANSCODER_TOKEN is a secret on this environment (wrangler secret put
 # TRANSCODER_TOKEN --env preview); the same value is set on the Fly app
 # sweam-transcoder. Never a var here, or the dev default would be live.
