@@ -3229,3 +3229,127 @@ input[type='checkbox'] {
   width: 100%;
   margin: 0.5rem 0;
 }
+
+/* Settings: header link, on-this-page list, and on/off switches. */
+.header-settings {
+  white-space: nowrap;
+}
+
+.settings-toc {
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  border-radius: 12px;
+}
+
+.settings-toc-heading {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.settings-toc ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#notifications,
+#notify-heading {
+  scroll-margin-top: 5rem;
+}
+
+.setting-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+}
+
+.setting-switch-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.setting-switch-label {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  padding: 0.25rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.switch:focus-visible {
+  outline: 3px solid #4de0f3;
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+.switch:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.switch-track {
+  position: relative;
+  width: 3rem;
+  height: 1.7rem;
+  border-radius: 999px;
+  background: #3a4a63;
+  transition: background 0.15s ease;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 0.2rem;
+  left: 0.2rem;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  background: #f4f7ff;
+  transition: transform 0.15s ease;
+}
+
+.switch-on .switch-track {
+  background: #4de0f3;
+}
+
+.switch-on .switch-thumb {
+  transform: translateX(1.3rem);
+  background: #04121a;
+}
+
+.switch-state {
+  min-width: 2rem;
+  font-weight: 700;
+}
+
+.setting-tests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch-track,
+  .switch-thumb {
+    transition: none;
+  }
+}

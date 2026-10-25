@@ -169,7 +169,7 @@ export function releaseEmail(opts: {
   const watchUrl = single ? `${site}/watch/${single.id}` : titleUrl;
   const ctaUrl = canWatch ? watchUrl : titleUrl;
   const ctaLabel = canWatch ? (single ? 'Watch now' : 'Watch the new episodes') : 'Subscribe to watch';
-  const settingsUrl = `${site}/settings`;
+  const settingsUrl = `${site}/settings#notifications`;
   const standalone = isStandalone(content);
   const by = title.creator_handle ? `@${title.creator_handle}` : title.creator_name;
   const lead = standalone

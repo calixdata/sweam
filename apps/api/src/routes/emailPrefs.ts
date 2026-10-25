@@ -36,7 +36,7 @@ emailPrefsRoutes.get('/unsubscribe', async (c) => {
   const userId = c.req.query('u') ?? '';
   const token = c.req.query('t') ?? '';
   if (!(await check(c.env.DB, userId, token))) {
-    return c.html(page('Link not valid', '<h1>That link is not valid</h1><p>Turn release emails off in <a href="/settings">Settings</a> instead.</p>'), 400);
+    return c.html(page('Link not valid', '<h1>That link is not valid</h1><p>Turn release emails off in <a href="/settings#notifications">Settings</a> instead.</p>'), 400);
   }
   const action = `/api/email/unsubscribe?u=${encodeURIComponent(userId)}&amp;t=${token}`;
   return c.html(
@@ -52,14 +52,14 @@ emailPrefsRoutes.post('/unsubscribe', async (c) => {
   const userId = c.req.query('u') ?? '';
   const token = c.req.query('t') ?? '';
   if (!(await check(c.env.DB, userId, token))) {
-    return c.html(page('Link not valid', '<h1>That link is not valid</h1><p>Turn release emails off in <a href="/settings">Settings</a> instead.</p>'), 400);
+    return c.html(page('Link not valid', '<h1>That link is not valid</h1><p>Turn release emails off in <a href="/settings#notifications">Settings</a> instead.</p>'), 400);
   }
   await c.env.DB.prepare('UPDATE users SET release_emails = 0 WHERE id = ?').bind(userId).run();
   console.log('release_emails_unsubscribed', userId, nowIso());
   return c.html(
     page(
       'Release emails stopped',
-      '<h1>Release emails stopped</h1><p>You will not get emails about new releases on Sweam any more. You can turn them back on any time in <a href="/settings">Settings</a>.</p>',
+      '<h1>Release emails stopped</h1><p>You will not get emails about new releases on Sweam any more. You can turn them back on any time in <a href="/settings#notifications">Settings</a>.</p>',
     ),
   );
 });

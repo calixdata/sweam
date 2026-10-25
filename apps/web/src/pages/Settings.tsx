@@ -5,7 +5,7 @@ import type { AudienceSettings, BlockedAccount, MyVerification, NotificationPref
 import { UPLOAD_SPECS, USERNAME_HINT, USERNAME_RE } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Avatar } from '../components/Avatar';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { usePageTitle } from '../hooks';
@@ -13,9 +13,30 @@ import { uploadMedia } from '../upload';
 
 type UsernameStatus = 'idle' | 'invalid' | 'checking' | 'available' | 'taken' | 'current';
 
+/** Scroll to and focus the section named in the URL hash once the page has rendered. */
+function useHashFocus(ready: boolean) {
+  const location = useLocation();
+  useEffect(() => {
+    if (!ready || !location.hash) return;
+    const id = decodeURIComponent(location.hash.slice(1));
+    const timer = window.setTimeout(() => {
+      const target = document.getElementById(id);
+      if (!target) return;
+      target.scrollIntoView({ block: 'start' });
+      const heading = target.matches('h2') ? target : target.querySelector('h2');
+      if (heading instanceof HTMLElement) {
+        if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+        heading.focus({ preventScroll: true });
+      }
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [ready, location.hash]);
+}
+
 export function Settings() {
   usePageTitle('Settings');
   const { user, loading, refresh } = useAuth();
+  useHashFocus(!loading && Boolean(user));
 
   const [username, setUsername] = useState('');
   const [status, setStatus] = useState<UsernameStatus>('idle');
@@ -99,6 +120,24 @@ export function Settings() {
   return (
     <div className="page page-form">
       <h1>Settings</h1>
+      <nav aria-labelledby="settings-toc-heading" className="settings-toc">
+        <h2 id="settings-toc-heading" className="settings-toc-heading">On this page</h2>
+        <ul>
+          <li><a href="#notifications">Notifications</a></li>
+          <li><a href="#username-heading">Username</a></li>
+          <li><a href="#avatar-heading">Profile picture</a></li>
+          <li><a href="#verify-heading">Verification</a></li>
+          <li><a href="#email-heading">Email address</a></li>
+          <li><a href="#password-heading">Password</a></li>
+          <li><a href="#audience-heading">Who you see</a></li>
+          <li><a href="#blocked-heading">Blocked accounts</a></li>
+          <li><a href="#billing-heading">Subscriptions and billing</a></li>
+          <li><a href="#delete-heading">Delete account</a></li>
+        </ul>
+      </nav>
+
+      <NotificationsSection />
+
       <section aria-labelledby="username-heading">
         <h2 id="username-heading">Username</h2>
         <p className="page-intro">
@@ -156,7 +195,6 @@ export function Settings() {
 
       <ChangePasswordSection />
 
-      <NotificationsSection />
       <AudienceSection />
 
       <BlockedAccountsSection />
@@ -179,10 +217,62 @@ export function Settings() {
 }
 
 /** Self-declared sex and the For You / feed audience filter. */
+/**
+ * An on/off switch: a real button with role="switch", so screen readers
+ * announce "Release emails, switch, on" and Space or Enter flips it.
+ */
+function SettingSwitch({
+  id,
+  label,
+  description,
+  checked,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <div className="setting-switch">
+      <div className="setting-switch-text">
+        <span className="setting-switch-label" id={`${id}-label`}>
+          {label}
+        </span>
+        <span className="field-hint" id={`${id}-desc`}>
+          {description}
+        </span>
+      </div>
+      <button
+        type="button"
+        id={id}
+        role="switch"
+        aria-checked={checked}
+        aria-labelledby={`${id}-label`}
+        aria-describedby={`${id}-desc`}
+        className={checked ? 'switch switch-on' : 'switch'}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+      >
+        <span className="switch-track" aria-hidden="true">
+          <span className="switch-thumb" />
+        </span>
+        <span className="switch-state" aria-hidden="true">
+          {checked ? 'On' : 'Off'}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function NotificationsSection() {
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
   const [testing, setTesting] = useState<'push' | 'email' | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
 
@@ -192,11 +282,13 @@ function NotificationsSection() {
       .catch((err) => setError(err instanceof ApiError ? err.message : 'Could not load notification settings.'));
   }, []);
 
-  async function setReleaseEmails(on: boolean) {
+  async function update(patch: Partial<Pick<NotificationPrefs, 'releaseEmails' | 'pushEnabled'>>, message: string) {
     setBusy(true);
     setError(null);
+    setSaved(null);
     try {
-      setPrefs(await apiSend<NotificationPrefs>('PUT', '/api/me/notification-prefs', { releaseEmails: on }));
+      setPrefs(await apiSend<NotificationPrefs>('PUT', '/api/me/notification-prefs', patch));
+      setSaved(message);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save. Try again.');
     } finally {
@@ -227,7 +319,11 @@ function NotificationsSection() {
       } else {
         setTestResult(
           devices
-            .map((d) => (d.ok ? `Sent to your ${d.platform} phone (ending ${d.device}). It should arrive within a minute.` : `Could not send to your ${d.platform} phone (ending ${d.device}): ${d.error ?? `error ${d.status}`}`))
+            .map((d) =>
+              d.ok
+                ? `Sent to your ${d.platform} phone (ending ${d.device}). It should arrive within a minute.`
+                : `Could not send to your ${d.platform} phone (ending ${d.device}): ${d.error ?? `error ${d.status}`}`,
+            )
             .join(' '),
         );
       }
@@ -239,40 +335,49 @@ function NotificationsSection() {
   }
 
   return (
-    <section aria-labelledby="notify-heading">
-      <h2 id="notify-heading">Notifications</h2>
+    <section aria-labelledby="notify-heading" id="notifications">
+      <h2 id="notify-heading" tabIndex={-1}>
+        Notifications
+      </h2>
       <p className="page-intro">
-        Sweam emails you whenever something new releases: a film, a show, or a new episode. When it
-        is from a creator you follow, or an episode you tapped Notify me on, you also get it in the
-        app and on your phone.
+        Choose how Sweam reaches you. In-app notifications always stay on your Notifications page.
       </p>
       {error && <p role="alert">{error}</p>}
       {prefs === null ? (
         <p>Loading…</p>
       ) : (
         <>
-          <div className="field field-checkbox">
-            <label>
-              <input
-                type="checkbox"
-                checked={prefs.releaseEmails}
-                disabled={busy}
-                onChange={(event) => void setReleaseEmails(event.target.checked)}
-              />{' '}
-              Email me when anything new releases on Sweam
-            </label>
-          </div>
-          <p className="field-hint">
-            {prefs.pushDevices === 0
-              ? 'No phone is registered for notifications on this account.'
-              : `${prefs.pushDevices} phone${prefs.pushDevices === 1 ? '' : 's'} registered for notifications.`}
+          <SettingSwitch
+            id="switch-release-emails"
+            label="Release emails"
+            description="An email whenever something new releases on Sweam: films, shows and new episodes."
+            checked={prefs.releaseEmails}
+            disabled={busy}
+            onChange={(on) => void update({ releaseEmails: on }, on ? 'Release emails turned on.' : 'Release emails turned off.')}
+          />
+          <SettingSwitch
+            id="switch-push"
+            label="Phone notifications"
+            description={`Alerts on your phone for new episodes from creators you follow, episodes you tapped Notify me on, replies and new followers. ${
+              prefs.pushDevices === 0
+                ? 'No phone is registered yet: open the Sweam app signed in and allow notifications.'
+                : `${prefs.pushDevices} phone${prefs.pushDevices === 1 ? '' : 's'} registered.`
+            }`}
+            checked={prefs.pushEnabled}
+            disabled={busy}
+            onChange={(on) => void update({ pushEnabled: on }, on ? 'Phone notifications turned on.' : 'Phone notifications turned off.')}
+          />
+          <p className="status" role="status" aria-live="polite">
+            {saved}
           </p>
-          <button type="button" className="button button-quiet" disabled={testing !== null} onClick={() => void sendTest()}>
-            {testing === 'push' ? 'Sending…' : 'Send a test notification to my phone'}
-          </button>{' '}
-          <button type="button" className="button button-quiet" disabled={testing !== null} onClick={() => void sendTestEmail()}>
-            {testing === 'email' ? 'Sending…' : 'Send me a test email'}
-          </button>
+          <div className="setting-tests">
+            <button type="button" className="button button-quiet" disabled={testing !== null} onClick={() => void sendTest()}>
+              {testing === 'push' ? 'Sending…' : 'Send a test notification to my phone'}
+            </button>
+            <button type="button" className="button button-quiet" disabled={testing !== null} onClick={() => void sendTestEmail()}>
+              {testing === 'email' ? 'Sending…' : 'Send me a test email'}
+            </button>
+          </div>
           <p className="status" role="status" aria-live="polite">
             {testResult}
           </p>

@@ -392,6 +392,7 @@ export interface MusicTrack {
 
 export interface NotificationPrefs {
   releaseEmails: boolean;
+  pushEnabled: boolean;
   pushDevices: number;
 }
 

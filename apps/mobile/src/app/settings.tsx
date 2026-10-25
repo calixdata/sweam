@@ -5,6 +5,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -370,6 +371,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
   },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
   primaryBtnText: { color: '#04121a', fontSize: 15, fontWeight: '700' },
   dangerBtn: { backgroundColor: colors.danger },
   blockedRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 6 },
@@ -428,10 +430,11 @@ function NotificationsSection() {
     void load();
   }, [load]);
 
-  async function setReleaseEmails(on: boolean) {
+  async function update(patch: Partial<Pick<NotificationPrefs, 'releaseEmails' | 'pushEnabled'>>, message: string) {
     setBusy(true);
     try {
-      setPrefs(await api.put<NotificationPrefs>('/api/me/notification-prefs', { releaseEmails: on }));
+      setPrefs(await api.put<NotificationPrefs>('/api/me/notification-prefs', patch));
+      setNote(message);
     } catch (err) {
       setNote(err instanceof ApiError ? err.message : 'Could not save.');
     } finally {
@@ -475,21 +478,35 @@ function NotificationsSection() {
         <ActivityIndicator color={colors.accent} />
       ) : (
         <>
-          <Text style={styles.fieldLabel}>Release emails</Text>
-          <View style={styles.chipRow}>
-            {([true, false] as const).map((on) => (
-              <Pressable
-                key={String(on)}
-                style={[styles.chip, prefs.releaseEmails === on && styles.chipOn]}
-                disabled={busy}
-                onPress={() => void setReleaseEmails(on)}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: prefs.releaseEmails === on }}
-                accessibilityLabel={on ? 'Release emails on' : 'Release emails off'}
-              >
-                <Text style={[styles.chipText, prefs.releaseEmails === on && styles.chipTextOn]}>{on ? 'On' : 'Off'}</Text>
-              </Pressable>
-            ))}
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>Release emails</Text>
+              <Text style={styles.sectionHint}>An email whenever something new releases on Sweam.</Text>
+            </View>
+            <Switch
+              value={prefs.releaseEmails}
+              disabled={busy}
+              onValueChange={(on) => void update({ releaseEmails: on }, on ? 'Release emails turned on.' : 'Release emails turned off.')}
+              trackColor={{ false: colors.line, true: colors.accent }}
+              thumbColor={colors.text}
+              accessibilityLabel="Release emails"
+            />
+          </View>
+          <View style={styles.switchRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>Phone notifications</Text>
+              <Text style={styles.sectionHint}>
+                New episodes from creators you follow, episodes you tapped Notify me on, replies and new followers.
+              </Text>
+            </View>
+            <Switch
+              value={prefs.pushEnabled}
+              disabled={busy}
+              onValueChange={(on) => void update({ pushEnabled: on }, on ? 'Phone notifications turned on.' : 'Phone notifications turned off.')}
+              trackColor={{ false: colors.line, true: colors.accent }}
+              thumbColor={colors.text}
+              accessibilityLabel="Phone notifications"
+            />
           </View>
           <Pressable
             style={styles.primaryBtn}

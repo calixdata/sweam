@@ -276,9 +276,13 @@ export async function sendPushToUser(
   link: string | null,
   source = 'notify',
 ): Promise<PushResult[]> {
+  // A test from Settings goes through even with phone notifications off.
   const { results } = await db
-    .prepare('SELECT token, user_id, platform FROM push_tokens WHERE user_id = ?')
-    .bind(userId)
+    .prepare(
+      `SELECT pt.token, pt.user_id, pt.platform FROM push_tokens pt JOIN users u ON u.id = pt.user_id
+       WHERE pt.user_id = ?1 AND (u.push_enabled = 1 OR ?2 = 'test')`,
+    )
+    .bind(userId, source)
     .all<DeviceRow>();
   return fanOut(db, results, title, body, link, source);
 }
@@ -296,7 +300,8 @@ export async function sendPushToFollowers(
       `SELECT pt.token, pt.user_id, pt.platform
        FROM push_tokens pt
        JOIN follows f ON f.follower_id = pt.user_id
-       WHERE f.creator_id = ?`,
+       JOIN users u ON u.id = pt.user_id
+       WHERE f.creator_id = ? AND u.push_enabled = 1`,
     )
     .bind(creatorId)
     .all<DeviceRow>();
@@ -351,7 +356,10 @@ export async function sendPushToUserIds(
 ): Promise<void> {
   for (let i = 0; i < userIds.length; i += 90) {
     const { results } = await db
-      .prepare('SELECT token, user_id, platform FROM push_tokens WHERE user_id IN (SELECT value FROM json_each(?))')
+      .prepare(
+        `SELECT pt.token, pt.user_id, pt.platform FROM push_tokens pt JOIN users u ON u.id = pt.user_id
+         WHERE pt.user_id IN (SELECT value FROM json_each(?)) AND u.push_enabled = 1`,
+      )
       .bind(JSON.stringify(userIds.slice(i, i + 90)))
       .all<DeviceRow>();
     await fanOut(db, results, title, body, link, source);

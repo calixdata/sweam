@@ -139,10 +139,10 @@ export function Layout() {
                   <NavLink to="/admin">Admin</NavLink>
                 </li>
               )}
-              {user && (
+              {user?.username && (
                 <li>
-                  <NavLink to="/settings" aria-label={user.username ? `Settings, @${user.username}` : 'Settings'}>
-                    {user.username ? `@${user.username}` : 'Settings'}
+                  <NavLink to={`/c/${user.username}`} aria-label={`Your profile, @${user.username}`}>
+                    @{user.username}
                   </NavLink>
                 </li>
               )}
@@ -166,6 +166,9 @@ export function Layout() {
                 <Avatar src={user.avatarUrl} name={user.displayName} size={32} />
                 <span className="nav-user">{user.displayName}</span>
                 {user.scout?.status === 'approved' && <ScoutBadge />}
+                <Link className="button button-quiet header-settings" to="/settings">
+                  <span aria-hidden="true">⚙ </span>Settings
+                </Link>
                 <button type="button" className="button button-quiet" onClick={handleSignOut}>
                   Sign out
                 </button>
@@ -196,6 +199,22 @@ export function Layout() {
             </p>
           </div>
           <nav className="footer-nav" aria-label="Footer">
+            {user && (
+              <div className="footer-col">
+                <h2>Your account</h2>
+                <ul>
+                  <li>
+                    <Link to="/settings">Settings</Link>
+                  </li>
+                  <li>
+                    <Link to="/settings#notifications">Notification settings</Link>
+                  </li>
+                  <li>
+                    <Link to="/me/subscriptions">Subscriptions and billing</Link>
+                  </li>
+                </ul>
+              </div>
+            )}
             <div className="footer-col">
               <h2>Explore</h2>
               <ul>

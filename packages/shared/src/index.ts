@@ -1745,6 +1745,8 @@ export interface ScoutUcastPoll {
 export interface NotificationPrefs {
   /** Email whenever something new releases on Sweam (films, shows, new episodes). */
   releaseEmails: boolean;
+  /** Phone notifications for this account (all phones). */
+  pushEnabled: boolean;
   /** How many phones this account has registered for push. */
   pushDevices: number;
 }

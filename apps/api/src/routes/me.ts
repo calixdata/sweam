@@ -617,26 +617,37 @@ meRoutes.post('/notifications/read-all', async (c) => {
 });
 
 /** Notification preferences: release emails on or off. */
+async function loadNotificationPrefs(db: D1Database, userId: string) {
+  const row = await db
+    .prepare(
+      'SELECT release_emails, push_enabled, (SELECT COUNT(*) FROM push_tokens WHERE user_id = ?1) AS devices FROM users WHERE id = ?1',
+    )
+    .bind(userId)
+    .first<{ release_emails: number; push_enabled: number; devices: number }>();
+  return {
+    releaseEmails: (row?.release_emails ?? 1) === 1,
+    pushEnabled: (row?.push_enabled ?? 1) === 1,
+    pushDevices: row?.devices ?? 0,
+  };
+}
+
 meRoutes.get('/notification-prefs', async (c) => {
-  const user = currentUser(c);
-  const row = await c.env.DB.prepare(
-    'SELECT release_emails, (SELECT COUNT(*) FROM push_tokens WHERE user_id = ?1) AS devices FROM users WHERE id = ?1',
-  )
-    .bind(user.id)
-    .first<{ release_emails: number; devices: number }>();
-  return c.json({ releaseEmails: (row?.release_emails ?? 1) === 1, pushDevices: row?.devices ?? 0 });
+  return c.json(await loadNotificationPrefs(c.env.DB, currentUser(c).id));
 });
 
+/** Turn release emails and phone notifications on or off (either or both). */
 meRoutes.put('/notification-prefs', async (c) => {
   const user = currentUser(c);
   const body = await parseBody(c, notificationPrefsSchema);
-  await c.env.DB.prepare('UPDATE users SET release_emails = ? WHERE id = ?')
-    .bind(body.releaseEmails ? 1 : 0, user.id)
-    .run();
-  const devices = await c.env.DB.prepare('SELECT COUNT(*) AS n FROM push_tokens WHERE user_id = ?')
-    .bind(user.id)
-    .first<{ n: number }>();
-  return c.json({ releaseEmails: body.releaseEmails, pushDevices: devices?.n ?? 0 });
+  const statements = [];
+  if (body.releaseEmails !== undefined) {
+    statements.push(c.env.DB.prepare('UPDATE users SET release_emails = ? WHERE id = ?').bind(body.releaseEmails ? 1 : 0, user.id));
+  }
+  if (body.pushEnabled !== undefined) {
+    statements.push(c.env.DB.prepare('UPDATE users SET push_enabled = ? WHERE id = ?').bind(body.pushEnabled ? 1 : 0, user.id));
+  }
+  if (statements.length) await c.env.DB.batch(statements);
+  return c.json(await loadNotificationPrefs(c.env.DB, user.id));
 });
 
 /**

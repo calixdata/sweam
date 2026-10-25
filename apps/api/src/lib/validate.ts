@@ -208,9 +208,12 @@ export const searchQuerySchema = z.object({
 });
 
 /** Notification preferences the member controls in Settings. */
-export const notificationPrefsSchema = z.object({
-  releaseEmails: z.boolean(),
-});
+export const notificationPrefsSchema = z
+  .object({
+    releaseEmails: z.boolean().optional(),
+    pushEnabled: z.boolean().optional(),
+  })
+  .refine((v) => v.releaseEmails !== undefined || v.pushEnabled !== undefined, 'Nothing to change.');
 
 export const pushTokenSchema = z.object({
   token: z.string().trim().min(1).max(4096),
