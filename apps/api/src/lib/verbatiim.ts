@@ -2,7 +2,7 @@ import type { VerbatiimClip, VerbatiimJob, VerbatiimJobMode, VerbatiimJobStatus,
 import { VERBATIIM_NAME } from '@sweam/shared';
 import type { Env } from '../env';
 import { nowIso } from './http';
-import { notify, notifyFollowers } from './notify';
+import { notify } from './notify';
 import { enqueueTranscode } from '../routes/transcode';
 
 /**
@@ -293,10 +293,8 @@ export async function importJob(env: Env, row: VerbatiimJobRow, job: RemoteJob):
       .run();
 
     await notify(env.DB, row.creator_id, 'verbatiim', `"${row.name}" is ready: ${VERBATIIM_NAME} added it as S${row.season} E${episodeNumber}${clips.length ? ` with ${clips.length} clip${clips.length === 1 ? '' : 's'}` : ''}.`, `/studio/t/${row.title_id}`);
-    const title = await env.DB.prepare('SELECT name, published FROM titles WHERE id = ?').bind(row.title_id).first<{ name: string; published: number }>();
-    if (title?.published === 1) {
-      await notifyFollowers(env.DB, row.creator_id, 'new_episode', `New episode of ${title.name}: S${row.season} E${episodeNumber}, ${row.name}.`, `/watch/${episodeId}`);
-    }
+    // Followers and members hear about the new episode from the release
+    // announcer (lib/release.ts) once the title is live.
   } catch (err) {
     await env.DB.prepare(`UPDATE verbatiim_jobs SET status = 'failed', error = ?, updated_at = ? WHERE id = ?`)
       .bind(err instanceof Error ? err.message : 'Import failed.', nowIso(), row.id)

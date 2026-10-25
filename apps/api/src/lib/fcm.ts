@@ -192,6 +192,30 @@ export async function logDelivery(
   }
 }
 
+type DeliveryEntry = Parameters<typeof logDelivery>[1];
+
+/** Write many delivery log rows with batched statements. */
+async function logDeliveries(db: D1Database, entries: DeliveryEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  const now = new Date().toISOString();
+  try {
+    for (let i = 0; i < entries.length; i += 50) {
+      await db.batch(
+        entries.slice(i, i + 50).map((e) =>
+          db
+            .prepare(
+              `INSERT INTO delivery_log (channel, source, user_id, target, ok, status, error, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            )
+            .bind(e.channel, e.source, e.userId, e.target, e.ok ? 1 : 0, e.status, e.error, now),
+        ),
+      );
+    }
+  } catch {
+    /* the log is diagnostic; never let it break a delivery */
+  }
+}
+
 async function fanOut(
   db: D1Database,
   devices: DeviceRow[],
@@ -207,7 +231,7 @@ async function fanOut(
       ? 'FCM_SERVICE_ACCOUNT is set but is not valid service account JSON.'
       : 'FCM_SERVICE_ACCOUNT is not set on this deployment.';
     const results = devices.map((d) => ({ platform: d.platform, device: d.token.slice(-8), ok: false, status: 0, error }));
-    for (const d of devices) await logDelivery(db, { channel: 'push', source, userId: d.user_id, target: d.token.slice(-8), ok: false, status: 0, error });
+    await logDeliveries(db, devices.map((d) => ({ channel: 'push' as const, source, userId: d.user_id, target: d.token.slice(-8), ok: false, status: 0, error })));
     console.error('push_not_configured', error);
     return results;
   }
@@ -217,10 +241,10 @@ async function fanOut(
   } catch (err) {
     const error = err instanceof Error ? err.message : 'Google OAuth failed.';
     console.error('push_oauth_failed', error);
-    for (const d of devices) await logDelivery(db, { channel: 'push', source, userId: d.user_id, target: d.token.slice(-8), ok: false, status: 0, error });
+    await logDeliveries(db, devices.map((d) => ({ channel: 'push' as const, source, userId: d.user_id, target: d.token.slice(-8), ok: false, status: 0, error })));
     return devices.map((d) => ({ platform: d.platform, device: d.token.slice(-8), ok: false, status: 0, error }));
   }
-  return Promise.all(
+  const results = await Promise.all(
     devices.map(async (d) => {
       let status = 0;
       let error: string | null = null;
@@ -231,13 +255,16 @@ async function fanOut(
       }
       const ok = status >= 200 && status < 300;
       if (!ok) console.error('push_failed', status, error);
-      await logDelivery(db, { channel: 'push', source, userId: d.user_id, target: d.token.slice(-8), ok, status, error });
-      if (!ok && tokenIsDead(status, error)) {
-        await db.prepare('DELETE FROM push_tokens WHERE token = ?').bind(d.token).run();
-      }
-      return { platform: d.platform, device: d.token.slice(-8), ok, status, error };
+      return { platform: d.platform, device: d.token.slice(-8), ok, status, error, token: d.token, userId: d.user_id };
     }),
   );
+  // One batched write for the log and one for dead tokens, not a query per device.
+  await logDeliveries(db, results.map((r) => ({ channel: 'push' as const, source, userId: r.userId, target: r.device, ok: r.ok, status: r.status, error: r.error })));
+  const dead = results.filter((r) => !r.ok && tokenIsDead(r.status, r.error)).map((r) => r.token);
+  if (dead.length) {
+    await db.prepare('DELETE FROM push_tokens WHERE token IN (SELECT value FROM json_each(?))').bind(JSON.stringify(dead)).run();
+  }
+  return results.map(({ platform, device, ok, status, error }) => ({ platform, device, ok, status, error }));
 }
 
 /** Push a notification to every device a single user has registered. */
@@ -311,4 +338,22 @@ export async function pushSelfCheck(db: D1Database): Promise<{ ok: boolean; stat
   });
   const text = res.ok ? null : (await res.text().catch(() => '')).slice(0, 500);
   return record(res.ok, res.status, res.ok ? `Validated. [${who}]` : `${text} [${who}]`, device.token.slice(-8));
+}
+
+/** Push one notification to every device registered by any of these users. */
+export async function sendPushToUserIds(
+  db: D1Database,
+  userIds: string[],
+  title: string,
+  body: string,
+  link: string | null,
+  source: string,
+): Promise<void> {
+  for (let i = 0; i < userIds.length; i += 90) {
+    const { results } = await db
+      .prepare('SELECT token, user_id, platform FROM push_tokens WHERE user_id IN (SELECT value FROM json_each(?))')
+      .bind(JSON.stringify(userIds.slice(i, i + 90)))
+      .all<DeviceRow>();
+    await fanOut(db, results, title, body, link, source);
+  }
 }

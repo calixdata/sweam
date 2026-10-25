@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
-import { sendPushToUser } from '../lib/fcm';
+import { logDelivery, sendPushToUser } from '../lib/fcm';
+import { loadAnnouncementContent, releaseEmail } from '../lib/release';
+import { hasBluAccess } from '../lib/blu';
 import { deleteCookie, getCookie } from 'hono/cookie';
 import type { BlockedAccount, MyVerification, NotificationItem, VerificationStatus } from '@sweam/shared';
 import { UPLOAD_SPECS } from '@sweam/shared';
@@ -654,6 +656,83 @@ meRoutes.post('/push-test', async (c) => {
     'test',
   );
   return c.json({ devices: results });
+});
+
+/**
+ * Send this member the latest release email, marked as a test, so they (and
+ * Sweam) can see exactly what release emails look like and that they arrive.
+ */
+meRoutes.post('/email-test', async (c) => {
+  const user = currentUser(c);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.emailTest, user.id);
+  if (!emailConfigured(c.env)) fail(503, 'email_disabled', 'Email sending is not configured.');
+  const db = c.env.DB;
+  const me = await db
+    .prepare('SELECT email, display_name, email_verified, email_unsub_token FROM users WHERE id = ?')
+    .bind(user.id)
+    .first<{ email: string; display_name: string; email_verified: number; email_unsub_token: string | null }>();
+  if (!me || me.email_verified !== 1) fail(400, 'email_unverified', 'Verify your email address first.');
+
+  const latest = await db
+    .prepare(
+      `SELECT a.title_id, a.episode_ids FROM release_announcements a JOIN titles t ON t.id = a.title_id
+       WHERE a.is_clip = 0 AND a.mode = 'release' AND t.published = 1 AND t.suppressed = 0
+         AND NOT EXISTS (SELECT 1 FROM takedowns tk WHERE tk.title_id = t.id AND tk.released_at IS NULL)
+         AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = ?1 AND b.blocked_id = t.creator_id) OR (b.blocker_id = t.creator_id AND b.blocked_id = ?1))
+       ORDER BY a.created_at DESC LIMIT 1`,
+    )
+    .bind(user.id)
+    .first<{ title_id: string; episode_ids: string }>();
+  let content = latest ? await loadAnnouncementContent(db, latest.title_id, JSON.parse(latest.episode_ids) as string[]) : null;
+  if (!content) {
+    const ep = await db
+      .prepare(
+        `SELECT e.id, e.title_id FROM episodes e JOIN titles t ON t.id = e.title_id
+         WHERE t.published = 1 AND t.suppressed = 0 AND t.is_blu = 0 AND e.media_type = 'video' AND e.is_clip = 0
+           AND (e.release_at IS NULL OR e.release_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+           AND NOT EXISTS (SELECT 1 FROM takedowns tk WHERE tk.title_id = t.id AND tk.released_at IS NULL)
+           AND NOT EXISTS (SELECT 1 FROM blocks b WHERE (b.blocker_id = ?1 AND b.blocked_id = t.creator_id) OR (b.blocker_id = t.creator_id AND b.blocked_id = ?1))
+         ORDER BY COALESCE(e.release_at, e.created_at) DESC LIMIT 1`,
+      )
+      .bind(user.id)
+      .first<{ id: string; title_id: string }>();
+    content = ep ? await loadAnnouncementContent(db, ep.title_id, [ep.id]) : null;
+  }
+  if (!content) fail(404, 'nothing_to_send', 'There is no release on Sweam yet to use for a test.');
+
+  let token = me.email_unsub_token;
+  if (!token) {
+    token = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, '0')).join('');
+    await db.prepare('UPDATE users SET email_unsub_token = COALESCE(email_unsub_token, ?) WHERE id = ?').bind(token, user.id).run();
+    token = (await db.prepare('SELECT email_unsub_token FROM users WHERE id = ?').bind(user.id).first<{ email_unsub_token: string }>())?.email_unsub_token ?? token;
+  }
+  const site = (c.env.PUBLIC_WEB_URL ?? 'https://sweam.co').replace(/\/+$/, '');
+  const unsubscribeUrl = `${site}/api/email/unsubscribe?u=${encodeURIComponent(user.id)}&t=${token}`;
+  const message = releaseEmail({
+    site,
+    content,
+    recipientName: me.display_name,
+    reason: 'member',
+    canWatch: content.title.is_blu !== 1 || (await hasBluAccess(db, user.id, content.title.creator_id)),
+    unsubscribeUrl,
+    postalAddress: c.env.MAIL_POSTAL_ADDRESS?.trim() || undefined,
+  });
+  try {
+    await sendEmail(c.env, {
+      to: me.email,
+      subject: `[Test] ${message.subject}`,
+      html: message.html,
+      text: message.text,
+      headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' },
+    });
+  } catch (err) {
+    const error = err instanceof Error ? err.message : 'Email failed.';
+    await logDelivery(db, { channel: 'email', source: 'test', userId: user.id, target: me.email.split('@')[1] ?? null, ok: false, status: 0, error });
+    fail(502, 'email_failed', `The test email could not be sent: ${error}`);
+  }
+  await logDelivery(db, { channel: 'email', source: 'test', userId: user.id, target: me.email.split('@')[1] ?? null, ok: true, status: 200, error: null });
+  const [name, domain] = me.email.split('@');
+  return c.json({ sent: true, to: `${(name ?? '').slice(0, 2)}…@${domain ?? ''}` });
 });
 
 // The mobile app registers its FCM device token here after sign-in.

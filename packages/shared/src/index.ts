@@ -1743,7 +1743,7 @@ export interface ScoutUcastPoll {
 // ---------------------------------------------------------------------------
 
 export interface NotificationPrefs {
-  /** Email when an episode the member asked about, or a followed creator's episode, releases. */
+  /** Email whenever something new releases on Sweam (films, shows, new episodes). */
   releaseEmails: boolean;
   /** How many phones this account has registered for push. */
   pushDevices: number;

@@ -20,7 +20,6 @@ import {
   OFFICIAL_MAX_UPLOAD_BYTES,
   ageInYears,
   easternMidnightUtc,
-  isReleased,
 } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { loadDailySeries, loadEpisodeViews, loadRetention } from '../lib/analytics';
@@ -28,7 +27,7 @@ import { BLU_NOT_ELIGIBLE_MESSAGE, getBluOfferGate } from '../lib/blufund';
 import { creatorFundPayouts } from '../lib/fund';
 import { fail, nowIso, parseBody } from '../lib/http';
 import { getCreatorEligibility } from '../lib/monetize';
-import { notify, notifyFollowers, notifyScoutsOfTitle } from '../lib/notify';
+import { notify, notifyScoutsOfTitle } from '../lib/notify';
 import { isOfficialAccount } from '../lib/official';
 import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
 import { SUSPENSION_STRIKES, activeStrikeCount, assertGoodStanding } from '../lib/standing';
@@ -396,25 +395,15 @@ studioRoutes.post('/titles/:titleId/publish', requireCreator, async (c) => {
   }
 
   if (body.published) {
-    const before = await c.env.DB.prepare('SELECT published_at FROM titles WHERE id = ?')
-      .bind(row.id)
-      .first<{ published_at: string | null }>();
     await c.env.DB.prepare(
       'UPDATE titles SET published = 1, published_at = COALESCE(published_at, ?) WHERE id = ?',
     )
       .bind(nowIso(), row.id)
       .run();
-    // A first publish announces the title to the creator's followers;
-    // republishing after an unpublish or takedown release does not re-ping.
-    if (before?.published_at === null) {
-      await notifyFollowers(
-        c.env.DB,
-        currentUser(c).id,
-        'new_episode',
-        `${currentUser(c).displayName} published ${row.name}.`,
-        `/t/${row.slug}`,
-      );
-    }
+    // The release announcer (lib/release.ts, on the 10-minute cron) announces
+    // the title's newly watchable episodes to followers and emails members, so
+    // a first publish needs no direct notice here and a republish of episodes
+    // that were already announced stays silent.
     // Alert matching scouts if this title is opted into scouting (once only).
     await notifyScoutsOfTitle(c.env.DB, row.id);
   } else {
@@ -568,17 +557,8 @@ studioRoutes.post('/titles/:titleId/episodes', requireCreator, async (c) => {
     throw err;
   }
   if (sourceUrl) await enqueueTranscode(c.env.DB, id, sourceUrl);
-  // New episodes on an already-published title go straight to followers; a
-  // scheduled one waits for its release (the release cron notifies then).
-  if (row.published === 1 && isReleased(releaseAt)) {
-    await notifyFollowers(
-      c.env.DB,
-      currentUser(c).id,
-      'new_episode',
-      `New episode of ${row.name}: S${body.season} E${body.episode}, ${body.name}.`,
-      `/watch/${id}`,
-    );
-  }
+  // The release announcer picks the episode up as soon as it is watchable (now
+  // on a live title, or at its scheduled release) and announces it once.
   return c.json({ id, transcodeQueued: sourceUrl !== null, releaseAt }, 201);
 });
 
@@ -629,8 +609,6 @@ studioRoutes.patch('/episodes/:episodeId', requireCreator, async (c) => {
       : body.releaseDate === null
         ? null
         : easternMidnightUtc(body.releaseDate);
-  const wasScheduled = !isReleased(episode.release_at);
-  const scheduleChanged = releaseAt !== undefined && releaseAt !== episode.release_at;
 
   const sets: string[] = [];
   const values: unknown[] = [];
@@ -645,8 +623,9 @@ studioRoutes.patch('/episodes/:episodeId', requireCreator, async (c) => {
     source_url: newSource ?? undefined,
     thumbnail_url: body.thumbnailUrl,
     release_at: releaseAt,
-    // A moved schedule is announced again when it actually releases.
-    release_notified_at: scheduleChanged ? null : undefined,
+    // release_notified_at is left alone: an episode that was never announced
+    // is announced when it becomes watchable at its new time, and one that
+    // was already announced is never announced again.
   };
   for (const [column, value] of Object.entries(columns)) {
     if (value !== undefined) {
@@ -665,22 +644,8 @@ studioRoutes.patch('/episodes/:episodeId', requireCreator, async (c) => {
     throw err;
   }
   if (newSource) await enqueueTranscode(c.env.DB, episode.id, newSource);
-  // Clearing a future schedule on a live title releases the episode right now.
-  if (scheduleChanged && wasScheduled && isReleased(releaseAt ?? null) && episode.title_published === 1) {
-    const season = body.season ?? episode.season;
-    const number = body.episode ?? episode.episode;
-    const name = body.name ?? episode.name;
-    await c.env.DB.prepare('UPDATE episodes SET release_notified_at = ? WHERE id = ?')
-      .bind(nowIso(), episode.id)
-      .run();
-    await notifyFollowers(
-      c.env.DB,
-      currentUser(c).id,
-      'new_episode',
-      `New episode of ${episode.title_name}: S${season} E${number}, ${name}.`,
-      `/watch/${episode.id}`,
-    );
-  }
+  // Clearing a future schedule on a live title makes the episode watchable now;
+  // the release announcer announces it on its next run (within 10 minutes).
   return c.json({ ok: true, transcodeQueued: newSource !== null, releaseAt: releaseAt ?? episode.release_at });
 });
 

@@ -183,7 +183,7 @@ function NotificationsSection() {
   const [prefs, setPrefs] = useState<NotificationPrefs | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [testing, setTesting] = useState(false);
+  const [testing, setTesting] = useState<'push' | 'email' | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
 
   useEffect(() => {
@@ -204,8 +204,21 @@ function NotificationsSection() {
     }
   }
 
+  async function sendTestEmail() {
+    setTesting('email');
+    setTestResult(null);
+    try {
+      const { to } = await apiSend<{ sent: boolean; to: string }>('POST', '/api/me/email-test');
+      setTestResult(`Test email sent to ${to}. It should arrive within a minute; check spam if it does not.`);
+    } catch (err) {
+      setTestResult(err instanceof ApiError ? err.message : 'Could not send the test email.');
+    } finally {
+      setTesting(null);
+    }
+  }
+
   async function sendTest() {
-    setTesting(true);
+    setTesting('push');
     setTestResult(null);
     try {
       const { devices } = await apiSend<{ devices: PushTestDevice[] }>('POST', '/api/me/push-test');
@@ -221,7 +234,7 @@ function NotificationsSection() {
     } catch (err) {
       setTestResult(err instanceof ApiError ? err.message : 'Could not send the test.');
     } finally {
-      setTesting(false);
+      setTesting(null);
     }
   }
 
@@ -229,8 +242,9 @@ function NotificationsSection() {
     <section aria-labelledby="notify-heading">
       <h2 id="notify-heading">Notifications</h2>
       <p className="page-intro">
-        When an episode you asked to be notified about, or a new episode from a creator you follow,
-        releases, Sweam tells you in the app, on your phone, and by email.
+        Sweam emails you whenever something new releases: a film, a show, or a new episode. When it
+        is from a creator you follow, or an episode you tapped Notify me on, you also get it in the
+        app and on your phone.
       </p>
       {error && <p role="alert">{error}</p>}
       {prefs === null ? (
@@ -245,7 +259,7 @@ function NotificationsSection() {
                 disabled={busy}
                 onChange={(event) => void setReleaseEmails(event.target.checked)}
               />{' '}
-              Email me when new episodes release
+              Email me when anything new releases on Sweam
             </label>
           </div>
           <p className="field-hint">
@@ -253,8 +267,11 @@ function NotificationsSection() {
               ? 'No phone is registered for notifications on this account.'
               : `${prefs.pushDevices} phone${prefs.pushDevices === 1 ? '' : 's'} registered for notifications.`}
           </p>
-          <button type="button" className="button button-quiet" disabled={testing} onClick={() => void sendTest()}>
-            {testing ? 'Sending…' : 'Send a test notification to my phone'}
+          <button type="button" className="button button-quiet" disabled={testing !== null} onClick={() => void sendTest()}>
+            {testing === 'push' ? 'Sending…' : 'Send a test notification to my phone'}
+          </button>{' '}
+          <button type="button" className="button button-quiet" disabled={testing !== null} onClick={() => void sendTestEmail()}>
+            {testing === 'email' ? 'Sending…' : 'Send me a test email'}
           </button>
           <p className="status" role="status" aria-live="polite">
             {testResult}

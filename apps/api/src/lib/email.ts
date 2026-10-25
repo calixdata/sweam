@@ -55,6 +55,103 @@ export async function sendEmail(
   }
 }
 
+export interface BatchEmail {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  headers?: Record<string, string>;
+  tags?: { name: string; value: string }[];
+}
+
+export interface BatchResult {
+  ok: boolean;
+  status: number;
+  /** Resend message id per item (same order as the request), when sent. */
+  ids: (string | null)[];
+  /** Items Resend rejected individually (permissive validation). */
+  itemErrors: { index: number; message: string }[];
+  error: string | null;
+  /** True for rate limits and provider outages: try again on the next tick. */
+  retryable: boolean;
+}
+
+const RESEND_BATCH_URL = 'https://api.resend.com/emails/batch';
+
+/**
+ * Resend's batch response lists ids for accepted emails. In permissive mode the
+ * rejected ones are only in `errors` (by request index), so when `data` is
+ * shorter than the request, its entries belong to the non-rejected indexes in
+ * order.
+ */
+export function mapBatchIds(count: number, data: { id?: string }[], rejected: number[]): (string | null)[] {
+  if (data.length === count) return data.map((d) => d.id ?? null);
+  const skip = new Set(rejected);
+  const ids: (string | null)[] = [];
+  let next = 0;
+  for (let i = 0; i < count; i++) {
+    if (skip.has(i)) ids.push(null);
+    else ids.push(data[next++]?.id ?? null);
+  }
+  return ids;
+}
+
+/**
+ * Send up to 100 emails in one Resend request. Permissive validation keeps one
+ * bad address from sinking the batch; the idempotency key makes a retry of the
+ * same batch (same key, same payload) a no-op on Resend's side for 24 hours.
+ */
+export async function sendEmailBatch(env: Env, messages: BatchEmail[], idempotencyKey: string): Promise<BatchResult> {
+  if (!env.RESEND_API_KEY) {
+    return { ok: false, status: 0, ids: [], itemErrors: [], error: 'Email sending is not configured.', retryable: false };
+  }
+  if (messages.length === 0) return { ok: true, status: 200, ids: [], itemErrors: [], error: null, retryable: false };
+  if (messages.length > 100) throw new EmailError('A Resend batch holds at most 100 emails.');
+  const from = env.MAIL_FROM || DEFAULT_FROM;
+  let res: Response;
+  try {
+    res = await fetch(RESEND_BATCH_URL, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        'content-type': 'application/json',
+        'idempotency-key': idempotencyKey.slice(0, 256),
+        'x-batch-validation': 'permissive',
+      },
+      body: JSON.stringify(
+        messages.map((m) => ({
+          from,
+          to: [m.to],
+          reply_to: 'support@sweam.co',
+          subject: m.subject,
+          html: m.html,
+          text: m.text,
+          ...(m.headers ? { headers: m.headers } : {}),
+          ...(m.tags ? { tags: m.tags } : {}),
+        })),
+      ),
+    });
+  } catch {
+    return { ok: false, status: 0, ids: [], itemErrors: [], error: 'Could not reach the email service.', retryable: true };
+  }
+  const bodyText = await res.text().catch(() => '');
+  if (!res.ok) {
+    const retryable = res.status === 429 || res.status >= 500 || (res.status === 409 && /concurrent/i.test(bodyText));
+    return { ok: false, status: res.status, ids: [], itemErrors: [], error: `Resend ${res.status}: ${bodyText.slice(0, 300)}`, retryable };
+  }
+  let parsed: { data?: { id?: string }[]; errors?: { index?: number; message?: string }[] } = {};
+  try {
+    parsed = JSON.parse(bodyText) as typeof parsed;
+  } catch {
+    parsed = {};
+  }
+  const itemErrors = (parsed.errors ?? [])
+    .filter((e) => typeof e.index === 'number')
+    .map((e) => ({ index: e.index as number, message: e.message ?? 'Rejected by Resend.' }));
+  const ids = mapBatchIds(messages.length, parsed.data ?? [], itemErrors.map((e) => e.index));
+  return { ok: true, status: res.status, ids, itemErrors, error: itemErrors.length ? `${itemErrors.length} item(s) rejected` : null, retryable: false };
+}
+
 /** The sign-up verification email (subject, HTML, and plain-text parts). */
 export function verificationEmail(
   link: string,

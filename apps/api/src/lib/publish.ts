@@ -296,8 +296,8 @@ export async function publishClip(
   if (audioSource === 'library' && !musicTrack) throw new PublishError('Pick a track from the Sweam music library.');
   await env.DB.prepare(
     `INSERT INTO episodes
-       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at, thumbnail_url, media_type, audio_source, music_track_id)
-     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, title_id, season, episode, name, synopsis, video_url, captions_url, duration_s, source_url, created_at, release_at, thumbnail_url, media_type, audio_source, music_track_id, is_clip)
+     VALUES (?, ?, 1, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, 1)`,
   )
     .bind(episodeId, titleId, episode, name, clip.caption, clip.sourceUrl, clip.captionsUrl, clip.sourceUrl, now, releaseAt, clip.posterUrl ?? clip.sourceUrl, isImage ? 'image' : 'video', audioSource, musicTrack ? musicTrack.id : null)
     .run();

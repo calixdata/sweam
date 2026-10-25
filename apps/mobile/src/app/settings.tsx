@@ -468,8 +468,8 @@ function NotificationsSection() {
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>Notifications</Text>
       <Text style={styles.sectionHint}>
-        When an episode you asked about, or a new episode from a creator you follow, releases, Sweam
-        tells you in the app, on this phone, and by email.
+        Sweam emails you whenever something new releases. When it is from a creator you follow, or an
+        episode you tapped Notify me on, you also get it in the app and on this phone.
       </Text>
       {prefs === null ? (
         <ActivityIndicator color={colors.accent} />

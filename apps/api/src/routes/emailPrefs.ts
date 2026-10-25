@@ -42,7 +42,7 @@ emailPrefsRoutes.get('/unsubscribe', async (c) => {
   return c.html(
     page(
       'Stop release emails',
-      `<h1>Stop release emails?</h1><p>You will no longer get an email when an episode you asked about, or a creator you follow, releases. In-app and phone notifications are not affected.</p>
+      `<h1>Stop release emails?</h1><p>You will no longer get an email when something new releases on Sweam: films, shows and new episodes. In-app and phone notifications are not affected.</p>
 <form method="post" action="${action}"><button type="submit">Stop release emails</button></form>`,
     ),
   );
@@ -59,7 +59,7 @@ emailPrefsRoutes.post('/unsubscribe', async (c) => {
   return c.html(
     page(
       'Release emails stopped',
-      '<h1>Release emails stopped</h1><p>You will not get release emails from Sweam any more. You can turn them back on any time in <a href="/settings">Settings</a>.</p>',
+      '<h1>Release emails stopped</h1><p>You will not get emails about new releases on Sweam any more. You can turn them back on any time in <a href="/settings">Settings</a>.</p>',
     ),
   );
 });

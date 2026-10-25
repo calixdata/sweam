@@ -38,6 +38,12 @@ export interface Env {
   RESEND_API_KEY?: string;
   MAIL_FROM?: string;
   /**
+   * Mailing address printed in the footer of release emails (CAN-SPAM requires
+   * a valid physical postal address in commercial email). Set as a var in
+   * wrangler.toml; the footer shows the company name alone until it is set.
+   */
+  MAIL_POSTAL_ADDRESS?: string;
+  /**
    * Firebase service account JSON (the entire key file contents) used to send
    * FCM v1 push notifications to the mobile app. A secret; set with
    * `wrangler secret put FCM_SERVICE_ACCOUNT`. Push is silently skipped when unset.

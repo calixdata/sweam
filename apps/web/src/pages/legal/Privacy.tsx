@@ -97,7 +97,12 @@ const sections: LegalSection[] = [
         <li>to calculate creator earnings and process payouts;</li>
         <li>to connect creators with scouts who express interest in titles the creator has opted to share;</li>
         <li>to keep {SERVICE} safe: moderation, handling reports and takedowns, and preventing abuse;</li>
-        <li>to send you service notifications you can see in the app;</li>
+        <li>to send you service notifications you can see in the app and on your phone;</li>
+        <li>
+          to email you when something new releases on {SERVICE}, if your email address is verified.
+          Every such email has a one-click link to stop them, and you can turn them off any time in
+          Settings;
+        </li>
         <li>to understand aggregate traffic (only with your analytics consent);</li>
         <li>to meet legal obligations and enforce our terms.</li>
       </ul>
