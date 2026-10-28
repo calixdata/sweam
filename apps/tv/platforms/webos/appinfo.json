@@ -1,0 +1,13 @@
+{
+  "id": "co.sweam.tv",
+  "version": "0.1.0",
+  "vendor": "Falcyn",
+  "type": "web",
+  "main": "index.html",
+  "title": "SweamTV",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "iconColor": "#080e19",
+  "bgColor": "#080e19",
+  "disableBackHistoryAPI": false
+}

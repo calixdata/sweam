@@ -212,6 +212,9 @@ export function Layout() {
                   <li>
                     <Link to="/me/subscriptions">Subscriptions and billing</Link>
                   </li>
+                  <li>
+                    <Link to="/activate">Activate a TV</Link>
+                  </li>
                 </ul>
               </div>
             )}

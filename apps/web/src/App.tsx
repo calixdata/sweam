@@ -34,6 +34,7 @@ import { Notifications } from './pages/Notifications';
 import { Record } from './pages/Record';
 import { Scout } from './pages/Scout';
 import { Settings } from './pages/Settings';
+import { Activate } from './pages/Activate';
 import { ScoutOneSheet } from './pages/ScoutOneSheet';
 import { Search } from './pages/Search';
 import { SignIn } from './pages/SignIn';
@@ -72,6 +73,15 @@ export function App() {
         <Route path="/submit" element={<Submit />} />
         <Route path="/create" element={<Record />} />
         <Route path="/settings" element={<Settings />} />
+        {/* SweamTV pairing: claim the code a TV is showing. */}
+        <Route
+          path="/activate"
+          element={
+            <RequireAuth>
+              <Activate />
+            </RequireAuth>
+          }
+        />
         <Route path="/search" element={<Search />} />
         <Route path="/t/:slug" element={<TitlePage />} />
         <Route path="/c/:handle" element={<CreatorPage />} />

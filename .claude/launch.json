@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "sweam-tv",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev:tv"],
+      "port": 5320
     }
   ]
 }

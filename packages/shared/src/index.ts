@@ -449,6 +449,8 @@ export interface TitleSummary {
   releasedEpisodeCount: number;
   /** The next scheduled release still in the future (ISO), or null. */
   nextReleaseAt: string | null;
+  /** On the SweamTV channel lineup (AI-generated originals; admin-curated). */
+  aiOriginal: boolean;
 }
 
 export interface EpisodeSummary {
@@ -1759,4 +1761,65 @@ export interface PushTestDevice {
   ok: boolean;
   status: number;
   error: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// SweamTV: the lean-back channel for AI-generated binge series and films
+// (tv.sweam.co, Roku, Samsung, LG). Pairing puts a short code on the TV; the
+// viewer claims it at sweam.co/activate, and the TV receives a normal session.
+// ---------------------------------------------------------------------------
+
+/** Pairing-code alphabet: 32 characters, no lookalikes (I, O, 0, 1 removed). */
+export const TV_PAIR_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const TV_PAIR_CODE_LENGTH = 6;
+/** A code stays claimable this long after the TV shows it. */
+export const TV_PAIR_CODE_TTL_MINUTES = 15;
+/** How often the TV polls while its code is on screen. */
+export const TV_PAIR_POLL_SECONDS = 3;
+/** Where a viewer claims the code (shown on the TV pairing screen). */
+export const TV_ACTIVATE_PATH = '/activate';
+
+export const TV_PLATFORMS = ['tv-web', 'roku', 'tizen', 'webos', 'other'] as const;
+export type TvPlatform = (typeof TV_PLATFORMS)[number];
+
+/** POST /api/tv/pair/start → the code the TV puts on screen. */
+export interface TvPairStart {
+  deviceId: string;
+  code: string;
+  expiresAt: string;
+  pollSeconds: number;
+  activateUrl: string;
+}
+
+/** POST /api/tv/pair/poll → pending, expired, or the one-time session handover. */
+export type TvPairPollResult =
+  | { status: 'pending' }
+  | { status: 'expired' }
+  | {
+      status: 'paired';
+      /** The session token, for native shells (Roku) that send Bearer headers. */
+      token: string;
+      user: { username: string | null; displayName: string };
+    };
+
+/** A paired TV as Settings lists it. */
+export interface TvDeviceSummary {
+  id: string;
+  platform: string;
+  name: string | null;
+  pairedAt: string;
+  lastSeenAt: string | null;
+}
+
+/** One rail of the TV home screen. */
+export interface TvFeedRow {
+  key: string;
+  name: string;
+  titles: TitleSummary[];
+}
+
+/** GET /api/tv/feed → the whole TV home screen. */
+export interface TvFeed {
+  rows: TvFeedRow[];
+  generatedAt: string;
 }

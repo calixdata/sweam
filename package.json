@@ -11,11 +11,13 @@
     "packages/shared",
     "apps/api",
     "apps/web",
+    "apps/tv",
     "apps/analytics",
     "apps/transcoder"
   ],
   "scripts": {
     "dev": "concurrently -n api,web -c blue,cyan \"npm run dev -w @sweam/api\" \"npm run dev -w @sweam/web\"",
+    "dev:tv": "node scripts/dev-tv.mjs",
     "dev:transcoder": "npm run dev -w @sweam/transcoder",
     "build": "npm run build --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

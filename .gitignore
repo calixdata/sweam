@@ -33,3 +33,6 @@ SWEAM SCOUT LOGO/
 sweam-stripe-artwork-preview.*
 small-size-proof.*
 *.apk
+
+# SweamTV Roku sideload zips (built artifacts)
+apps/roku/out/

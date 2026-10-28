@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="AppScene" extends="Scene">
+  <script type="text/brightscript" uri="AppScene.brs" />
+  <children>
+    <Rectangle id="background" width="1920" height="1080" color="0x080E19FF" />
+
+    <Group id="pairGroup" visible="false">
+      <Label id="pairTitle" text="SweamTV" translation="[120,90]" font="font:LargeBoldSystemFont" color="0xEEF1F7FF" />
+      <Label id="pairTag" text="AI-generated binge series and films, on your TV." translation="[120,170]" font="font:MediumSystemFont" color="0x9FB3CCFF" />
+      <Label id="pairCode" translation="[120,290]" font="font:LargeBoldSystemFont" color="0x4DE0F3FF" />
+      <Label id="pairSteps" translation="[120,430]" width="1500" wrap="true" font="font:MediumSystemFont" color="0xEEF1F7FF" lineSpacing="14" />
+      <Label id="pairStatus" translation="[120,700]" width="1500" font="font:SmallSystemFont" color="0x9FB3CCFF" />
+    </Group>
+
+    <Group id="homeGroup" visible="false">
+      <Label id="homeTitle" text="SweamTV" translation="[120,60]" font="font:LargeBoldSystemFont" color="0xEEF1F7FF" />
+      <Label id="homeWho" translation="[120,132]" font="font:SmallSystemFont" color="0x9FB3CCFF" />
+      <RowList
+        id="rows"
+        translation="[120,200]"
+        itemComponentName="PosterItem"
+        itemSize="[1680,440]"
+        numRows="2"
+        rowItemSize="[[240,400]]"
+        rowItemSpacing="[[24,0]]"
+        itemSpacing="[0,56]"
+        showRowLabel="[true]"
+        rowLabelOffset="[[0,16]]"
+        rowFocusAnimationStyle="floatingFocus" />
+    </Group>
+
+    <Group id="detailGroup" visible="false">
+      <Poster id="detailPoster" translation="[120,120]" width="320" height="480" loadDisplayMode="scaleToZoom" />
+      <Label id="detailName" translation="[500,120]" width="1280" font="font:LargeBoldSystemFont" color="0xEEF1F7FF" />
+      <Label id="detailMeta" translation="[500,206]" width="1280" font="font:SmallSystemFont" color="0x9FB3CCFF" />
+      <Label id="detailSynopsis" translation="[500,264]" width="1280" maxLines="6" wrap="true" font="font:MediumSystemFont" color="0xEEF1F7FF" />
+      <LabelList id="episodeList" translation="[500,560]" itemSize="[1280,64]" numRows="5" color="0xEEF1F7FF" focusedColor="0x04121CFF" />
+      <Label id="detailComing" translation="[500,912]" width="1280" wrap="true" maxLines="3" font="font:SmallSystemFont" color="0xF5C47CFF" />
+    </Group>
+
+    <Group id="videoGroup" visible="false">
+      <Video id="video" width="1920" height="1080" translation="[0,0]" />
+    </Group>
+
+    <Label id="globalStatus" translation="[120,1000]" width="1680" font="font:SmallSystemFont" color="0x9FB3CCFF" />
+    <Timer id="pollTimer" repeat="true" duration="3" />
+  </children>
+</component>

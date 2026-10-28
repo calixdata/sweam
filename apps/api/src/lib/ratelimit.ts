@@ -68,6 +68,13 @@ export const RATE_LIMITS = {
   ucastRequest: { name: 'ucast-request', limit: 5, windowS: 24 * 60 * 60 },
   ucastBallot: { name: 'ucast-ballot', limit: 40, windowS: 24 * 60 * 60 },
   ucastVote: { name: 'ucast-vote', limit: 300, windowS: 60 * 60 },
+  /** SweamTV pairing: new codes per IP (a TV asks again only when one expires). */
+  tvPairStart: { name: 'tv-pair-start', limit: 12, windowS: 60 * 60 },
+  /** Pairing polls per IP: one TV polls every 3 s while its code is on screen (~300 per 15 min). */
+  tvPairPoll: { name: 'tv-pair-poll', limit: 900, windowS: 15 * 60 },
+  /** TV code claims per account and per IP (code-guessing brakes; codes expire in 15 minutes). */
+  tvClaimUser: { name: 'tv-claim-user', limit: 10, windowS: 60 * 60 },
+  tvClaimIp: { name: 'tv-claim-ip', limit: 20, windowS: 60 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /** Start of the fixed window containing nowMs, in epoch seconds. */

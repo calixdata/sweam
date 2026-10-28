@@ -3,7 +3,7 @@ import { logDelivery, sendPushToUser } from '../lib/fcm';
 import { loadAnnouncementContent, releaseEmail } from '../lib/release';
 import { hasBluAccess } from '../lib/blu';
 import { deleteCookie, getCookie } from 'hono/cookie';
-import type { BlockedAccount, MyVerification, NotificationItem, VerificationStatus } from '@sweam/shared';
+import type { BlockedAccount, MyVerification, NotificationItem, TvDeviceSummary, VerificationStatus } from '@sweam/shared';
 import { UPLOAD_SPECS } from '@sweam/shared';
 import type { AppEnv } from '../env';
 import { generateToken, hashPassword, sha256Hex, verifyPassword } from '../lib/auth';
@@ -11,7 +11,7 @@ import { emailChangeVerification, emailConfigured, sendEmail } from '../lib/emai
 import { fail, nowIso, parseBody } from '../lib/http';
 import type { TitleRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
-import { RATE_LIMITS, enforceRateLimit } from '../lib/ratelimit';
+import { RATE_LIMITS, clientIp, enforceRateLimit } from '../lib/ratelimit';
 import { loadScoutMembership } from '../lib/scoutMembership';
 import { cancelSubscription, stripeConfigured } from '../lib/stripe';
 import { SESSION_COOKIE, bearerToken, requireUser, currentUser } from '../lib/session';
@@ -23,6 +23,7 @@ import {
   pushTokenDeleteSchema,
   pushTokenSchema,
   reportCreateSchema,
+  tvClaimSchema,
   usernameSchema,
   verificationRequestSchema,
   notificationPrefsSchema,
@@ -822,4 +823,72 @@ meRoutes.delete('/likes/:titleId', async (c) => {
       .run();
   }
   return c.json({ likedByMe: false });
+});
+
+// ---------------------------------------------------------------------------
+// SweamTV devices. The TV shows a code (routes/tv.ts); the viewer claims it
+// here from /activate, and Settings lists and unpairs TVs. Unpairing deletes
+// the TV's session, so the set ends on the TV's next request.
+// ---------------------------------------------------------------------------
+
+meRoutes.post('/tv/claim', async (c) => {
+  const user = currentUser(c);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.tvClaimUser, user.id);
+  await enforceRateLimit(c.env.DB, RATE_LIMITS.tvClaimIp, clientIp(c.req.raw));
+  const body = await parseBody(c, tvClaimSchema);
+  // One guarded UPDATE: only an unclaimed, unexpired code can be taken, and
+  // the TV's next poll turns the claim into its session.
+  const device = await c.env.DB.prepare(
+    `UPDATE tv_devices SET user_id = ?
+      WHERE code = ? AND user_id IS NULL AND code_expires_at > ?
+      RETURNING id, platform, name`,
+  )
+    .bind(user.id, body.code, nowIso())
+    .first<{ id: string; platform: string; name: string | null }>();
+  if (!device) {
+    fail(404, 'code_invalid', 'That code is not active. Check the code on your TV screen and try again.');
+  }
+  return c.json({ ok: true, device: { platform: device.platform, name: device.name } });
+});
+
+meRoutes.get('/tv/devices', async (c) => {
+  const user = currentUser(c);
+  const rows = await c.env.DB.prepare(
+    `SELECT id, platform, name, paired_at, last_seen_at FROM tv_devices
+      WHERE user_id = ? AND session_token_hash IS NOT NULL
+      ORDER BY paired_at DESC`,
+  )
+    .bind(user.id)
+    .all<{ id: string; platform: string; name: string | null; paired_at: string; last_seen_at: string | null }>();
+  const devices: TvDeviceSummary[] = (rows.results ?? []).map((row) => ({
+    id: row.id,
+    platform: row.platform,
+    name: row.name,
+    pairedAt: row.paired_at,
+    lastSeenAt: row.last_seen_at,
+  }));
+  return c.json({ devices });
+});
+
+meRoutes.delete('/tv/devices/:deviceId', async (c) => {
+  const user = currentUser(c);
+  const device = await c.env.DB.prepare(
+    'SELECT id, session_token_hash FROM tv_devices WHERE id = ? AND user_id = ?',
+  )
+    .bind(c.req.param('deviceId'), user.id)
+    .first<{ id: string; session_token_hash: string | null }>();
+  if (!device) fail(404, 'not_found', 'That TV is not paired to your account.');
+  await c.env.DB.batch([
+    ...(device.session_token_hash
+      ? [c.env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(device.session_token_hash)]
+      : []),
+    c.env.DB.prepare('DELETE FROM tv_devices WHERE id = ?').bind(device.id),
+  ]);
+  // A TV unpairing itself just deleted the session this request rode in on;
+  // clear its cookie so the shell lands back on the pairing screen cleanly.
+  const token = getCookie(c, SESSION_COOKIE) ?? bearerToken(c);
+  if (token && device.session_token_hash === (await sha256Hex(token))) {
+    deleteCookie(c, SESSION_COOKIE, { path: '/' });
+  }
+  return c.json({ ok: true });
 });

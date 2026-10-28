@@ -29,6 +29,7 @@ import { studioRoutes } from './routes/studio';
 import { stripeRoutes } from './routes/stripe';
 import { submissionRoutes } from './routes/submissions';
 import { transcodeRoutes } from './routes/transcode';
+import { tvRoutes } from './routes/tv';
 import { ucastRoutes } from './routes/ucast';
 import { ucastAdminRoutes } from './routes/ucastAdmin';
 import { musicRoutes } from './routes/music';
@@ -58,6 +59,7 @@ app.route('/api/catalog', catalogRoutes);
 app.route('/api/discover', discoverRoutes);
 app.route('/api/feed', feedRoutes);
 app.route('/api/titles', titleRoutes);
+app.route('/api/tv', tvRoutes);
 app.route('/api/comments', commentRoutes);
 app.route('/api/creators', creatorRoutes);
 app.route('/api/watch', watchRoutes);
@@ -118,7 +120,19 @@ export default {
     if (pathname.startsWith('/api') || pathname.startsWith('/media')) {
       return app.fetch(request, env, ctx);
     }
-    return env.ASSETS ? env.ASSETS.fetch(request) : app.fetch(request, env, ctx);
+    if (env.ASSETS) {
+      // SweamTV. The TV bundle is built at /tv/ inside the web assets (Vite
+      // base '/tv/'), so on tv.sweam.co its hashed files already arrive as
+      // /tv/assets/*; every other path there is a TV screen and gets the TV
+      // shell — never the website's index.html.
+      if (url.hostname === 'tv.sweam.co' && !pathname.startsWith('/tv/')) {
+        const tvUrl = new URL(url);
+        tvUrl.pathname = pathname.includes('.') ? `/tv${pathname}` : '/tv/';
+        return env.ASSETS.fetch(new Request(tvUrl.toString(), request));
+      }
+      return env.ASSETS.fetch(request);
+    }
+    return app.fetch(request, env, ctx);
   },
 
   /**

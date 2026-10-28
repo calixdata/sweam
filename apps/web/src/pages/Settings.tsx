@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Link } from 'react-router-dom';
-import type { AudienceSettings, BlockedAccount, MyVerification, NotificationPrefs, PushTestDevice } from '@sweam/shared';
+import type { AudienceSettings, BlockedAccount, MyVerification, NotificationPrefs, PushTestDevice, TvDeviceSummary } from '@sweam/shared';
 import { UPLOAD_SPECS, USERNAME_HINT, USERNAME_RE } from '@sweam/shared';
 import { ApiError, apiGet, apiSend } from '../api';
 import { useAuth } from '../auth';
@@ -124,6 +124,7 @@ export function Settings() {
         <h2 id="settings-toc-heading" className="settings-toc-heading">On this page</h2>
         <ul>
           <li><a href="#notifications">Notifications</a></li>
+          <li><a href="#tv-devices">TV devices</a></li>
           <li><a href="#username-heading">Username</a></li>
           <li><a href="#avatar-heading">Profile picture</a></li>
           <li><a href="#verify-heading">Verification</a></li>
@@ -137,6 +138,8 @@ export function Settings() {
       </nav>
 
       <NotificationsSection />
+
+      <TvDevicesSection />
 
       <section aria-labelledby="username-heading">
         <h2 id="username-heading">Username</h2>
@@ -265,6 +268,92 @@ function SettingSwitch({
         </span>
       </button>
     </div>
+  );
+}
+
+const TV_PLATFORM_LABELS: Record<string, string> = {
+  'tv-web': 'Smart TV',
+  roku: 'Roku',
+  tizen: 'Samsung TV',
+  webos: 'LG TV',
+  other: 'TV',
+};
+
+/** TVs paired through SweamTV. Unpairing signs that TV out on its next request. */
+function TvDevicesSection() {
+  const [devices, setDevices] = useState<TvDeviceSummary[] | null>(null);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const result = await apiGet<{ devices: TvDeviceSummary[] }>('/api/me/tv/devices');
+      setDevices(result.devices);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not load your TVs.');
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function unpair(id: string) {
+    setBusyId(id);
+    setError('');
+    try {
+      await apiSend('DELETE', `/api/me/tv/devices/${id}`);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not unpair that TV.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section aria-labelledby="tv-heading" id="tv-devices">
+      <h2 id="tv-heading">TV devices</h2>
+      <p>
+        TVs signed in through SweamTV, the channel for AI-generated series and films. To pair
+        one, open SweamTV on the TV and enter its code at{' '}
+        <Link to="/activate">Activate a TV</Link>.
+      </p>
+      {error && (
+        <p className="status status-error" role="alert">
+          {error}
+        </p>
+      )}
+      {devices === null ? (
+        <p className="status" role="status">
+          Loading your TVs…
+        </p>
+      ) : devices.length === 0 ? (
+        <p>No TVs are paired right now.</p>
+      ) : (
+        <ul>
+          {devices.map((device) => {
+            const label = device.name?.trim() || TV_PLATFORM_LABELS[device.platform] || 'TV';
+            return (
+              <li key={device.id}>
+                <strong>{label}</strong> — paired {new Date(device.pairedAt).toLocaleDateString()}
+                {device.lastSeenAt
+                  ? `, last used ${new Date(device.lastSeenAt).toLocaleDateString()}`
+                  : ''}{' '}
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => void unpair(device.id)}
+                  disabled={busyId === device.id}
+                >
+                  {busyId === device.id ? 'Unpairing…' : `Unpair ${label}`}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 

@@ -14,6 +14,8 @@ import {
   SCOUT_OFFER_KINDS,
   SCOUT_PROMO_MAX_PERCENT,
   SUBGENRES,
+  TV_PAIR_CODE_LENGTH,
+  TV_PLATFORMS,
   UCAST_MAX_ROLES,
   UCAST_WORK_KINDS,
   USERNAME_HINT,
@@ -819,3 +821,30 @@ export const adminUcastCreateSchema = ucastDuplicateCheckSchema.extend({
   coverUrl: z.string().trim().max(500).nullable().optional(),
   asHost: z.boolean().default(true),
 });
+
+// ---------------------------------------------------------------------------
+// SweamTV pairing
+// ---------------------------------------------------------------------------
+
+export const tvPairStartSchema = z.object({
+  platform: z.enum(TV_PLATFORMS).default('tv-web'),
+  /** A model or room name the TV shell may report ("Living room Roku"). */
+  name: z.string().trim().max(80).optional(),
+});
+
+/** Codes are typed from a phone or a remote: trim and uppercase before checking. */
+const tvCode = z
+  .string()
+  .trim()
+  .transform((value) => value.toUpperCase())
+  .pipe(z.string().length(TV_PAIR_CODE_LENGTH, 'Enter the code shown on your TV.'));
+
+export const tvPairPollSchema = z.object({
+  deviceId: z.string().trim().min(8).max(80),
+  code: tvCode,
+});
+
+export const tvClaimSchema = z.object({ code: tvCode });
+
+/** Admin: put a title on (or take it off) the SweamTV channel lineup. */
+export const aiOriginalToggleSchema = z.object({ aiOriginal: z.boolean() });

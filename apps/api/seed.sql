@@ -392,3 +392,9 @@ UPDATE titles SET genres = json_array(genre) WHERE genres = '[]';
 UPDATE titles SET audiences = '["Adult"]' WHERE audiences = '[]';
 UPDATE submissions SET genres = json_array(genre) WHERE genres = '[]';
 UPDATE submissions SET audiences = '["Adult"]' WHERE audiences = '[]';
+
+-- SweamTV: put a few seed titles on the AI-originals channel so the TV app
+-- has rails in local dev. (On live the lineup is admin-curated — Scion Saga
+-- first; the Blender shorts are open-movie placeholders, not AI works.)
+UPDATE titles SET ai_original = 1
+  WHERE slug IN ('sintel', 'big-buck-bunny', 'tears-of-steel', 'open-cinema-anthology');

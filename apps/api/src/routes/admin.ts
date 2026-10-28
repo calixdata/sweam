@@ -63,6 +63,7 @@ import {
   verificationDecideSchema,
   verifiedToggleSchema,
   adminPasswordResetSchema,
+  aiOriginalToggleSchema,
 } from '../lib/validate';
 import { generateToken, sha256Hex } from '../lib/auth';
 import { emailConfigured, passwordResetEmail, sendEmail } from '../lib/email';
@@ -717,6 +718,71 @@ adminRoutes.get('/users', async (c) => {
     .bind(pattern, pattern, pattern, term, term)
     .all<AdminAccountRow>();
   return c.json({ accounts: results.map(mapAdminAccount) });
+});
+
+// ---------------------------------------------------------------------------
+// SweamTV curation: which titles are on the AI-originals channel.
+// ---------------------------------------------------------------------------
+
+interface AdminTvTitleRow {
+  id: string;
+  slug: string;
+  name: string;
+  kind: string;
+  published: number;
+  suppressed: number;
+  ai_original: number;
+  creator_handle: string;
+}
+
+const ADMIN_TITLE_SELECT = `t.id, t.slug, t.name, t.kind, t.published, t.suppressed,
+  t.ai_original, cp.handle AS creator_handle
+  FROM titles t JOIN creator_profiles cp ON cp.user_id = t.creator_id`;
+
+function mapAdminTvTitle(row: AdminTvTitleRow) {
+  return {
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    kind: row.kind,
+    published: row.published === 1,
+    suppressed: row.suppressed === 1,
+    aiOriginal: row.ai_original === 1,
+    creatorHandle: row.creator_handle,
+  };
+}
+
+/**
+ * Find titles to curate. With no query, the current SweamTV lineup comes
+ * back (every title flagged ai_original), so the admin page doubles as the
+ * channel's programming sheet.
+ */
+adminRoutes.get('/titles', async (c) => {
+  const term = (c.req.query('q') ?? '').replace(/^@+/, '').trim().slice(0, 80);
+  const { results } = term
+    ? await c.env.DB.prepare(
+        `SELECT ${ADMIN_TITLE_SELECT}
+         WHERE t.name LIKE ? ESCAPE '\\' OR t.slug LIKE ? ESCAPE '\\' OR cp.handle LIKE ? ESCAPE '\\'
+         ORDER BY t.ai_original DESC, t.published DESC, t.published_at DESC
+         LIMIT 25`,
+      )
+        .bind(`%${likeEscape(term)}%`, `%${likeEscape(term)}%`, `%${likeEscape(term)}%`)
+        .all<AdminTvTitleRow>()
+    : await c.env.DB.prepare(
+        `SELECT ${ADMIN_TITLE_SELECT} WHERE t.ai_original = 1
+         ORDER BY t.published DESC, t.published_at DESC LIMIT 50`,
+      ).all<AdminTvTitleRow>();
+  return c.json({ titles: results.map(mapAdminTvTitle) });
+});
+
+/** Put a title on (or take it off) the SweamTV channel. */
+adminRoutes.post('/titles/:titleId/ai-original', async (c) => {
+  const body = await parseBody(c, aiOriginalToggleSchema);
+  const updated = await c.env.DB.prepare('UPDATE titles SET ai_original = ? WHERE id = ?')
+    .bind(body.aiOriginal ? 1 : 0, c.req.param('titleId'))
+    .run();
+  if ((updated.meta?.changes ?? 0) === 0) fail(404, 'title_not_found', 'No title with that id.');
+  return c.json({ ok: true, aiOriginal: body.aiOriginal });
 });
 
 /**

@@ -13,6 +13,7 @@ export const TITLE_SELECT = `
   t.id, t.slug, t.name, t.kind, t.genre, t.audiences AS audiences, t.hero_url AS hero_url,
   t.synopsis, t.advisory, t.poster_url, t.published_at,
   t.is_blu AS is_blu, t.blu_price_cents AS blu_price_cents, t.promoted_by AS promoted_by,
+  t.ai_original AS ai_original,
   u.display_name AS creator_name, u.avatar_url AS creator_avatar, u.verified AS creator_verified,
   cp.handle AS creator_handle,
   (SELECT COUNT(*) FROM episodes e WHERE e.title_id = t.id) AS episode_count,
@@ -43,6 +44,7 @@ export interface TitleRow {
   is_blu: number;
   blu_price_cents: number | null;
   promoted_by: string | null;
+  ai_original: number;
   creator_name: string;
   creator_avatar: string | null;
   creator_verified: number | null;
@@ -82,6 +84,7 @@ export function mapTitle(row: TitleRow): TitleSummary {
     isBlu: row.is_blu === 1,
     bluPriceCents: row.blu_price_cents,
     promotedBy: row.promoted_by,
+    aiOriginal: row.ai_original === 1,
     releasedEpisodeCount: row.released_episode_count ?? row.episode_count,
     nextReleaseAt: row.next_release_at ?? null,
   };

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="ApiTask" extends="Task">
+  <interface>
+    <field id="method" type="string" value="GET" />
+    <field id="url" type="string" />
+    <field id="body" type="string" />
+    <field id="token" type="string" />
+    <field id="status" type="integer" value="0" />
+    <field id="response" type="assocarray" />
+    <field id="done" type="boolean" value="false" alwaysNotify="true" />
+  </interface>
+  <script type="text/brightscript" uri="ApiTask.brs" />
+</component>
