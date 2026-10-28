@@ -6,9 +6,10 @@ import { notBlockedBy } from '../lib/blocks';
 import { requireUser, currentUser } from '../lib/session';
 
 /**
- * The vertical, swipe-up feed for the mobile app: published titles, newest
- * first, each paired with its first episode's playable URL and live engagement
- * counts, so a client can autoplay and show like/comment state in one request.
+ * The vertical, swipe-up feed for the mobile app: published titles, the ones
+ * with something new first (see FRESH_AT), each paired with its playable
+ * episode and live engagement counts, so a client can autoplay and show
+ * like/comment state in one request.
  * Watching is gated, so this requires a signed-in account.
  */
 export const feedRoutes = new Hono<AppEnv>();
@@ -29,6 +30,7 @@ interface FeedRow {
   episode_id: string;
   video_url: string;
   published_at: string | null;
+  fresh_at: string;
   views: number;
   likes: number;
   comment_count: number;
@@ -46,13 +48,24 @@ const PAGE = 20;
 /** How many active promotions to pin at the top of the first feed page. */
 const MAX_PINNED_PROMOS = 10;
 
+/**
+ * When a title last had something new: its publish time, or the latest episode
+ * that has released (scheduled) or been added (unscheduled) since. A new episode
+ * of a series brings the whole series back to the top of the feed; ordering by
+ * publish time alone left a series where it was first published.
+ */
+const FRESH_AT = `MAX(COALESCE(t.published_at, t.created_at), COALESCE(
+    (SELECT MAX(COALESCE(x.release_at, x.created_at)) FROM episodes x
+     WHERE x.title_id = t.id
+       AND (x.release_at IS NULL OR x.release_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))), ''))`;
+
 /** The columns + joins every feed row needs (one playable episode per title). */
 const FEED_SELECT = `
   SELECT t.id AS title_id, t.slug, t.name, t.kind, t.synopsis,
     u.display_name AS creator_name, u.avatar_url AS creator_avatar, u.verified AS creator_verified,
     cp.handle AS creator_handle, t.poster_url,
     t.is_blu AS is_blu, t.promoted_by AS promoted_by,
-    e.id AS episode_id, e.video_url, e.media_type, t.published_at,
+    e.id AS episode_id, e.video_url, e.media_type, t.published_at, ${FRESH_AT} AS fresh_at,
     e.season AS episode_season, e.episode AS episode_number, e.name AS episode_name, e.release_at AS episode_release_at,
     COALESCE(s.plays, 0) AS views, COALESCE(s.likes, 0) AS likes,
     (SELECT COUNT(*) FROM comments co WHERE co.title_id = t.id AND co.status = 'visible') AS comment_count,
@@ -107,7 +120,7 @@ function toFeedItem(row: FeedRow): FeedItem {
 
 feedRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  // Keyset pagination on published_at: pass the last item's `nextCursor` as ?before=.
+  // Keyset pagination on fresh_at: pass the last item's `nextCursor` as ?before=.
   const before = c.req.query('before') ?? '';
   // ?following=1 narrows the feed to clips from creators the viewer follows.
   const following = c.req.query('following') === '1' ? 1 : 0;
@@ -136,12 +149,12 @@ feedRoutes.get('/', async (c) => {
 
   const rows = await c.env.DB.prepare(
     `${FEED_SELECT}
-     WHERE t.published = 1 AND t.is_blu = 0 AND t.promoted_at IS NULL AND (?2 = '' OR t.published_at < ?2)
+     WHERE t.published = 1 AND t.is_blu = 0 AND t.promoted_at IS NULL AND (?2 = '' OR fresh_at < ?2)
        AND ${notBlockedBy('?1', 't.creator_id')}${aud}
        AND (?3 = 0 OR EXISTS (
          SELECT 1 FROM follows f WHERE f.follower_id = ?1 AND f.creator_id = t.creator_id
        ))
-     ORDER BY t.published_at DESC
+     ORDER BY fresh_at DESC
      LIMIT ${PAGE}`,
   )
     .bind(user.id, before, following)
@@ -152,6 +165,6 @@ feedRoutes.get('/', async (c) => {
   // The cursor tracks only the chronological stream, so paging never re-shows a
   // pinned promotion.
   const last = rows.results.at(-1);
-  const nextCursor = rows.results.length === PAGE && last ? last.published_at : null;
+  const nextCursor = rows.results.length === PAGE && last ? last.fresh_at : null;
   return c.json({ items, nextCursor });
 });

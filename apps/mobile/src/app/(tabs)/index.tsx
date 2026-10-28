@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   ActivityIndicator,
+  AppState,
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   View,
@@ -25,6 +28,7 @@ import { Link, router, useFocusEffect } from 'expo-router';
 import { api, mediaUrl, videoSource } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
 import { useIntroDone } from '../../lib/intro';
+import { useWatchProgress } from '../../lib/progress';
 import { colors } from '../../lib/theme';
 import type { FeedItem } from '../../lib/types';
 import { CommentsSheet } from '../../components/CommentsSheet';
@@ -39,6 +43,12 @@ function formatCount(n: number): string {
 
 type FeedTab = 'following' | 'foryou';
 
+/** Away this long (tab or app), the feed reloads from the top on return. */
+const STALE_MS = 10 * 60_000;
+/** While watching, look for new releases this often and offer them. */
+const CHECK_MS = 2 * 60_000;
+const itemKey = (i: FeedItem) => `${i.titleId}:${i.episodeId}`;
+
 export default function FeedScreen() {
   const { user, loading: authLoading, token } = useAuth();
   const insets = useSafeAreaInsets();
@@ -49,29 +59,112 @@ export default function FeedScreen() {
   const [listHeight, setListHeight] = useState(0);
   const [commentSlug, setCommentSlug] = useState<string | null>(null);
   const [screenFocused, setScreenFocused] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  // A newer feed found by the background check, waiting behind the "New" button.
+  const [fresh, setFresh] = useState<FeedItem[] | null>(null);
+  const listRef = useRef<FlatList<FeedItem>>(null);
+  const loadedAt = useRef(0);
+  const itemsRef = useRef<FeedItem[] | null>(null);
+  itemsRef.current = items;
+
+  const feedPath = feedTab === 'following' ? '/api/feed?following=1' : '/api/feed';
+  const fetchFeed = useCallback(async () => (await api.get<{ items: FeedItem[] }>(feedPath)).items, [feedPath]);
+
+  // Put a fetched feed on screen, from the top.
+  const show = useCallback((next: FeedItem[]) => {
+    setItems(next);
+    setActiveIndex(0);
+    setFresh(null);
+    loadedAt.current = Date.now();
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
+
+  // First load and tab switch: a spinner while it loads.
+  const load = useCallback(async () => {
+    if (!user) return;
+    setItems(null);
+    setActiveIndex(0);
+    setError(null);
+    setFresh(null);
+    try {
+      show(await fetchFeed());
+    } catch {
+      setError('Could not load the feed.');
+    }
+  }, [user, fetchFeed, show]);
+
+  // Pull to refresh, the Refresh button, tapping the open tab again, and coming
+  // back after a while: the current clips stay up until the new feed arrives.
+  const refresh = useCallback(
+    async (announce: boolean) => {
+      if (!user) return;
+      setRefreshing(true);
+      try {
+        show(await fetchFeed());
+        setError(null);
+        if (announce) AccessibilityInfo.announceForAccessibility('Feed refreshed.');
+      } catch {
+        if (itemsRef.current) AccessibilityInfo.announceForAccessibility('Could not refresh the feed. Try again.');
+        else setError('Could not load the feed.');
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [user, fetchFeed, show],
+  );
+
+  // Look for new releases without moving the viewer; offer them with a button.
+  const check = useCallback(async () => {
+    const current = itemsRef.current;
+    if (!user || !current) return;
+    try {
+      const next = await fetchFeed();
+      const have = new Set(current.map(itemKey));
+      if (next.some((i) => !have.has(itemKey(i)))) {
+        setFresh((prev) => {
+          if (!prev) AccessibilityInfo.announceForAccessibility('New on Sweam. The New button at the top shows it.');
+          return next;
+        });
+      }
+    } catch {
+      /* offline: try again next time */
+    }
+  }, [user, fetchFeed]);
+
+  // Coming back to Home or to the app: reload when stale, otherwise just check.
+  const onReturn = useCallback(() => {
+    if (!itemsRef.current) return;
+    if (Date.now() - loadedAt.current > STALE_MS) void refresh(false);
+    else void check();
+  }, [refresh, check]);
+  const onReturnRef = useRef(onReturn);
+  onReturnRef.current = onReturn;
 
   // Pause all feed playback when the Home tab/screen loses focus so audio never
   // bleeds into other tabs or screens.
   useFocusEffect(
     useCallback(() => {
       setScreenFocused(true);
+      onReturnRef.current();
       return () => setScreenFocused(false);
     }, []),
   );
 
-  const load = useCallback(async () => {
-    if (!user) return;
-    setItems(null);
-    setActiveIndex(0);
-    setError(null);
-    try {
-      const path = feedTab === 'following' ? '/api/feed?following=1' : '/api/feed';
-      const data = await api.get<{ items: FeedItem[] }>(path);
-      setItems(data.items);
-    } catch {
-      setError('Could not load the feed.');
-    }
-  }, [user, feedTab]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') onReturnRef.current();
+    });
+    return () => sub.remove();
+  }, []);
+
+  // While Home is open, check for new releases every two minutes.
+  useEffect(() => {
+    if (!screenFocused || !user) return;
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') void check();
+    }, CHECK_MS);
+    return () => clearInterval(timer);
+  }, [screenFocused, user, check]);
 
   useEffect(() => {
     if (authLoading || !user) return;
@@ -102,7 +195,7 @@ export default function FeedScreen() {
   const topTabs = (
     <View style={[styles.topTabs, { paddingTop: insets.top + 8 }]} pointerEvents="box-none">
       <Pressable
-        onPress={() => setFeedTab('following')}
+        onPress={() => (feedTab === 'following' ? void refresh(true) : setFeedTab('following'))}
         accessibilityRole="tab"
         accessibilityState={{ selected: feedTab === 'following' }}
         hitSlop={8}
@@ -110,15 +203,40 @@ export default function FeedScreen() {
         <Text style={[styles.topTab, feedTab === 'following' && styles.topTabActive]}>Following</Text>
       </Pressable>
       <Pressable
-        onPress={() => setFeedTab('foryou')}
+        onPress={() => (feedTab === 'foryou' ? void refresh(true) : setFeedTab('foryou'))}
         accessibilityRole="tab"
         accessibilityState={{ selected: feedTab === 'foryou' }}
         hitSlop={8}
       >
         <Text style={[styles.topTab, feedTab === 'foryou' && styles.topTabActive]}>For You</Text>
       </Pressable>
+      <Pressable
+        style={[styles.refreshBtn, { top: insets.top + 4 }]}
+        onPress={() => void refresh(true)}
+        disabled={refreshing}
+        accessibilityRole="button"
+        accessibilityLabel={refreshing ? 'Refreshing the feed' : 'Refresh feed'}
+        hitSlop={10}
+      >
+        <Ionicons name="refresh" size={22} color={refreshing ? 'rgba(255,255,255,0.4)' : '#fff'} />
+      </Pressable>
     </View>
   );
+
+  const newPill = fresh ? (
+    <Pressable
+      style={[styles.newPill, { top: insets.top + 44 }]}
+      onPress={() => {
+        show(fresh);
+        AccessibilityInfo.announceForAccessibility('Showing what is new.');
+      }}
+      accessibilityRole="button"
+      accessibilityLabel="New on Sweam. Show it"
+    >
+      <Ionicons name="arrow-up" size={16} color="#04121a" />
+      <Text style={styles.newPillText}>New on Sweam</Text>
+    </Pressable>
+  ) : null;
 
   return (
     <View
@@ -127,8 +245,18 @@ export default function FeedScreen() {
     >
       {listHeight > 0 && items && items.length > 0 && (
         <FlatList
+          ref={listRef}
           data={items}
-          keyExtractor={(item) => item.titleId}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void refresh(true)}
+              tintColor={colors.accent}
+              colors={[colors.accent]}
+              progressViewOffset={insets.top + 40}
+            />
+          }
+          keyExtractor={itemKey}
           pagingEnabled
           showsVerticalScrollIndicator={false}
           snapToInterval={listHeight}
@@ -182,6 +310,7 @@ export default function FeedScreen() {
       )}
 
       {topTabs}
+      {newPill}
 
       <CommentsSheet
         slug={commentSlug}
@@ -240,6 +369,10 @@ function FeedCard({
       }
     }
   }, [isNear, isImage, introDone, item.videoUrl, token, player]);
+
+  // Count the play and watch time of the active clip (signed-in viewers; the
+  // feed always starts from the beginning, so no resume here).
+  useWatchProgress(player, item.episodeId, isActive && !isImage && Boolean(token), 0);
 
   // Only the active, un-paused card plays — and only while the screen is focused,
   // so leaving the tab/screen stops the audio.
@@ -455,6 +588,19 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   topTab: { color: 'rgba(255,255,255,0.65)', fontSize: 16, fontWeight: '600' },
+  refreshBtn: { position: 'absolute', right: 16, padding: 4 },
+  newPill: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: colors.accent,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+  },
+  newPillText: { color: '#04121a', fontSize: 14, fontWeight: '800' },
   topTabActive: {
     color: '#fff',
     fontWeight: '800',

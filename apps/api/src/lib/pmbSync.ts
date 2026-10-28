@@ -145,7 +145,7 @@ export const SOURCES: Source[] = [
       const out = [userEvent(eventId('vs', s(r.uid), s(r.episode_id)), 'video_started', r.uid, r.ts, props)];
       if (r.completed === 1) {
         out.push(userEvent(eventId('vc', s(r.uid), s(r.episode_id)), 'video_completed', r.uid, r.ts, props));
-        // The launch funnel's stage: 70 percent or more of a title 10 minutes or longer.
+        // The launch funnel's stage: Sweam's completion mark (90 percent of the runtime) on a title 10 minutes or longer.
         if (props.long_form) out.push(userEvent(eventId('vf', s(r.uid), s(r.episode_id)), 'video_finished', r.uid, r.ts, props));
       }
       return out;

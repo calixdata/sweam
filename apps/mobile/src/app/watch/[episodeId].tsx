@@ -7,6 +7,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { api, mediaUrl, videoSource } from '../../lib/api';
 import { ApiError } from '../../lib/api';
 import { useAuth } from '../../lib/auth';
+import { useWatchProgress } from '../../lib/progress';
 import { colors } from '../../lib/theme';
 import type { WatchPayload } from '../../lib/types';
 
@@ -36,6 +37,14 @@ export default function WatchScreen() {
     (p) => {
       p.play();
     },
+  );
+
+  // Report watch progress (plays, completions, Continue watching) and resume.
+  useWatchProgress(
+    player,
+    payload?.episode.id,
+    Boolean(user && payload && payload.episode.mediaType !== 'image'),
+    payload?.positionS ?? 0,
   );
 
   // Stop playback (and its audio) whenever this screen loses focus — e.g. the
