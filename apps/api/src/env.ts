@@ -43,6 +43,15 @@ export interface Env {
    * wrangler.toml; the footer shows the company name alone until it is set.
    */
   MAIL_POSTAL_ADDRESS?: string;
+  /** "on" only on the production Worker: gates the scheduled handler (release announcer, monthly payouts). */
+  SCHEDULED_JOBS?: string;
+  /** PM Bestie Analytics write keys (secrets). Without the live key the sync does nothing. */
+  PMB_ANALYTICS_LIVE_KEY?: string;
+  PMB_ANALYTICS_TEST_KEY?: string;
+  /** Collect endpoint; default https://pmbestie.net/api/collect. */
+  PMB_ANALYTICS_URL?: string;
+  /** Comma-separated user ids whose activity goes to PM Bestie's test data (the team). */
+  PMB_TEAM_USER_IDS?: string;
   /**
    * Firebase service account JSON (the entire key file contents) used to send
    * FCM v1 push notifications to the mobile app. A secret; set with

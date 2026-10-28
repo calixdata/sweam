@@ -32,10 +32,13 @@ ENVIRONMENT = "development"
 # when ENVIRONMENT is "production").
 TRANSCODER_TOKEN = "dev-transcoder-token"
 
-# Scheduled jobs. The scout royalty pool is distributed monthly, at 07:00 UTC on
-# the 1st, for the previous calendar month (the Worker's scheduled handler).
+# No scheduled jobs at the top level. A deploy without --env preview creates a
+# separate Worker ("sweam-api") on the SAME database; on 2026-10-19 one did, and
+# its 10-minute timer claimed releases before the real announcer. Scheduled jobs
+# live only in [env.preview.triggers], and the handler also refuses to run unless
+# SCHEDULED_JOBS = "on" (set only in [env.preview.vars]).
 [triggers]
-crons = ["0 7 1 * *", "*/10 * * * *"]
+crons = []
 
 # ---------------------------------------------------------------------------
 # Always-on deploy (workers.dev). Serves the SPA + API from one Worker.
@@ -67,6 +70,13 @@ bucket_name = "sweam-media"
 
 [env.preview.vars]
 ENVIRONMENT = "production"
+# The scheduled handler runs only where this is "on" (see [triggers] above).
+SCHEDULED_JOBS = "on"
+# PM Bestie Analytics sync (lib/pmbSync.ts). The write keys are secrets
+# (PMB_ANALYTICS_LIVE_KEY, PMB_ANALYTICS_TEST_KEY). Activity of these accounts
+# goes to the TEST data, with admins and official accounts: calix, eterna
+# (Verbatiim scout), playreviewer (store review account).
+PMB_TEAM_USER_IDS = "c398c577-a7ec-4956-8b0a-c945823f0f0d,8347dbe2-5a1f-45d4-a929-09534f389c75,d704e5e4-a5fe-4ba1-8b39-934829d2bebd"
 # Falcyn Inc mailing address for the release email footer (CAN-SPAM). While it
 # is empty, only Notify-me release emails are sent.
 MAIL_POSTAL_ADDRESS = "1207 Delaware Ave #4777, Wilmington, DE 19806"

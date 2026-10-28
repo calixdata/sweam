@@ -9,6 +9,7 @@ import { pushSelfCheck, setPushEnv } from './lib/fcm';
 let pushSelfChecked = false;
 import { runBluFund } from './lib/fund';
 import { announceReleasedEpisodes } from './lib/release';
+import { syncPmBestie } from './lib/pmbSync';
 import { previousMonthPeriod, runScoutRoyalty } from './lib/royalty';
 import { adminRoutes } from './routes/admin';
 import { adRoutes } from './routes/ads';
@@ -127,6 +128,14 @@ export default {
    * configured they record pending allocations as a ledger.
    */
   scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): void {
+    // Only the production Worker runs scheduled jobs. A copy deployed without
+    // --env preview binds the same database, and in October 2026 one such copy
+    // claimed releases before the real announcer (no email, no push). Local
+    // testing: wrangler dev --var SCHEDULED_JOBS:on
+    if (env.SCHEDULED_JOBS !== 'on') {
+      console.warn('scheduled_skipped', env.ENVIRONMENT, event.cron);
+      return;
+    }
     // The frequent trigger announces scheduled releases that have just unlocked;
     // the monthly one runs the payout distributions.
     if (event.cron === RELEASE_CRON) {
@@ -138,6 +147,8 @@ export default {
       ctx.waitUntil(
         announceReleasedEpisodes(env).catch((err) => console.error('release_announce_failed', err)),
       );
+      // Activity to the Sweam workspace's analytics in PM Bestie (no-op without the key).
+      ctx.waitUntil(syncPmBestie(env).catch((err) => console.error('pmb_sync_crashed', err)));
       return;
     }
     const { periodStart, periodEnd } = previousMonthPeriod(new Date(event.scheduledTime));
