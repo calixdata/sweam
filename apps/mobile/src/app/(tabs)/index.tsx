@@ -31,6 +31,17 @@ import { useIntroDone } from '../../lib/intro';
 import { useWatchProgress } from '../../lib/progress';
 import { colors } from '../../lib/theme';
 import type { FeedItem } from '../../lib/types';
+import {
+  appendPage,
+  itemCount,
+  itemKey,
+  nextRequest,
+  startPager,
+  wrapAround,
+  type FeedEntry,
+  type FeedPage,
+  type Pager,
+} from '../../lib/feedPager';
 import { CommentsSheet } from '../../components/CommentsSheet';
 
 /** 12.3K-style counts for the feed rail, where space is tight. */
@@ -47,51 +58,79 @@ type FeedTab = 'following' | 'foryou';
 const STALE_MS = 10 * 60_000;
 /** While watching, look for new releases this often and offer them. */
 const CHECK_MS = 2 * 60_000;
-const itemKey = (i: FeedItem) => `${i.titleId}:${i.episodeId}`;
 
 export default function FeedScreen() {
   const { user, loading: authLoading, token } = useAuth();
   const insets = useSafeAreaInsets();
   const [feedTab, setFeedTab] = useState<FeedTab>('foryou');
-  const [items, setItems] = useState<FeedItem[] | null>(null);
+  // null while the first page loads.
+  const [pager, setPager] = useState<Pager | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [listHeight, setListHeight] = useState(0);
   const [commentSlug, setCommentSlug] = useState<string | null>(null);
   const [screenFocused, setScreenFocused] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // A newer feed found by the background check, waiting behind the "New" button.
-  const [fresh, setFresh] = useState<FeedItem[] | null>(null);
-  const listRef = useRef<FlatList<FeedItem>>(null);
+  // A newer first page found by the background check, waiting behind the "New" button.
+  const [fresh, setFresh] = useState<FeedPage | null>(null);
+  const listRef = useRef<FlatList<FeedEntry>>(null);
   const loadedAt = useRef(0);
-  const itemsRef = useRef<FeedItem[] | null>(null);
-  itemsRef.current = items;
+  const pagerRef = useRef<Pager | null>(null);
+  pagerRef.current = pager;
+  const loadingMore = useRef(false);
 
-  const feedPath = feedTab === 'following' ? '/api/feed?following=1' : '/api/feed';
-  const fetchFeed = useCallback(async () => (await api.get<{ items: FeedItem[] }>(feedPath)).items, [feedPath]);
+  const fetchPage = useCallback(
+    (before?: string) => {
+      const params = [feedTab === 'following' ? 'following=1' : '', before ? `before=${encodeURIComponent(before)}` : '']
+        .filter(Boolean)
+        .join('&');
+      return api.get<FeedPage>(`/api/feed${params ? `?${params}` : ''}`);
+    },
+    [feedTab],
+  );
 
-  // Put a fetched feed on screen, from the top.
-  const show = useCallback((next: FeedItem[]) => {
-    setItems(next);
+  // Put a fetched first page on screen, from the top.
+  const show = useCallback((page: FeedPage) => {
+    setPager(startPager(page));
     setActiveIndex(0);
     setFresh(null);
     loadedAt.current = Date.now();
     listRef.current?.scrollToOffset({ offset: 0, animated: false });
   }, []);
 
+  // Near the end of what is loaded: the next older page, or once the oldest is
+  // in, an "all caught up" card and the newest again. Never a dead end.
+  const loadMore = useCallback(async () => {
+    const current = pagerRef.current;
+    if (!current || loadingMore.current) return;
+    const want = nextRequest(current);
+    if (!want) return;
+    loadingMore.current = true;
+    try {
+      const page = await fetchPage(want === 'wrap' ? undefined : want.before);
+      // Ignore the answer if the feed was refreshed or switched meanwhile.
+      if (pagerRef.current !== current) return;
+      setPager(want === 'wrap' ? wrapAround(current, page) : appendPage(current, page));
+    } catch {
+      /* offline: the next scroll tries again */
+    } finally {
+      loadingMore.current = false;
+    }
+  }, [fetchPage]);
+
   // First load and tab switch: a spinner while it loads.
   const load = useCallback(async () => {
     if (!user) return;
-    setItems(null);
+    setPager(null);
     setActiveIndex(0);
     setError(null);
     setFresh(null);
     try {
-      show(await fetchFeed());
+      show(await fetchPage());
     } catch {
       setError('Could not load the feed.');
     }
-  }, [user, fetchFeed, show]);
+  }, [user, fetchPage, show]);
 
   // Pull to refresh, the Refresh button, tapping the open tab again, and coming
   // back after a while: the current clips stay up until the new feed arrives.
@@ -100,27 +139,27 @@ export default function FeedScreen() {
       if (!user) return;
       setRefreshing(true);
       try {
-        show(await fetchFeed());
+        show(await fetchPage());
         setError(null);
-        if (announce) AccessibilityInfo.announceForAccessibility('Feed refreshed.');
+        if (announce) AccessibilityInfo.announceForAccessibility('Feed refreshed. Newest first.');
       } catch {
-        if (itemsRef.current) AccessibilityInfo.announceForAccessibility('Could not refresh the feed. Try again.');
+        if (pagerRef.current) AccessibilityInfo.announceForAccessibility('Could not refresh the feed. Try again.');
         else setError('Could not load the feed.');
       } finally {
         setRefreshing(false);
       }
     },
-    [user, fetchFeed, show],
+    [user, fetchPage, show],
   );
 
   // Look for new releases without moving the viewer; offer them with a button.
   const check = useCallback(async () => {
-    const current = itemsRef.current;
+    const current = pagerRef.current;
     if (!user || !current) return;
     try {
-      const next = await fetchFeed();
-      const have = new Set(current.map(itemKey));
-      if (next.some((i) => !have.has(itemKey(i)))) {
+      const next = await fetchPage();
+      const have = new Set(current.entries.flatMap((e) => (e.kind === 'item' ? [itemKey(e.item)] : [])));
+      if (next.items.some((i) => !have.has(itemKey(i)))) {
         setFresh((prev) => {
           if (!prev) AccessibilityInfo.announceForAccessibility('New on Sweam. The New button at the top shows it.');
           return next;
@@ -129,11 +168,11 @@ export default function FeedScreen() {
     } catch {
       /* offline: try again next time */
     }
-  }, [user, fetchFeed]);
+  }, [user, fetchPage]);
 
   // Coming back to Home or to the app: reload when stale, otherwise just check.
   const onReturn = useCallback(() => {
-    if (!itemsRef.current) return;
+    if (!pagerRef.current) return;
     if (Date.now() - loadedAt.current > STALE_MS) void refresh(false);
     else void check();
   }, [refresh, check]);
@@ -243,10 +282,10 @@ export default function FeedScreen() {
       style={styles.container}
       onLayout={(e: LayoutChangeEvent) => setListHeight(e.nativeEvent.layout.height)}
     >
-      {listHeight > 0 && items && items.length > 0 && (
+      {listHeight > 0 && pager && itemCount(pager) > 0 && (
         <FlatList
           ref={listRef}
-          data={items}
+          data={pager.entries}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -256,7 +295,9 @@ export default function FeedScreen() {
               progressViewOffset={insets.top + 40}
             />
           }
-          keyExtractor={itemKey}
+          keyExtractor={(entry) => entry.key}
+          onEndReached={() => void loadMore()}
+          onEndReachedThreshold={3}
           pagingEnabled
           showsVerticalScrollIndicator={false}
           snapToInterval={listHeight}
@@ -269,22 +310,26 @@ export default function FeedScreen() {
           maxToRenderPerBatch={2}
           windowSize={3}
           removeClippedSubviews
-          renderItem={({ item, index }) => (
-            <FeedCard
-              item={item}
-              height={listHeight}
-              isActive={index === activeIndex}
-              // Preload the current and the next clip only; everything else is a poster.
-              isNear={index === activeIndex || index === activeIndex + 1}
-              screenFocused={screenFocused}
-              token={token}
-              onOpenComments={() => setCommentSlug(item.slug)}
-            />
-          )}
+          renderItem={({ item: entry, index }) =>
+            entry.kind === 'end' ? (
+              <CaughtUpCard height={listHeight} onRefresh={() => void refresh(true)} />
+            ) : (
+              <FeedCard
+                item={entry.item}
+                height={listHeight}
+                isActive={index === activeIndex}
+                // Preload the current and the next clip only; everything else is a poster.
+                isNear={index === activeIndex || index === activeIndex + 1}
+                screenFocused={screenFocused}
+                token={token}
+                onOpenComments={() => setCommentSlug(entry.item.slug)}
+              />
+            )
+          }
         />
       )}
 
-      {!items && !error && (
+      {!pager && !error && (
         <View style={[StyleSheet.absoluteFill, styles.centeredOverlay]}>
           <ActivityIndicator color={colors.accent} />
         </View>
@@ -294,7 +339,7 @@ export default function FeedScreen() {
           <Text style={styles.gateBody}>{error}</Text>
         </View>
       )}
-      {items && items.length === 0 && (
+      {pager && itemCount(pager) === 0 && (
         <View style={[StyleSheet.absoluteFill, styles.centeredOverlay]}>
           <Text style={styles.gateBody}>
             {feedTab === 'following'
@@ -318,6 +363,22 @@ export default function FeedScreen() {
         signedIn={user !== null}
         onClose={() => setCommentSlug(null)}
       />
+    </View>
+  );
+}
+
+/** Between passes of the endless feed: the viewer has seen everything. */
+function CaughtUpCard({ height, onRefresh }: { height: number; onRefresh: () => void }) {
+  return (
+    <View style={[styles.caughtUp, { height }]} accessible={false}>
+      <Ionicons name="checkmark-circle" size={56} color={colors.accent} />
+      <Text style={styles.caughtUpTitle} accessibilityRole="header">
+        You're all caught up
+      </Text>
+      <Text style={styles.gateBody}>Keep scrolling to watch again from the newest, or refresh for anything new.</Text>
+      <Pressable style={styles.primaryBtn} onPress={onRefresh} accessibilityRole="button" accessibilityLabel="Refresh feed">
+        <Text style={styles.primaryBtnText}>Refresh</Text>
+      </Pressable>
     </View>
   );
 }
@@ -589,6 +650,8 @@ const styles = StyleSheet.create({
   },
   topTab: { color: 'rgba(255,255,255,0.65)', fontSize: 16, fontWeight: '600' },
   refreshBtn: { position: 'absolute', right: 16, padding: 4 },
+  caughtUp: { alignItems: 'center', justifyContent: 'center', gap: 14, padding: 32, backgroundColor: colors.bg },
+  caughtUpTitle: { color: colors.text, fontSize: 24, fontWeight: '800', textAlign: 'center' },
   newPill: {
     position: 'absolute',
     alignSelf: 'center',

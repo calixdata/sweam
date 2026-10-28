@@ -25,6 +25,16 @@
       "ios": {
         "resourceClass": "m-medium"
       }
+    },
+    "check": {
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "check"
+      },
+      "android": {
+        "buildType": "apk",
+        "credentialsSource": "local"
+      }
     }
   },
   "submit": {

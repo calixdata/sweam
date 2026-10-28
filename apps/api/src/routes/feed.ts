@@ -120,8 +120,10 @@ function toFeedItem(row: FeedRow): FeedItem {
 
 feedRoutes.get('/', async (c) => {
   const user = currentUser(c);
-  // Keyset pagination on fresh_at: pass the last item's `nextCursor` as ?before=.
+  // Keyset pagination on (fresh_at, title id): pass the last item's `nextCursor`
+  // as ?before=. A plain timestamp (older clients) still works.
   const before = c.req.query('before') ?? '';
+  const [beforeAt = '', beforeId = ''] = before.split('|');
   // ?following=1 narrows the feed to clips from creators the viewer follows.
   const following = c.req.query('following') === '1' ? 1 : 0;
   // The viewer's audience preference (women-only / men-only For You).
@@ -149,15 +151,15 @@ feedRoutes.get('/', async (c) => {
 
   const rows = await c.env.DB.prepare(
     `${FEED_SELECT}
-     WHERE t.published = 1 AND t.is_blu = 0 AND t.promoted_at IS NULL AND (?2 = '' OR fresh_at < ?2)
+     WHERE t.published = 1 AND t.is_blu = 0 AND t.promoted_at IS NULL AND (?2 = '' OR fresh_at < ?2 OR (fresh_at = ?2 AND t.id < ?4))
        AND ${notBlockedBy('?1', 't.creator_id')}${aud}
        AND (?3 = 0 OR EXISTS (
          SELECT 1 FROM follows f WHERE f.follower_id = ?1 AND f.creator_id = t.creator_id
        ))
-     ORDER BY fresh_at DESC
+     ORDER BY fresh_at DESC, t.id DESC
      LIMIT ${PAGE}`,
   )
-    .bind(user.id, before, following)
+    .bind(user.id, beforeAt, following, beforeId)
     .all<FeedRow>();
 
   const items: FeedItem[] = [...promoted, ...rows.results].map(toFeedItem);
@@ -165,6 +167,6 @@ feedRoutes.get('/', async (c) => {
   // The cursor tracks only the chronological stream, so paging never re-shows a
   // pinned promotion.
   const last = rows.results.at(-1);
-  const nextCursor = rows.results.length === PAGE && last ? last.fresh_at : null;
+  const nextCursor = rows.results.length === PAGE && last ? `${last.fresh_at}|${last.title_id}` : null;
   return c.json({ items, nextCursor });
 });

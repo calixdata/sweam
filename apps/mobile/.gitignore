@@ -45,3 +45,7 @@ example
 # Firebase config (do not commit to the public repo)
 google-services.json
 play-service-account.json
+
+# Throwaway signing key for the Sweam Check test build (eas build --profile check)
+credentials.json
+check-keystore/
