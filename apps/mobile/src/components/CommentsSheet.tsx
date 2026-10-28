@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { router } from 'expo-router';
@@ -111,13 +112,16 @@ export function CommentsSheet({
   }, [draft, slug, replyTo, load]);
 
   const count = comments ? countVisible(comments) : 0;
+  // The sheet draws to the bottom edge (edge to edge); lift the composer clear of
+  // the navigation bar or gesture area so a tap never lands on Back or Home.
+  const insets = useSafeAreaInsets();
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.sheet}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}
       >
         <View style={styles.handle} />
         <View style={styles.header}>

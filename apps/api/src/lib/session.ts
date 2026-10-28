@@ -37,6 +37,7 @@ interface SessionRow {
   scout_status: 'pending' | 'approved' | 'rejected' | null;
   scout_org: string | null;
   is_admin: number | null;
+  account_status: string | null;
 }
 
 export async function resolveSession(db: D1Database, token: string): Promise<SessionUser | null> {
@@ -45,7 +46,7 @@ export async function resolveSession(db: D1Database, token: string): Promise<Ses
     .prepare(
       `SELECT s.expires_at, s.token_hash, u.id, u.email, u.display_name, u.avatar_url, u.username, cp.handle,
         sp.status AS scout_status, sp.org_name AS scout_org,
-        (a.user_id IS NOT NULL) AS is_admin
+        (a.user_id IS NOT NULL) AS is_admin, u.account_status
        FROM sessions s
        JOIN users u ON u.id = s.user_id
        LEFT JOIN creator_profiles cp ON cp.user_id = u.id
@@ -56,7 +57,7 @@ export async function resolveSession(db: D1Database, token: string): Promise<Ses
     .bind(tokenHash)
     .first<SessionRow>();
   if (!row) return null;
-  if (row.expires_at <= nowIso()) {
+  if (row.expires_at <= nowIso() || (row.account_status && row.account_status !== 'active')) {
     await db.prepare('DELETE FROM sessions WHERE token_hash = ?').bind(tokenHash).run();
     return null;
   }

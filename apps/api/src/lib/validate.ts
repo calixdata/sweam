@@ -414,6 +414,31 @@ export const adminPasswordResetSchema = z.object({
   email: z.boolean(),
 });
 
+const standingReason = z.string().trim().max(500, 'Keep the reason under 500 characters.').optional();
+
+/** Suspend an account, until a date (YYYY-MM-DD, end of that day UTC) or until restored. */
+export const accountSuspendSchema = z.object({
+  reason: standingReason,
+  until: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter the end date as YYYY-MM-DD.')
+    .optional()
+    .or(z.literal('')),
+  email: z.boolean().default(true),
+});
+
+/** Ban an account permanently. */
+export const accountBanSchema = z.object({ reason: standingReason, email: z.boolean().default(true) });
+
+/** Restore a suspended or banned account. */
+export const accountRestoreSchema = z.object({ email: z.boolean().default(true) });
+
+/** Staff set a new password for an account. */
+export const adminSetPasswordSchema = z.object({ password });
+
+/** Staff delete an account; confirm with its username or email. */
+export const adminDeleteAccountSchema = z.object({ confirm: z.string().trim().min(1, 'Type the username or email to confirm.').max(254) });
+
 /** Admin account search. */
 export const adminUserSearchSchema = z.object({
   q: z.string().trim().min(1, 'Enter a username, name, or email.').max(120),

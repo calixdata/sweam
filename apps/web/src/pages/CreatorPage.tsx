@@ -87,9 +87,17 @@ export function CreatorPage() {
           </p>
         </div>
       </div>
-      {creator.bio && <p className="title-synopsis">{creator.bio}</p>}
+      {creator.bio && creator.accountStatus === 'active' && <p className="title-synopsis">{creator.bio}</p>}
 
-      {!isSelf && (
+      {creator.accountStatus !== 'active' ? (
+        <p className="standing-notice" role="note">
+          {creator.accountStatus === 'banned'
+            ? 'This account has been banned for breaking Sweam\'s rules.'
+            : 'This account is suspended.'}
+        </p>
+      ) : null}
+
+      {!isSelf && creator.accountStatus === 'active' && (
         <div className="title-actions">
           {user ? (
             <>
@@ -130,7 +138,7 @@ export function CreatorPage() {
         </div>
       )}
 
-      {creator.titles.length === 0 ? (
+      {creator.accountStatus !== 'active' ? null : creator.titles.length === 0 ? (
         <section aria-labelledby="creator-titles-heading">
           <h2 id="creator-titles-heading">Titles</h2>
           <p>{creator.isCreator ? 'Nothing published yet.' : 'No posts yet.'}</p>

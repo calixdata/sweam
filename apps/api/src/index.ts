@@ -10,6 +10,7 @@ let pushSelfChecked = false;
 import { runBluFund } from './lib/fund';
 import { announceReleasedEpisodes } from './lib/release';
 import { syncPmBestie } from './lib/pmbSync';
+import { restoreExpiredSuspensions } from './lib/accounts';
 import { previousMonthPeriod, runScoutRoyalty } from './lib/royalty';
 import { adminRoutes } from './routes/admin';
 import { adRoutes } from './routes/ads';
@@ -163,6 +164,7 @@ export default {
       );
       // Activity to the Sweam workspace's analytics in PM Bestie (no-op without the key).
       ctx.waitUntil(syncPmBestie(env).catch((err) => console.error('pmb_sync_crashed', err)));
+      ctx.waitUntil(restoreExpiredSuspensions(env).catch((err) => console.error('suspension_restore_failed', err)));
       return;
     }
     const { periodStart, periodEnd } = previousMonthPeriod(new Date(event.scheduledTime));

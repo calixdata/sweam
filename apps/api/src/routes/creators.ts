@@ -23,6 +23,7 @@ interface CreatorRow {
   display_name: string;
   avatar_url: string | null;
   is_creator: number;
+  account_status: 'active' | 'suspended' | 'banned';
 }
 
 async function creatorByHandle(db: D1Database, handle: string): Promise<CreatorRow> {
@@ -30,7 +31,7 @@ async function creatorByHandle(db: D1Database, handle: string): Promise<CreatorR
     .prepare(
       `SELECT u.id AS user_id, COALESCE(cp.handle, u.username) AS handle,
          COALESCE(cp.bio, '') AS bio, MAX(u.verified, COALESCE(cp.verified, 0)) AS verified,
-         u.display_name, u.avatar_url, (cp.user_id IS NOT NULL) AS is_creator
+         u.display_name, u.avatar_url, (cp.user_id IS NOT NULL) AS is_creator, u.account_status
        FROM users u
        LEFT JOIN creator_profiles cp ON cp.user_id = u.id
        WHERE (cp.handle = ? OR u.username = ? COLLATE NOCASE)
@@ -87,7 +88,9 @@ creatorRoutes.get('/:handle', async (c) => {
     followerCount,
     followedByMe,
     blockedByMe,
-    titles: titlesResult.results.map(mapTitle),
+    // Suspended and banned accounts show their standing and nothing else.
+    accountStatus: creator.account_status ?? 'active',
+    titles: creator.account_status && creator.account_status !== 'active' ? [] : titlesResult.results.map(mapTitle),
   };
   return c.json(payload);
 });
@@ -97,6 +100,9 @@ creatorRoutes.put('/:handle/follow', requireUser, async (c) => {
   const creator = await creatorByHandle(c.env.DB, c.req.param('handle'));
   if (creator.user_id === user.id) {
     fail(400, 'self_follow', 'You cannot follow yourself.');
+  }
+  if (creator.account_status && creator.account_status !== 'active') {
+    fail(403, 'account_unavailable', 'This account is not available.');
   }
   if (await blockedEitherWay(c.env.DB, user.id, creator.user_id)) {
     fail(403, 'blocked', 'You cannot follow this account.');

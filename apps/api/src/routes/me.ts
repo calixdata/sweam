@@ -13,7 +13,7 @@ import type { TitleRow } from '../lib/mappers';
 import { TITLE_FROM, TITLE_SELECT, mapTitle } from '../lib/mappers';
 import { RATE_LIMITS, clientIp, enforceRateLimit } from '../lib/ratelimit';
 import { loadScoutMembership } from '../lib/scoutMembership';
-import { cancelSubscription, stripeConfigured } from '../lib/stripe';
+import { deleteAccountCompletely, removeMedia } from '../lib/accounts';
 import { SESSION_COOKIE, bearerToken, requireUser, currentUser } from '../lib/session';
 import {
   audienceUpdateSchema,
@@ -288,21 +288,9 @@ meRoutes.delete('/account', async (c) => {
     fail(400, 'invalid_password', 'Your password is incorrect.');
   }
 
-  // Stop billing before the records disappear.
-  if (stripeConfigured(c.env)) {
-    const { results: subs } = await c.env.DB.prepare(
-      `SELECT stripe_subscription_id AS id FROM blu_subscriptions
-         WHERE subscriber_id = ?1 AND stripe_subscription_id IS NOT NULL AND status != 'canceled'
-       UNION
-       SELECT stripe_subscription_id AS id FROM scout_all_access
-         WHERE user_id = ?1 AND stripe_subscription_id IS NOT NULL AND status != 'canceled'`,
-    )
-      .bind(user.id)
-      .all<{ id: string }>();
-    await Promise.allSettled(subs.map((sub) => cancelSubscription(c.env, sub.id)));
-  }
-
-  await c.env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id).run();
+  // Billing stops first; then the rows go (cascading), then the media files.
+  const { files } = await deleteAccountCompletely(c.env, user.id, null);
+  c.executionCtx.waitUntil(removeMedia(c.env.MEDIA, files));
   deleteCookie(c, SESSION_COOKIE, { path: '/' });
   return c.json({ deleted: true });
 });

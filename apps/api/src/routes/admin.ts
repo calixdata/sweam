@@ -64,7 +64,20 @@ import {
   verifiedToggleSchema,
   adminPasswordResetSchema,
   aiOriginalToggleSchema,
+  accountBanSchema,
+  accountRestoreSchema,
+  accountSuspendSchema,
+  adminDeleteAccountSchema,
+  adminSetPasswordSchema,
 } from '../lib/validate';
+import {
+  deleteAccountByStaff,
+  removeMedia,
+  restoreAccount,
+  setPasswordByStaff,
+  setStanding,
+  type AccountStatus,
+} from '../lib/accounts';
 import { generateToken, sha256Hex } from '../lib/auth';
 import { emailConfigured, passwordResetEmail, sendEmail } from '../lib/email';
 import { grantFreeMembership } from '../lib/scoutMembership';
@@ -682,6 +695,11 @@ interface AdminAccountRow {
   is_demo: number;
   is_creator: number;
   created_at: string;
+  is_admin: number;
+  account_status: AccountStatus;
+  status_reason: string | null;
+  status_until: string | null;
+  status_changed_at: string | null;
 }
 
 function mapAdminAccount(row: AdminAccountRow): AdminAccount {
@@ -696,12 +714,24 @@ function mapAdminAccount(row: AdminAccountRow): AdminAccount {
     isDemo: row.is_demo === 1,
     isCreator: row.is_creator === 1,
     createdAt: row.created_at,
+    isAdmin: row.is_admin === 1,
+    accountStatus: row.account_status ?? 'active',
+    statusReason: row.status_reason,
+    statusUntil: row.status_until,
+    statusChangedAt: row.status_changed_at,
   };
 }
 
 const ADMIN_ACCOUNT_SELECT = `u.id, u.display_name, u.username, u.email, u.verified, u.verified_at,
-  u.official, u.is_demo, (cp.user_id IS NOT NULL) AS is_creator, u.created_at
+  u.official, u.is_demo, (cp.user_id IS NOT NULL) AS is_creator, u.created_at,
+  EXISTS (SELECT 1 FROM admins ad WHERE ad.user_id = u.id) AS is_admin,
+  u.account_status, u.status_reason, u.status_until, u.status_changed_at
   FROM users u LEFT JOIN creator_profiles cp ON cp.user_id = u.id`;
+
+async function adminAccountById(db: D1Database, userId: string): Promise<AdminAccount | null> {
+  const row = await db.prepare(`SELECT ${ADMIN_ACCOUNT_SELECT} WHERE u.id = ?`).bind(userId).first<AdminAccountRow>();
+  return row ? mapAdminAccount(row) : null;
+}
 
 /** Find accounts by username, display name, or email (exact username first). */
 adminRoutes.get('/users', async (c) => {
@@ -894,6 +924,63 @@ adminRoutes.post('/users/:userId/password-reset', async (c) => {
   }
   console.log('admin_password_reset', admin.id, target.id, body.email ? (emailed ? 'emailed' : 'email_failed') : 'link_only');
   return c.json({ link, expiresAt, emailed });
+});
+
+/** Suspend an account, until a date or until restored. */
+adminRoutes.post('/users/:userId/suspend', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, accountSuspendSchema);
+  // A date means through the end of that day (UTC).
+  const until = body.until ? `${body.until}T23:59:59.000Z` : null;
+  const out = await setStanding(c.env, admin.id, c.req.param('userId'), 'suspended', body.reason || null, until, body.email);
+  return c.json({ ...out, account: await adminAccountById(c.env.DB, c.req.param('userId')) });
+});
+
+/** Ban an account permanently (until an admin restores it). */
+adminRoutes.post('/users/:userId/ban', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, accountBanSchema);
+  const out = await setStanding(c.env, admin.id, c.req.param('userId'), 'banned', body.reason || null, null, body.email);
+  return c.json({ ...out, account: await adminAccountById(c.env.DB, c.req.param('userId')) });
+});
+
+/** Restore a suspended or banned account and everything its suspension or ban hid. */
+adminRoutes.post('/users/:userId/restore', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, accountRestoreSchema);
+  const out = await restoreAccount(c.env, admin.id, c.req.param('userId'), body.email);
+  return c.json({ ...out, account: await adminAccountById(c.env.DB, c.req.param('userId')) });
+});
+
+/** Set a new password for an account. The owner is signed out everywhere and told by email. */
+adminRoutes.post('/users/:userId/password', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, adminSetPasswordSchema);
+  return c.json(await setPasswordByStaff(c.env, admin.id, c.req.param('userId'), body.password));
+});
+
+/** Delete an account and everything it owns, for good. */
+adminRoutes.delete('/users/:userId', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, adminDeleteAccountSchema);
+  const { files, label } = await deleteAccountByStaff(c.env, admin.id, c.req.param('userId'), body.confirm);
+  c.executionCtx.waitUntil(removeMedia(c.env.MEDIA, files));
+  return c.json({ deleted: true, label });
+});
+
+/** The staff actions on an account, newest first. */
+adminRoutes.get('/users/:userId/actions', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT a.action, a.reason, a.until, a.restored_at, a.created_at,
+       COALESCE(u.display_name, CASE WHEN a.actor_id = 'system' THEN 'Sweam (automatic)' ELSE a.actor_id END) AS actor
+     FROM account_actions a LEFT JOIN users u ON u.id = a.actor_id
+     WHERE a.user_id = ? ORDER BY a.created_at DESC LIMIT 50`,
+  )
+    .bind(c.req.param('userId'))
+    .all<{ action: string; reason: string | null; until: string | null; restored_at: string | null; created_at: string; actor: string }>();
+  return c.json({
+    actions: results.map((r) => ({ action: r.action, reason: r.reason, until: r.until, restoredAt: r.restored_at, createdAt: r.created_at, actor: r.actor })),
+  });
 });
 
 /** Sign an account out of every device (for a lost phone or a shared password). */

@@ -13,6 +13,7 @@ import {
   verificationEmail,
 } from '../lib/email';
 import { fail, nowIso, parseBody } from '../lib/http';
+import { restoreAccount, standingMessage, type AccountStatus } from '../lib/accounts';
 import {
   RATE_LIMITS,
   clientIp,
@@ -295,7 +296,7 @@ authRoutes.post('/signin', async (c) => {
   const row = await c.env.DB.prepare(
     `SELECT u.id, u.email, u.display_name, u.avatar_url, u.username, u.password_hash, u.email_verified, cp.handle,
        sp.status AS scout_status, sp.org_name AS scout_org,
-       (a.user_id IS NOT NULL) AS is_admin
+       (a.user_id IS NOT NULL) AS is_admin, u.account_status, u.status_until
      FROM users u
      LEFT JOIN creator_profiles cp ON cp.user_id = u.id
      LEFT JOIN scout_profiles sp ON sp.user_id = u.id
@@ -315,6 +316,8 @@ authRoutes.post('/signin', async (c) => {
       scout_status: 'pending' | 'approved' | 'rejected' | null;
       scout_org: string | null;
       is_admin: number | null;
+      account_status: AccountStatus;
+      status_until: string | null;
     }>();
 
   if (!row) {
@@ -326,6 +329,12 @@ authRoutes.post('/signin', async (c) => {
   if (!(await verifyPassword(body.password, row.password_hash))) {
     await recordLoginFailure(c.env.DB);
     fail(401, 'invalid_credentials', 'Invalid email or password.');
+  }
+  // Standing, like verification, is only revealed to someone with the correct password.
+  if (row.account_status === 'suspended' && row.status_until && row.status_until <= nowIso()) {
+    await restoreAccount(c.env, 'system', row.id, false); // the suspension has run out
+  } else if (row.account_status && row.account_status !== 'active') {
+    fail(403, row.account_status === 'banned' ? 'account_banned' : 'account_suspended', standingMessage(row.account_status, row.status_until));
   }
   // Only reveal verification state to someone who has the correct password.
   if (row.email_verified === 0) {

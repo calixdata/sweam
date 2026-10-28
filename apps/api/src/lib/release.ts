@@ -43,7 +43,7 @@ const BLOCKED_EITHER_WAY = (userCol: string, creatorParam: string) =>
 const EMAILABLE = (u: string) =>
   `${u}.email_verified = 1 AND ${u}.release_emails = 1 AND ${u}.is_demo = 0
    AND ${u}.email NOT LIKE '%@demo.sweam' AND ${u}.email NOT LIKE '%@seed.sweam'
-   AND ${u}.password_hash LIKE 'pbkdf2$%'`;
+   AND ${u}.password_hash LIKE 'pbkdf2$%' AND ${u}.account_status = 'active'`;
 
 interface ClaimedEpisode {
   id: string;

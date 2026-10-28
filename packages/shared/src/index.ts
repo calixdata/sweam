@@ -988,6 +988,27 @@ export interface AdminAccount {
   isDemo: boolean;
   isCreator: boolean;
   createdAt: string;
+  /** An administrator (cannot be suspended, banned or deleted). */
+  isAdmin: boolean;
+  /** Standing set by staff. */
+  accountStatus: AccountStatus;
+  statusReason: string | null;
+  /** End of a suspension (ISO), or null for until restored. */
+  statusUntil: string | null;
+  statusChangedAt: string | null;
+}
+
+/** An account's standing: active, suspended (until a date or until restored), or banned. */
+export type AccountStatus = 'active' | 'suspended' | 'banned';
+
+/** One staff action on an account (Admin > Accounts history). */
+export interface AdminAccountAction {
+  action: 'suspend' | 'ban' | 'restore' | 'delete' | 'set_password' | string;
+  reason: string | null;
+  until: string | null;
+  restoredAt: string | null;
+  createdAt: string;
+  actor: string;
 }
 
 /** A pending identity verification, as the admin queue shows it. */
@@ -1459,6 +1480,8 @@ export interface CreatorPublicPage {
   followedByMe: boolean;
   /** True when the signed-in viewer has blocked this account. */
   blockedByMe: boolean;
+  /** Suspended or banned accounts show a notice and no titles. */
+  accountStatus: AccountStatus;
   titles: TitleSummary[];
 }
 

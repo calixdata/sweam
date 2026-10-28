@@ -159,8 +159,15 @@ export default function CreatorScreen() {
           {followerCount.toLocaleString()} {followerCount === 1 ? 'follower' : 'followers'} ·{' '}
           {page.titles.length} {page.titles.length === 1 ? 'title' : 'titles'}
         </Text>
-        {page.bio ? <Text style={styles.bio}>{page.bio}</Text> : null}
-        <View style={styles.actionRow}>
+        {page.bio && page.accountStatus === 'active' ? <Text style={styles.bio}>{page.bio}</Text> : null}
+        {page.accountStatus && page.accountStatus !== 'active' ? (
+          <Text style={styles.standing} accessibilityRole="text">
+            {page.accountStatus === 'banned'
+              ? "This account has been banned for breaking Sweam's rules."
+              : 'This account is suspended.'}
+          </Text>
+        ) : null}
+        <View style={[styles.actionRow, page.accountStatus && page.accountStatus !== 'active' ? { display: 'none' } : null]}>
           {!blocked && (
             <Pressable
               style={[styles.followBtn, following && styles.followingBtn]}
@@ -199,8 +206,8 @@ export default function CreatorScreen() {
         )}
       </View>
 
-      <Text style={styles.gridHeading}>Titles</Text>
-      {page.titles.length === 0 ? (
+      {page.accountStatus && page.accountStatus !== 'active' ? null : <Text style={styles.gridHeading}>Titles</Text>}
+      {page.accountStatus && page.accountStatus !== 'active' ? null : page.titles.length === 0 ? (
         <Text style={[styles.muted, { paddingHorizontal: pad }]}>
           {page.isCreator === false ? 'No posts yet.' : 'No published titles yet.'}
         </Text>
@@ -261,6 +268,7 @@ const styles = StyleSheet.create({
   handle: { color: colors.muted, fontSize: 15 },
   followers: { color: colors.muted, fontSize: 13, marginTop: 2 },
   bio: { color: colors.text, fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 6 },
+  standing: { color: '#ff8a8a', fontSize: 15, fontWeight: '700', textAlign: 'center', marginTop: 10 },
   followBtn: {
     flexDirection: 'row',
     alignItems: 'center',

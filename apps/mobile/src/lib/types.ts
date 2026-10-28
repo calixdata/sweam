@@ -150,6 +150,8 @@ export interface WatchPayload {
 }
 
 export interface CreatorPublicPage {
+  /** Suspended and banned accounts show a notice and no titles. */
+  accountStatus?: 'active' | 'suspended' | 'banned';
   handle: string;
   displayName: string;
   avatarUrl: string | null;

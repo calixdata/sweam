@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { Image } from 'expo-image';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,8 @@ export default function WatchScreen() {
   const [payload, setPayload] = useState<WatchPayload | null>(null);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [liked, setLiked] = useState(false);
+  const { width, height } = useWindowDimensions();
+  const landscape = width > height;
 
   useEffect(() => {
     if (authLoading || !episodeId) return;
@@ -115,7 +118,9 @@ export default function WatchScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 40 }}>
-      <View style={styles.playerWrap}>
+      {/* Turned sideways, the player takes the whole screen; the details are below it. */}
+      <StatusBar hidden={landscape} />
+      <View style={[styles.playerWrap, landscape && { aspectRatio: undefined, width, height }]}>
         {episode.mediaType === 'image' ? (
           <Image
             source={{ uri: mediaUrl(episode.videoUrl) ?? undefined }}

@@ -3358,3 +3358,17 @@ input[type='checkbox'] {
 .reset-link { margin-top: 1.5rem; }
 .reset-link input { flex: 1; min-width: 0; }
 
+
+/* Admin Accounts: manage one account. */
+.standing-flag { color: var(--danger, #ff8a8a); font-weight: 700; }
+.manage-account { margin-top: 1.5rem; padding: 1.25rem; border: 1px solid var(--line, #293a52); border-radius: 12px; }
+.manage-account h3:focus { outline: 2px solid var(--accent, #4de0f3); outline-offset: 4px; }
+.manage-group { margin: 1.25rem 0 0; padding: 1rem; border: 1px solid var(--line, #293a52); border-radius: 10px; display: grid; gap: 0.5rem; }
+.manage-group fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 0.5rem; min-width: 0; }
+.manage-group legend { font-weight: 700; padding: 0 0.25rem; }
+.manage-group input[type='text'], .manage-group input[type='password'], .manage-group input[type='date'] { max-width: 28rem; }
+.manage-danger { border-color: var(--danger, #ff8a8a); }
+.manage-history { padding-left: 1.25rem; }
+
+/* Profile of a suspended or banned account. */
+.standing-notice { color: var(--danger, #ff8a8a); font-weight: 700; font-size: 1.05rem; margin: 1rem 0; }

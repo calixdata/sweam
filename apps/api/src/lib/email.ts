@@ -175,6 +175,55 @@ export function verificationEmail(
   return { subject, html, text };
 }
 
+function noticeEmail(subject: string, heading: string, displayName: string, lines: string[]): { subject: string; html: string; text: string } {
+  const name = escapeHtml(displayName);
+  const text = `Hi ${displayName},\n\n${lines.join('\n\n')}\n\nQuestions: support@sweam.co`;
+  const html =
+    `<!doctype html><html><body style="margin:0;font-family:Segoe UI,Arial,sans-serif;background:#080e19;color:#f4f7ff;padding:24px">` +
+    `<div style="max-width:480px;margin:0 auto;background:#111c2d;border:1px solid #293a52;border-radius:14px;padding:28px">` +
+    `<h1 style="font-size:1.35rem;margin:0 0 12px">${escapeHtml(heading)}</h1>` +
+    `<p style="color:#a5b5cd;margin:0 0 14px">Hi ${name},</p>` +
+    lines.map((l) => `<p style="color:#a5b5cd;margin:0 0 14px">${escapeHtml(l)}</p>`).join('') +
+    `<p style="color:#a5b5cd;font-size:0.85rem;margin:16px 0 0">Questions: <a href="mailto:support@sweam.co" style="color:#6fe1f2">support@sweam.co</a></p>` +
+    `</div></body></html>`;
+  return { subject, html, text };
+}
+
+/** Tells an account owner that Sweam staff suspended, banned, or restored the account. */
+export function accountStandingEmail(
+  kind: 'suspended' | 'banned' | 'restored',
+  displayName: string,
+  reason: string | null,
+  untilLabel: string | null,
+): { subject: string; html: string; text: string } {
+  const why = reason ? `Reason: ${reason}` : null;
+  if (kind === 'restored') {
+    return noticeEmail('Your Sweam account is active again', 'Your account is active again', displayName, [
+      'Your Sweam account has been restored. You can sign in again, and your titles and comments are back.',
+    ]);
+  }
+  if (kind === 'banned') {
+    return noticeEmail('Your Sweam account has been banned', 'Your account has been banned', displayName, [
+      'Your Sweam account has been permanently banned for breaking Sweam\'s rules. You can no longer sign in, and your titles and comments are no longer shown.',
+      ...(why ? [why] : []),
+      'If you think this is a mistake, reply to this email.',
+    ]);
+  }
+  return noticeEmail('Your Sweam account has been suspended', 'Your account has been suspended', displayName, [
+    `Your Sweam account has been suspended ${untilLabel ? `until ${untilLabel}` : 'until further notice'}. While it is suspended you cannot sign in, and your titles and comments are hidden.`,
+    ...(why ? [why] : []),
+    'If you think this is a mistake, reply to this email.',
+  ]);
+}
+
+/** Tells an account owner that Sweam staff set a new password for them. */
+export function passwordSetByStaffEmail(displayName: string): { subject: string; html: string; text: string } {
+  return noticeEmail('Your Sweam password was changed', 'Your password was changed', displayName, [
+    'Sweam staff set a new password for your account, and every device was signed out. Use the new password you were given to sign in.',
+    'If you did not ask for this, reply to this email right away.',
+  ]);
+}
+
 /** The password-reset email (subject, HTML, and plain-text parts). */
 export function passwordResetEmail(
   link: string,
