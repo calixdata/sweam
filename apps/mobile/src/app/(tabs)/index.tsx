@@ -32,12 +32,11 @@ import { useWatchProgress } from '../../lib/progress';
 import { colors } from '../../lib/theme';
 import type { FeedItem } from '../../lib/types';
 import {
-  appendPage,
   itemCount,
   itemKey,
+  loadNext,
   nextRequest,
   startPager,
-  wrapAround,
   type FeedEntry,
   type FeedPage,
   type Pager,
@@ -102,15 +101,12 @@ export default function FeedScreen() {
   // in, an "all caught up" card and the newest again. Never a dead end.
   const loadMore = useCallback(async () => {
     const current = pagerRef.current;
-    if (!current || loadingMore.current) return;
-    const want = nextRequest(current);
-    if (!want) return;
+    if (!current || loadingMore.current || !nextRequest(current)) return;
     loadingMore.current = true;
     try {
-      const page = await fetchPage(want === 'wrap' ? undefined : want.before);
+      const next = await loadNext(current, fetchPage);
       // Ignore the answer if the feed was refreshed or switched meanwhile.
-      if (pagerRef.current !== current) return;
-      setPager(want === 'wrap' ? wrapAround(current, page) : appendPage(current, page));
+      if (pagerRef.current === current) setPager(next);
     } catch {
       /* offline: the next scroll tries again */
     } finally {

@@ -407,6 +407,11 @@ export const verifiedToggleSchema = z.object({
   verifiedSex: z.enum(['female', 'male']).optional(),
 });
 
+/** Staff password help: email the owner a reset link, or only return it. */
+export const adminPasswordResetSchema = z.object({
+  email: z.boolean(),
+});
+
 /** Admin account search. */
 export const adminUserSearchSchema = z.object({
   q: z.string().trim().min(1, 'Enter a username, name, or email.').max(120),

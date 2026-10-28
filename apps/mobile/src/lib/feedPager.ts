@@ -65,6 +65,29 @@ export function wrapAround(prev: Pager, firstPage: FeedPage): Pager {
   return p;
 }
 
+/**
+ * Fetch until the list actually grows (or nothing is left to ask). A page can
+ * add nothing: the page after a full last page is empty, and a page can repeat
+ * what is already shown. The list only asks for more when it grows, so stopping
+ * there would leave the viewer stuck at the end.
+ */
+export async function loadNext(
+  p: Pager,
+  fetchPage: (before?: string) => Promise<FeedPage>,
+  maxSteps = 4,
+): Promise<Pager> {
+  let current = p;
+  for (let step = 0; step < maxSteps; step++) {
+    const want = nextRequest(current);
+    if (!want) return current;
+    const page = await fetchPage(want === 'wrap' ? undefined : want.before);
+    const next = want === 'wrap' ? wrapAround(current, page) : appendPage(current, page);
+    if (next.entries.length > current.entries.length || next.exhausted) return next;
+    current = next;
+  }
+  return current;
+}
+
 /** What the next scroll-to-the-end request should fetch. */
 export function nextRequest(p: Pager): { before: string } | 'wrap' | null {
   if (p.exhausted) return null;

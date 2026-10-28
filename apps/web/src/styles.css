@@ -3353,3 +3353,8 @@ input[type='checkbox'] {
     transition: none;
   }
 }
+
+/* Admin Accounts: the reset link to pass on. */
+.reset-link { margin-top: 1.5rem; }
+.reset-link input { flex: 1; min-width: 0; }
+

@@ -157,16 +157,20 @@ feedRoutes.get('/', async (c) => {
          SELECT 1 FROM follows f WHERE f.follower_id = ?1 AND f.creator_id = t.creator_id
        ))
      ORDER BY fresh_at DESC, t.id DESC
-     LIMIT ${PAGE}`,
+     LIMIT ${PAGE + 1}`,
   )
     .bind(user.id, beforeAt, following, beforeId)
     .all<FeedRow>();
+  // One extra row says whether an older page exists, so a feed that ends on a
+  // full page does not hand out a cursor to an empty one.
+  const more = rows.results.length > PAGE;
+  const stream = rows.results.slice(0, PAGE);
 
-  const items: FeedItem[] = [...promoted, ...rows.results].map(toFeedItem);
+  const items: FeedItem[] = [...promoted, ...stream].map(toFeedItem);
 
   // The cursor tracks only the chronological stream, so paging never re-shows a
   // pinned promotion.
-  const last = rows.results.at(-1);
-  const nextCursor = rows.results.length === PAGE && last ? `${last.fresh_at}|${last.title_id}` : null;
+  const last = stream.at(-1);
+  const nextCursor = more && last ? `${last.fresh_at}|${last.title_id}` : null;
   return c.json({ items, nextCursor });
 });

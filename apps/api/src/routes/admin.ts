@@ -62,7 +62,10 @@ import {
   takedownCreateSchema,
   verificationDecideSchema,
   verifiedToggleSchema,
+  adminPasswordResetSchema,
 } from '../lib/validate';
+import { generateToken, sha256Hex } from '../lib/auth';
+import { emailConfigured, passwordResetEmail, sendEmail } from '../lib/email';
 import { grantFreeMembership } from '../lib/scoutMembership';
 import { cancelSubscription, stripeConfigured } from '../lib/stripe';
 import { AiReviewError, aiReviewConfigured, reviewSubmission } from '../lib/aiReview';
@@ -783,6 +786,59 @@ adminRoutes.post('/users/:userId/verified', async (c) => {
     .bind(userId)
     .first<AdminAccountRow>();
   return c.json({ account: row ? mapAdminAccount(row) : null });
+});
+
+/**
+ * Password help. Sweam never shows or sets anyone's password: staff send the
+ * owner a one-hour reset link by email, or take the same link to pass on some
+ * other way. A new link replaces any earlier one. It also clears the account's
+ * failed sign-in count, so a locked-out owner can sign in at once.
+ */
+adminRoutes.post('/users/:userId/password-reset', async (c) => {
+  const admin = currentUser(c);
+  const body = await parseBody(c, adminPasswordResetSchema);
+  const userId = c.req.param('userId');
+  const target = await c.env.DB.prepare('SELECT id, email, display_name FROM users WHERE id = ?')
+    .bind(userId)
+    .first<{ id: string; email: string; display_name: string }>();
+  if (!target) fail(404, 'user_not_found', 'No account with that id.');
+  if (body.email && !emailConfigured(c.env)) fail(503, 'email_not_configured', 'Email sending is not set up.');
+
+  const token = generateToken();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await c.env.DB.batch([
+    c.env.DB.prepare('UPDATE users SET reset_token_hash = ?, reset_expires_at = ? WHERE id = ?').bind(
+      await sha256Hex(token),
+      expiresAt,
+      target.id,
+    ),
+    c.env.DB.prepare('DELETE FROM rate_limits WHERE bucket = ?').bind(`signin-email:${target.email.toLowerCase()}`),
+  ]);
+  // Links always point at the public site, even when staff work on admin.sweam.co.
+  const origin = new URL(c.req.url).origin.replace('://admin.', '://');
+  const link = `${origin}/reset-password?token=${encodeURIComponent(token)}`;
+  let emailed = false;
+  if (body.email) {
+    try {
+      await sendEmail(c.env, { to: target.email, ...passwordResetEmail(link, target.display_name) });
+      emailed = true;
+    } catch (err) {
+      console.error('admin_password_reset_email_failed', target.id, err);
+    }
+  }
+  console.log('admin_password_reset', admin.id, target.id, body.email ? (emailed ? 'emailed' : 'email_failed') : 'link_only');
+  return c.json({ link, expiresAt, emailed });
+});
+
+/** Sign an account out of every device (for a lost phone or a shared password). */
+adminRoutes.post('/users/:userId/sign-out-everywhere', async (c) => {
+  const admin = currentUser(c);
+  const userId = c.req.param('userId');
+  const target = await c.env.DB.prepare('SELECT id FROM users WHERE id = ?').bind(userId).first<{ id: string }>();
+  if (!target) fail(404, 'user_not_found', 'No account with that id.');
+  const res = await c.env.DB.prepare('DELETE FROM sessions WHERE user_id = ?').bind(target.id).run();
+  console.log('admin_sign_out_everywhere', admin.id, target.id, res.meta.changes ?? 0);
+  return c.json({ signedOut: res.meta.changes ?? 0 });
 });
 
 // ---------------------------------------------------------------------------

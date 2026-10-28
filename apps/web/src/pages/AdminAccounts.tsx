@@ -8,7 +8,7 @@ import { ErrorNote, Loading } from '../components/Status';
 import { VerifiedBadge } from '../components/VerifiedBadge';
 import { usePageTitle } from '../hooks';
 
-/** Admin: find any account, grant or remove the verified check, and review identity documents. */
+/** Admin: find any account, grant or remove the verified check, help with sign-in, and review identity documents. */
 export function AdminAccounts() {
   usePageTitle('Accounts');
   const { user, loading } = useAuth();
@@ -172,6 +172,60 @@ function AccountsSection() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState<string | null>(null);
+  // A reset link to pass on, shown once under the table.
+  const [resetLink, setResetLink] = useState<{ label: string; link: string; expiresAt: string } | null>(null);
+
+  async function passwordReset(account: AdminAccount, label: string, email: boolean) {
+    setBusyId(account.id);
+    setError(null);
+    setNotice('');
+    setResetLink(null);
+    try {
+      const data = await apiSend<{ link: string; expiresAt: string; emailed: boolean }>(
+        'POST',
+        `/api/admin/users/${account.id}/password-reset`,
+        { email },
+      );
+      if (email) {
+        setNotice(
+          data.emailed
+            ? `Sent a password reset link to ${account.email}. It works for 1 hour. Failed sign-ins were cleared.`
+            : `The email to ${account.email} did not send. Use the link below instead.`,
+        );
+        if (!data.emailed) setResetLink({ label, link: data.link, expiresAt: data.expiresAt });
+      } else {
+        setResetLink({ label, link: data.link, expiresAt: data.expiresAt });
+        setNotice(`Reset link ready for ${label}, below. It works once, for 1 hour. Failed sign-ins were cleared.`);
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not create a reset link.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function signOutEverywhere(account: AdminAccount, label: string) {
+    if (!window.confirm(`Sign ${label} out of every device? They will need to sign in again.`)) return;
+    setBusyId(account.id);
+    setError(null);
+    try {
+      const data = await apiSend<{ signedOut: number }>('POST', `/api/admin/users/${account.id}/sign-out-everywhere`);
+      setNotice(`Signed ${label} out of ${data.signedOut} ${data.signedOut === 1 ? 'device' : 'devices'}.`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not sign that account out.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function copyLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      setNotice('Reset link copied.');
+    } catch {
+      setNotice('Could not copy. Select the link field and copy it.');
+    }
+  }
 
   async function search(event: FormEvent) {
     event.preventDefault();
@@ -228,6 +282,11 @@ function AccountsSection() {
         Find an account and tick Verified to grant the pink check right away, or untick it to
         remove it. The account is notified either way.
       </p>
+      <p className="field-hint">
+        Sign-in help: Sweam never shows or sets anyone's password. Email the owner a reset link,
+        or get the link to pass on yourself (it works once, for 1 hour). Both clear failed
+        sign-ins. Sign out everywhere ends every session on every device.
+      </p>
       <form onSubmit={search} role="search" className="search-form" noValidate>
         <label htmlFor="admin-account-query">Username, name, or email</label>
         <div className="search-row">
@@ -264,6 +323,7 @@ function AccountsSection() {
                 <th scope="col">Email</th>
                 <th scope="col">Type</th>
                 <th scope="col">Verified</th>
+                <th scope="col">Sign-in help</th>
               </tr>
             </thead>
             <tbody>
@@ -304,11 +364,58 @@ function AccountsSection() {
                           : 'Not verified'}
                       </label>
                     </td>
+                    <td>
+                      <div className="episode-actions">
+                        <button
+                          type="button"
+                          className="button button-quiet"
+                          disabled={busyId === account.id}
+                          onClick={() => void passwordReset(account, label, true)}
+                          aria-label={`Email a password reset link to ${label}`}
+                        >
+                          Email reset link
+                        </button>
+                        <button
+                          type="button"
+                          className="button button-quiet"
+                          disabled={busyId === account.id}
+                          onClick={() => void passwordReset(account, label, false)}
+                          aria-label={`Get a password reset link for ${label}`}
+                        >
+                          Get reset link
+                        </button>
+                        <button
+                          type="button"
+                          className="button button-quiet"
+                          disabled={busyId === account.id}
+                          onClick={() => void signOutEverywhere(account, label)}
+                          aria-label={`Sign ${label} out everywhere`}
+                        >
+                          Sign out everywhere
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
+        </div>
+      )}
+      {resetLink && (
+        <div className="reset-link" aria-labelledby="reset-link-heading">
+          <h3 id="reset-link-heading">Reset link for {resetLink.label}</h3>
+          <p className="field-hint">
+            Works once, until {new Date(resetLink.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.
+            Whoever opens it can set the password, so only send it to the account's owner.
+          </p>
+          <label htmlFor="reset-link-field">Link</label>
+          <div className="search-row">
+            <input id="reset-link-field" type="text" readOnly value={resetLink.link} onFocus={(e) => e.target.select()} />
+            <button type="button" className="button" onClick={() => void copyLink(resetLink.link)}>
+              Copy link
+            </button>
+          </div>
         </div>
       )}
     </section>
