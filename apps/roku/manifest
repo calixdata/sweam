@@ -1,7 +1,7 @@
 title=SweamTV
 major_version=0
 minor_version=1
-build_version=2
+build_version=3
 
 mm_icon_focus_fhd=pkg:/images/sweamtv-channel-icon-fhd-540x405.png
 mm_icon_focus_hd=pkg:/images/sweamtv-channel-icon-hd-290x218.png

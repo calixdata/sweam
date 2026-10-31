@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="AppScene" extends="Scene">
+  <interface>
+    <!-- Deep link from main.brs: { contentId, mediaType }. alwaysNotify so
+         re-sending the same link (roInput) still fires the observer. -->
+    <field id="deepLink" type="assocarray" alwaysNotify="true" />
+  </interface>
   <script type="text/brightscript" uri="AppScene.brs" />
   <children>
     <Rectangle id="background" width="1920" height="1080" color="0x080E19FF" />

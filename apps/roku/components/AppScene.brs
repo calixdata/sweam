@@ -1,6 +1,8 @@
 ' SweamTV for Roku: pair with a short code, browse the AI-originals feed,
-' play HLS/MP4 with the device session as a Bearer header, and send the same
-' watch-progress beacons as the website so resume follows the account.
+' play HLS/MP4 with the device session as a Bearer header (captions ride the
+' watch payload as a sideloaded track), send the same watch-progress beacons
+' as the website so resume follows the account, and take deep links straight
+' into playback.
 
 sub init()
     m.BASE = "https://sweam.co"
@@ -29,9 +31,11 @@ sub init()
     m.pollTimer.observeField("fire", "onPollTick")
     m.video.observeField("state", "onVideoState")
     m.video.observeField("position", "onVideoPosition")
+    m.top.observeField("deepLink", "onDeepLink")
 
     m.tasks = []
     m.feedRows = invalid
+    m.detail = invalid
     m.detailEpisodeIds = []
     m.watch = invalid
     m.nextEpisodeId = ""
@@ -40,6 +44,8 @@ sub init()
     m.homeRetry = false
     m.pendingSeek = 0
     m.lastBeaconS = 0
+    m.sessionOk = false
+    m.pendingDeepLink = ""
 
     m.token = regRead("token")
     m.deviceId = regRead("device")
@@ -135,7 +141,9 @@ sub handleSession(status as integer, response as object)
             who = "Watching as @" + response.user.username
         end if
         m.homeWho.text = who
+        m.sessionOk = true
         loadFeed()
+        applyDeepLink()
     else
         m.token = ""
         regWrite("token", "")
@@ -145,6 +153,7 @@ end sub
 
 sub startPairing()
     showGroup("pair")
+    m.sessionOk = false
     m.pairRetry = false
     m.pairCode.text = ""
     m.pairSteps.text = ""
@@ -184,7 +193,9 @@ sub handlePairPoll(status as integer, response as object)
             who = "Watching as @" + response.user.username
         end if
         m.homeWho.text = who
+        m.sessionOk = true
         loadFeed()
+        applyDeepLink()
     else if response.status = "expired"
         m.pollTimer.control = "stop"
         m.pairCodeValue = ""
@@ -225,7 +236,8 @@ sub handleFeed(status as integer, response as object)
         end for
     end for
     m.rows.content = content
-    m.rows.setFocus(true)
+    ' A deep link may already be playing on top of home: leave focus alone.
+    if m.homeGroup.visible then m.rows.setFocus(true)
 end sub
 
 sub onRowItemSelected()
@@ -309,12 +321,14 @@ end sub
 sub handleWatch(status as integer, response as object)
     m.globalStatus.text = ""
     if status = 401
-        ' The session was revoked (unpaired from Settings): pair again.
+        ' The session was revoked (unpaired from Settings): pair again. A
+        ' pending deep link survives the re-pair and plays once paired.
         m.token = ""
         regWrite("token", "")
         startPairing()
         return
     end if
+    m.pendingDeepLink = ""
     if status <> 200 or response.episode = invalid or response.episode.videoUrl = invalid or response.episode.videoUrl = ""
         m.globalStatus.text = "That episode is not available yet."
         return
@@ -338,12 +352,26 @@ sub handleWatch(status as integer, response as object)
     content.HttpCertificatesFile = "common:/certs/ca-bundle.crt"
     content.HttpHeaders = ["Authorization: Bearer " + m.token]
 
+    ' Captions. In-stream HLS text tracks surface on their own; the sidecar
+    ' file from the watch payload is added as a sideloaded track and selected
+    ' below so the OS renders it whenever the viewer's system caption setting
+    ' asks for captions. The channel never writes globalCaptionMode: that
+    ' setting belongs to the viewer.
+    capUrl = ""
+    if response.episode.captionsUrl <> invalid and response.episode.captionsUrl <> ""
+        capUrl = absUrl(response.episode.captionsUrl)
+        content.SubtitleTracks = [{ Language: "eng", Description: "English", TrackName: capUrl }]
+    end if
+
     m.pendingSeek = 0
     if response.positionS <> invalid and response.positionS > 5
         m.pendingSeek = Int(response.positionS)
     end if
     m.lastBeaconS = 0
     m.video.content = content
+    ' An empty capUrl clears any selection left by the previous episode, so
+    ' in-stream tracks go back to the OS's own language-based pick.
+    m.video.subtitleTrack = capUrl
     m.video.setFocus(true)
     m.video.control = "play"
 end sub
@@ -386,9 +414,59 @@ sub closeVideo()
     m.video.control = "stop"
     m.video.content = invalid
     m.watch = invalid
-    showGroup("detail")
-    if m.detailEpisodeIds.Count() > 0 then m.episodeList.setFocus(true)
+    if m.detail <> invalid
+        showGroup("detail")
+        if m.detailEpisodeIds.Count() > 0 then m.episodeList.setFocus(true)
+    else
+        ' Deep-linked playback has no detail screen behind it: go home.
+        showGroup("home")
+        if m.rows.content <> invalid then m.rows.setFocus(true)
+    end if
 end sub
+
+' --------------------------------------------------------------------------
+' Deep linking (Roku Search, ads, ECP input): contentId is an episode id for
+' both supported mediaTypes — "episode" plays that episode, "series" enters
+' the series at that episode and the watch payload's resume position and
+' next-episode chaining take it from there. A link that arrives before the
+' session is confirmed (cold launch, or mid-pairing) waits in
+' m.pendingDeepLink and plays right after; an unplayable contentId lands on
+' the home screen with a message, per Roku's certification rules.
+' --------------------------------------------------------------------------
+
+sub onDeepLink()
+    dl = m.top.deepLink
+    if dl = invalid then return
+    if not isNonEmptyString(dl.contentId) or not isNonEmptyString(dl.mediaType) then return
+    mediaType = LCase(dl.mediaType)
+    if mediaType <> "episode" and mediaType <> "series" then return
+    m.pendingDeepLink = dl.contentId
+    if m.sessionOk then applyDeepLink()
+end sub
+
+sub applyDeepLink()
+    if m.pendingDeepLink = "" then return
+    if m.videoGroup.visible
+        sendBeacon(m.video.position)
+        m.video.control = "stop"
+        m.video.content = invalid
+        m.watch = invalid
+    end if
+    ' Home sits behind the playback, so Back and any failure message land
+    ' somewhere sensible; stale detail state is dropped for the same reason.
+    m.detail = invalid
+    m.detailEpisodeIds = []
+    showGroup("home")
+    if m.rows.content <> invalid then m.rows.setFocus(true)
+    ' The pending id stays set until the watch response: a 401 re-pairs and
+    ' then retries it, any other response consumes it (see handleWatch).
+    openEpisode(m.pendingDeepLink)
+end sub
+
+function isNonEmptyString(value as dynamic) as boolean
+    if type(value) <> "String" and type(value) <> "roString" then return false
+    return value <> ""
+end function
 
 ' --------------------------------------------------------------------------
 ' Navigation
