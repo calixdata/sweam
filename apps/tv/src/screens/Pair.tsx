@@ -80,8 +80,7 @@ export function PairScreen({ announce, onPaired }: PairScreenProps) {
   return (
     <main className="tv-root pair-wrap">
       <h1>
-        SweamTV
-        <span className="sr-only">.</span>
+        <img className="pair-logo" src="brand/sweamtv-wordmark-reverse.svg" alt="SweamTV" />
       </h1>
       <p className="pair-tag">AI-generated binge series and films, on your TV.</p>
 

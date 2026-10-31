@@ -7,7 +7,7 @@
   "title": "SweamTV",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
-  "iconColor": "#080e19",
-  "bgColor": "#080e19",
+  "iconColor": "#0B1424",
+  "bgColor": "#0B1424",
   "disableBackHistoryAPI": false
 }

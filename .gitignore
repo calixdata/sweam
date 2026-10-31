@@ -36,3 +36,6 @@ small-size-proof.*
 
 # SweamTV Roku sideload zips (built artifacts)
 apps/roku/out/
+
+# SweamTV brand kit (source art; deployable copies live in apps/)
+SWEAMTV/

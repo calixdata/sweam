@@ -6,8 +6,9 @@ the AI-originals rails, and play HLS/MP4 with the paired account's session
 
 ## What's inside
 
-- `manifest` — channel metadata + generated placeholder art in `images/`
-  (replace with real art before store submission).
+- `manifest` — channel metadata + the approved SweamTV kit art in `images/`
+  (from `SWEAMTV/SWEAMTV LOGO/SweamTV-Kit-v1.1/08-TV-Platforms/Roku`; the
+  store-listing poster `sweamtv-store-poster-540x405.jpg` stays in the kit).
 - `source/main.brs` — entry point.
 - `components/AppScene.*` — the whole flow: pairing (POST `/api/tv/pair/start`,
   poll `/api/tv/pair/poll`), home rails (GET `/api/tv/feed`), title detail

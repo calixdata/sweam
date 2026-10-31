@@ -57,11 +57,8 @@ export function HomeScreen({ user, announce, onOpenTitle, onOpenDevices }: HomeS
   return (
     <main className="tv-root">
       <header className="tv-topbar">
-        <img className="brand" src="brand/sweam-wordmark-dark.png" alt="Sweam" />
-        <span className="tv-badge" aria-hidden="true">
-          TV
-        </span>
-        <span className="sr-only">TV. The channel for AI-generated series and films.</span>
+        <img className="brand" src="brand/sweamtv-wordmark-reverse.svg" alt="SweamTV" />
+        <span className="sr-only">The channel for AI-generated series and films.</span>
         {user && (
           <span className="who">
             Watching as {user.username ? `@${user.username}` : user.displayName}

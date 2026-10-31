@@ -29,8 +29,10 @@ resubmission — redeploying the Worker is the update.
 
 ## Notes
 
-- The icons here are generated placeholders (flat midnight + cyan wordmark);
-  replace them with real art before store submission.
+- The icons here are the approved SweamTV brand art (kit v1.1 at
+  `SWEAMTV/SWEAMTV LOGO/SweamTV-Kit-v1.1`, which also holds Apple TV
+  layered assets, Android/Google TV adaptive resources and Fire TV art for
+  the future native builds).
 - Both stores review against their UX checklists: the hosted app already
   handles D-pad navigation, the platform Back keys (Tizen 10009, webOS 461),
   big type, and visible focus.

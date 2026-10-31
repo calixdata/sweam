@@ -64,20 +64,11 @@ img {
   margin-bottom: 30px;
 }
 
+/* The approved SweamTV wordmark (reverse, for dark surfaces) wants 240px+ of
+   width in TV UI; 48px tall gives ~245px at its 696:136 ratio. */
 .tv-topbar .brand {
-  height: 42px;
+  height: 48px;
   width: auto;
-}
-
-.tv-badge {
-  font-weight: 700;
-  font-size: 19px;
-  line-height: 1;
-  letter-spacing: 0.22em;
-  color: #04121c;
-  background: var(--cyan);
-  padding: 8px 10px 7px 12px;
-  border-radius: 8px;
 }
 
 .tv-topbar .who {
@@ -140,8 +131,13 @@ button {
 }
 
 .pair-wrap h1 {
-  font: 700 44px/1.15 Georgia, serif;
   margin: 0 0 6px;
+}
+
+.pair-logo {
+  height: 92px;
+  width: auto;
+  display: block;
 }
 
 .pair-tag {
