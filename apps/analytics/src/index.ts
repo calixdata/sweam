@@ -200,9 +200,45 @@ async function readStats(env: Env, days: number): Promise<Stats> {
 
 // ---------------------------------------------------------------------- auth
 
+/**
+ * Failed-password limits (shared rate_limits table, 15-minute windows): 10
+ * failures per IP, and 100 across all IPs to blunt a distributed attempt.
+ * Checked before the password is compared; only failures count.
+ */
+const LOGIN_WINDOW_S = 15 * 60;
+const LOGIN_FAILS_PER_IP = 10;
+const LOGIN_FAILS_GLOBAL = 100;
+
+function loginWindow(): number {
+  return Math.floor(Date.now() / 1000 / LOGIN_WINDOW_S) * LOGIN_WINDOW_S;
+}
+
+async function loginFailures(env: Env, ip: string): Promise<{ ip: number; all: number }> {
+  const w = loginWindow();
+  const { results } = await env.DB.prepare(
+    'SELECT bucket, count FROM rate_limits WHERE window_start = ? AND bucket IN (?, ?)',
+  )
+    .bind(w, `analytics-login-ip:${ip}`, 'analytics-login-all')
+    .all<{ bucket: string; count: number }>();
+  const n = (b: string) => results?.find((r) => r.bucket === b)?.count ?? 0;
+  return { ip: n(`analytics-login-ip:${ip}`), all: n('analytics-login-all') };
+}
+
+async function recordLoginFailure(env: Env, ip: string): Promise<void> {
+  const w = loginWindow();
+  const upsert = `INSERT INTO rate_limits (bucket, window_start, count) VALUES (?, ?, 1)
+    ON CONFLICT (bucket, window_start) DO UPDATE SET count = count + 1`;
+  await env.DB.batch([
+    env.DB.prepare(upsert).bind(`analytics-login-ip:${ip}`, w),
+    env.DB.prepare(upsert).bind('analytics-login-all', w),
+    env.DB.prepare("DELETE FROM rate_limits WHERE bucket LIKE 'analytics-login-%' AND window_start < ?").bind(w - LOGIN_WINDOW_S),
+  ]);
+}
+
 /** Returns a Response when access should be denied, or null when authorized. */
-function requireAuth(request: Request, env: Env): Response | null {
-  const pass = env.DASH_PASS;
+async function requireAuth(request: Request, env: Env): Promise<Response | null> {
+  // A trailing line break from a pasted secret never makes the password unusable.
+  const pass = env.DASH_PASS?.replace(/[\r\n]+$/, '');
   if (env.ENVIRONMENT === 'production' && !pass) {
     return new Response(
       'Analytics dashboard is not configured yet. Set the DASH_PASS secret (and ANALYTICS_SALT) to enable it.',
@@ -226,11 +262,22 @@ function requireAuth(request: Request, env: Env): Response | null {
   } catch {
     return new Response('Authentication required.', challenge);
   }
+  const ip = request.headers.get('CF-Connecting-IP') ?? 'unknown';
+  const fails = await loginFailures(env, ip);
+  if (fails.ip >= LOGIN_FAILS_PER_IP || fails.all >= LOGIN_FAILS_GLOBAL) {
+    return new Response('Too many wrong passwords. Try again in 15 minutes.', {
+      status: 429,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Retry-After': String(LOGIN_WINDOW_S) },
+    });
+  }
   const sep = decoded.indexOf(':');
   const user = sep >= 0 ? decoded.slice(0, sep) : '';
   const supplied = sep >= 0 ? decoded.slice(sep + 1) : '';
   const ok = timingSafeEqual(user, expectedUser) && timingSafeEqual(supplied, pass ?? '');
-  if (!ok) return new Response('Invalid credentials.', challenge);
+  if (!ok) {
+    await recordLoginFailure(env, ip);
+    return new Response('Invalid credentials.', challenge);
+  }
   return null;
 }
 
@@ -387,13 +434,13 @@ export default {
       return Response.json({ ok: true, service: 'sweam-analytics' });
     }
     if (pathname === '/api/stats' && request.method === 'GET') {
-      const denied = requireAuth(request, env);
+      const denied = await requireAuth(request, env);
       if (denied) return denied;
       const stats = await readStats(env, parseWindow(url));
       return Response.json(stats, { headers: { 'Cache-Control': 'no-store' } });
     }
     if ((pathname === '/' || pathname === '/dashboard') && request.method === 'GET') {
-      const denied = requireAuth(request, env);
+      const denied = await requireAuth(request, env);
       if (denied) return denied;
       const stats = await readStats(env, parseWindow(url));
       return new Response(renderDashboard(stats), { headers: dashboardHeaders() });
