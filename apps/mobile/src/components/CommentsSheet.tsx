@@ -120,7 +120,7 @@ export function CommentsSheet({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 12) + 12 }]}
       >
         <View style={styles.handle} />
@@ -131,32 +131,9 @@ export function CommentsSheet({
           </Pressable>
         </View>
 
-        {!comments ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={colors.accent} />
-          </View>
-        ) : comments.length === 0 ? (
-          <View style={styles.center}>
-            <Text style={styles.muted}>No comments yet. Be the first.</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={comments}
-            keyExtractor={(c) => c.id}
-            contentContainerStyle={{ paddingBottom: 12 }}
-            keyboardShouldPersistTaps="handled"
-            renderItem={({ item }) => (
-              <SheetComment
-                comment={item}
-                rootId={item.id}
-                signedIn={signedIn}
-                onLike={setLike}
-                onReply={startReply}
-              />
-            )}
-          />
-        )}
-
+        {/* The box sits at the top, under the heading. On Android this pop-up draws
+            edge to edge and is not resized for the keyboard, so a box at the bottom
+            was covered by it; here the keyboard (rising from the bottom) never reaches it. */}
         {signedIn ? (
           <View>
             {replyTo && (
@@ -200,6 +177,33 @@ export function CommentsSheet({
             <Text style={styles.link}>Sign in to comment</Text>
           </Pressable>
         )}
+
+        {!comments ? (
+          <View style={styles.center}>
+            <ActivityIndicator color={colors.accent} />
+          </View>
+        ) : comments.length === 0 ? (
+          <View style={styles.center}>
+            <Text style={styles.muted}>No comments yet. Be the first.</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={comments}
+            keyExtractor={(c) => c.id}
+            contentContainerStyle={{ paddingBottom: 12 }}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <SheetComment
+                comment={item}
+                rootId={item.id}
+                signedIn={signedIn}
+                onLike={setLike}
+                onReply={startReply}
+              />
+            )}
+          />
+        )}
+
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -391,9 +395,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingTop: 10,
-    borderTopColor: colors.line,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 10,
+    borderBottomColor: colors.line,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   input: {
     flex: 1,
